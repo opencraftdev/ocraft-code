@@ -715,7 +715,7 @@ Comfortable values are `:root`; the final column is the complete compact overrid
 |-------|-------------|---------|-------|
 | `--header-h` | `52px` | `46px` | App header below `769px` |
 | `--header-h-wide` | `46px` | — | App header from `769px`, in either density (`--header-h` takes this value there) |
-| `--sidebar-w` | `320px` | `300px` | Sidebar/drawer; the default while the user has not dragged the sidebar's edge |
+| `--sidebar-w` | `280px` | `260px` | Sidebar/drawer; the default while the user has not dragged the sidebar's edge |
 | `--control-h` | `34px` | `32px` | Buttons and fields |
 | `--segmented-inset` | `6px` | — | What the segmented track takes from `--control-h` above and below an option (its `2px` padding and the hairline, both sides): an option is `--control-h` less this, and its touch expander grows from that height to `--touch-target` |
 | `--touch-target` | `44px` | — | Coarse-pointer minimum: every control a finger can reach is at least this in both dimensions |
@@ -3350,3 +3350,43 @@ headless choice; sign-in waits continue reconnecting automatically.
 | Terminal content accessibility relies on xterm defaults | `PaneTerminal.tsx` | Screen-reader mode changes terminal DOM and input behavior | Decide with herdr TUI owners |
 | Drawer has no focus trap | `.sidebar.is-open` | Closed state leaves the tab order, but open-state trapping is not implemented | Add a shared focus utility |
 | Modal focus is initialized, not fully trapped | Dialog components | Escape/scrim/close work; tab containment is not shared | Add the same focus utility |
+
+
+## T3 Code-inspired conversation workspace
+
+The fork's workspace redesign follows T3 Code's compact project navigation, quiet transcript,
+and rounded composer with a tucked context strip. References inspected in the local t3code
+checkout: `apps/web/src/index.css`, `components/chat/ComposerSurface.tsx`,
+`components/chat/MessagesTimeline.tsx`, and `components/chat/ChatHeader.tsx`. The implementation
+uses Ovis's own components and tokens; no T3 Code source or assets are copied.
+
+A developer reading and answering agents at a desk needs an uninterrupted conversation, while
+phone users need the same actions within reach. Existing light/dark and palette preferences
+remain in control. The default Codex palette gains separate chat canvas, sidebar, and composer
+surfaces: near-black graphite in dark mode and off-white paper with a pale sidebar in light mode.
+Other palettes resolve these roles from their own colors. Terminal colors keep their values.
+
+| Token | Base value | Purpose |
+|-------|------------|---------|
+| `--chat-canvas` | `var(--bg)` | Conversation background; Codex dark #111214, light #fcfcfd |
+| `--sidebar-surface` | `var(--bg-panel)` | Navigation surface; Codex dark #191a1d, light #f4f4f6 |
+| `--composer-surface-bg` | `var(--bg-elevated)` | Solid input card; Codex dark #202125, light #fefefe |
+| `--surface-edge` | `color-mix(in srgb, var(--border) 70%, transparent)` | Quiet workspace separators |
+
+- The desktop sidebar starts with the Ovis identity between its collapse and palette controls.
+  Its default width is 280px (260px compact); a saved resized width still wins.
+- Search uses a leading icon with an associated accessible label. Settings has a visible label.
+- Agents follow the workspace list without a band of empty space. Workspaces take at most 55%
+  and Agents at most 50%, each scrolling independently when necessary. The footer stays at the bottom.
+- Tabs use a neutral selected surface. User turns are rounded neutral bubbles; assistant prose
+  has a 75ch reading measure, and folded work uses a quiet disclosure without a full-width rule.
+- Code blocks keep their language/copy header visible above the code on desktop and touch.
+- The composer keeps attachment/actions, then model/context information, then Send/Stop in a
+  single row when space permits. Its existing measured narrow layout handles overflow and IME.
+  Send/Stop share a rounded square target. The solid surface avoids a blur on scrolling content.
+- Desktop send-key hints follow `enterSends`; phone, touch, short-window, and open-approval
+  layouts omit the hint so reference text and instructions keep their space. The folder
+  and branch strip retains its existing behavior and shared column geometry.
+- Draft ownership, approvals, terminal input, streaming follow, selection, virtualization, and
+  reduced-motion behavior continue through the existing components. No additional animation
+  runs for each arriving message, and no new network or rendering dependency is introduced.

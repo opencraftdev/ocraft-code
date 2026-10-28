@@ -1468,6 +1468,10 @@ export function Composer({
           </span>}
         </div>
       )}
+      <div className="composer-keyhint" aria-hidden="true">
+        <kbd>{settings.enterSends ? "↵" : "⌘ / Ctrl ↵"}</kbd>
+        <span>{t("Send message")}</span>
+      </div>
       {/* above the whole composer: inside the surface it would cover the text being dictated */}
       {dictation.shown && <VoiceRecordingPill dictation={dictation} align="start" />}
     </div>

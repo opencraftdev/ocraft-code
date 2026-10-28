@@ -1,12 +1,11 @@
-/* Agents takes the height of its rows, at most half the sidebar, docked above the footer; the
-   workspace list has the rest. Parted from it by space, not a rule. */
+/* Conversations follow projects without a dead band. Both lists can scroll independently. */
 .agents-sidebar {
   display: flex;
   flex: 0 1 auto;
   flex-direction: column;
   min-height: 0;
   max-height: 50%;
-  padding: var(--space-2) var(--side-gutter) 0;
+  padding: var(--space-4) var(--side-gutter) var(--space-2);
 }
 
 .agents-sidebar.is-collapsed,
@@ -36,7 +35,7 @@
   bottom: 0;
   display: block;
   height: var(--space-4);
-  background: linear-gradient(transparent, var(--bg-panel));
+  background: linear-gradient(transparent, var(--sidebar-surface));
   pointer-events: none;
 }
 

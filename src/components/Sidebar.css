@@ -7,13 +7,13 @@
   --side-row: var(--control-h);
   --side-row-2: calc(var(--control-h) + var(--space-3));
   --side-action: var(--space-6);
-  --side-hover: color-mix(in srgb, var(--bg-hover) 50%, var(--bg-panel));
-  --side-selected: var(--bg-hover);
+  --side-hover: color-mix(in srgb, var(--bg-hover) 50%, var(--sidebar-surface));
+  --side-selected: color-mix(in srgb, var(--bg-hover) 75%, var(--sidebar-surface));
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--bg-panel);
+  background: var(--sidebar-surface);
 }
 
 .sidebar-list {
@@ -84,15 +84,26 @@ button.sidebar-section-label:focus-visible { outline-offset: calc(var(--ring-off
   flex: 0 0 auto;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--side-gutter) 0;
+  padding: var(--space-2) var(--side-gutter) var(--space-2);
 }
 
 /* the field's label stays in view whatever is typed: the section head's words (Agents) */
 .sidebar-filter-label {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--side-row);
   flex: none;
   color: var(--text-dim);
   font-size: var(--fs-input);
   line-height: var(--lh-tight);
+}
+
+.sidebar-filter-label svg {
+  width: var(--space-4);
+  height: var(--space-4);
 }
 
 /* the size of the field's own text beside it, as .input steps down on a wide screen */
@@ -104,7 +115,10 @@ button.sidebar-section-label:focus-visible { outline-offset: calc(var(--ring-off
   flex: 1 1 auto;
   min-width: 0;
   height: var(--side-row);
+  padding-left: var(--side-row);
   padding-right: var(--side-row);
+  background: color-mix(in srgb, var(--bg-input) 50%, var(--sidebar-surface));
+  border-color: var(--surface-edge);
   text-overflow: ellipsis;
 }
 
@@ -725,6 +739,8 @@ button.sidebar-section-label:focus-visible { outline-offset: calc(var(--ring-off
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
+  margin-top: auto;
+  border-top: var(--hairline) solid var(--surface-edge);
   padding: var(--space-2) var(--side-gutter) calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
 }
 
@@ -764,14 +780,14 @@ button.sidebar-section-label:focus-visible { outline-offset: calc(var(--ring-off
   min-width: 0;
 }
 
-/* Settings is its gear alone, so the plan meters beside it get the rest of the row */
+/* A visible Settings label makes the footer discoverable; meters may take the remaining room. */
 .sidebar-footer-row > .sidebar-footer-settings {
   flex: 0 0 auto;
-  width: var(--side-box);
-  padding: 0;
+  width: auto;
+  padding: 0 var(--space-2) 0 0;
 }
 
-.sidebar-footer-settings svg { margin-inline: auto; }
+.sidebar-footer-settings svg { margin-inline: calc((var(--side-box) - var(--icon-size)) / 2); }
 
 .sidebar-install-help {
   margin: 0;

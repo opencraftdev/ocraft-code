@@ -1,4 +1,4 @@
-/* herdr's tab row, over the pane: quiet names on a hairline, the open one underlined in amber */
+/* herdr's tab row: quiet names and a neutral selected surface, above the conversation. */
 .tab-strip {
   display: flex;
   align-items: stretch;
@@ -7,9 +7,9 @@
   min-height: var(--control-h);
   padding: 0 var(--space-3);
   /* the strip's surface, which the + that covers the scrolling tabs paints too */
-  --strip-bg: var(--bg-panel);
+  --strip-bg: var(--chat-canvas);
   background: var(--strip-bg);
-  border-bottom: var(--hairline) solid var(--border);
+  border-bottom: var(--hairline) solid var(--surface-edge);
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -52,9 +52,11 @@
   flex: 0 0 auto;
 }
 
-/* the underline spans the name and the optional touch menu */
+/* A neutral selected tab keeps navigation distinct from the conversation's primary action. */
 .tab-strip-item.is-active {
-  box-shadow: inset 0 -2px 0 var(--accent);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  box-shadow: none;
 }
 
 .tab-strip-tab {

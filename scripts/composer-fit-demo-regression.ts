@@ -573,7 +573,8 @@ try {
       });
       // Typography is applied by SettingsProvider after the render. At this fixed card width,
       // the larger interface font must step effort out without needing a viewport resize.
-      await withCard(browser, 1075, { agent: "codex", model: LONG_MODEL }, async (page) => {
+      // 1035px minus the 280px sidebar keeps the same 755px pane this fixture exercises.
+      await withCard(browser, 1035, { agent: "codex", model: LONG_MODEL }, async (page) => {
         const before = await measure(page);
         assert.equal(before.draw, "full");
         assert.equal(before.model?.clipped, false);

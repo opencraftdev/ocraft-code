@@ -9,7 +9,7 @@
      The indicator is a thin bar near the bottom edge: the box may sit 16px into its 34px inset
      and still clear it, and the full inset left a band of nothing under the box */
   padding: 0 var(--space-4) max(var(--space-4), calc(env(safe-area-inset-bottom, 0px) - var(--space-4)));
-  background: var(--bg-panel);
+  background: var(--chat-canvas);
 }
 
 /* The prompt card's place (PaneTerminal.tsx): over the input card and under the held messages,
@@ -158,7 +158,7 @@
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: var(--space-1);
   min-width: 0;
   min-height: var(--chip-h);
@@ -236,8 +236,8 @@
   min-width: 0;
   height: var(--control-h);
   padding: 0 var(--space-3);
-  border-radius: var(--radius-pill);
-  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-hover) 45%, transparent);
   overflow: hidden;
 }
 
@@ -461,20 +461,19 @@
     "attachments attachments attachments"
     "text text text"
     "left status right";
-  background: var(--bg-elevated);
-  border: var(--hairline) solid var(--border);
+  background: var(--composer-surface-bg);
+  border: var(--hairline) solid var(--surface-edge);
   border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-card);
+  box-shadow: 0 var(--space-1) var(--space-4) color-mix(in srgb, var(--chat-canvas) 30%, transparent);
   transition:
     border-color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out);
 }
 
-/* focus is the surface's: the accent border on the rounded box, not a rectangle on the
-   textarea inside it (the global :focus-visible ring is suppressed below) */
+/* Focus belongs to the whole input surface; its quiet outline stays visible in every theme. */
 .composer-surface:focus-within {
   border-color: var(--accent);
-  box-shadow: var(--shadow-card), 0 0 0 var(--hairline) var(--accent-tint);
+  box-shadow: 0 0 0 var(--hairline) var(--accent-tint);
 }
 
 .composer-surface.is-dragging {
@@ -597,7 +596,7 @@
   height: var(--space-8);
   padding: 0;
   border: 0;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--primary-text);
 }
@@ -707,7 +706,7 @@
   border: var(--hairline) solid var(--border);
   border-top: 0;
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
-  background: var(--bg-elevated);
+  background: var(--composer-surface-bg);
   color: var(--text-dim);
   font-size: var(--fs-xs);
 }
@@ -745,6 +744,30 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Keyboard help follows the actual send preference and never takes a phone's keyboard space. */
+.composer-keyhint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: min(100%, var(--chat-w));
+  margin: var(--space-2) auto 0;
+  color: var(--text-dim);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-base);
+}
+
+.composer-keyhint kbd {
+  font: inherit;
+}
+
+/* Approval forms already explain their keys and need this height for the reference text. */
+.terminal-stack:has(> .prompt-dock:not(:empty)) .composer-keyhint { display: none; }
+
+@media (max-width: 768px), (max-height: 640px), (pointer: coarse) {
+  .composer-keyhint { display: none; }
 }
 
 .composer-menu {
@@ -1512,12 +1535,10 @@
   .terminal-stack.is-chat:not(.is-greeted) > .terminal-surface + .prompt-dock:empty + .composer:not(.has-notices) {
     z-index: 1;
     margin-top: calc(-1 * var(--composer-over));
-    background: linear-gradient(transparent, var(--bg) var(--composer-over));
+    background: linear-gradient(transparent, var(--chat-canvas) var(--composer-over));
   }
 
   .terminal-stack.is-chat:not(.is-greeted) > .terminal-surface + .prompt-dock:empty + .composer:not(.has-notices) .composer-surface {
-    background: var(--card-glass);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
+    background: var(--composer-surface-bg);
   }
 }

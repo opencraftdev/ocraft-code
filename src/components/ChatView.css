@@ -56,7 +56,7 @@
   scroll-padding-top: var(--header-over, 0px);
   /* and a row brought into view (an opened screen preview) stops clear of the card, not under it */
   scroll-padding-bottom: var(--composer-over, 0px);
-  background: var(--bg);
+  background: var(--chat-canvas);
 }
 
 /* From 769px the header over the chat has no bar and no rule (styles.css): the transcript
@@ -70,7 +70,7 @@
     display: block;
     height: var(--space-5);
     margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) calc(-1 * var(--space-1));
-    background: linear-gradient(var(--bg), transparent);
+    background: linear-gradient(var(--chat-canvas), transparent);
     pointer-events: none;
   }
   .terminal-host:first-child .chat-view-virtual::before {
@@ -91,6 +91,11 @@
 
 .chat-turn {
   width: 100%;
+}
+
+/* Comfortable measure for prose, even when a user chooses a wider lane for code or diffs. */
+.chat-turn-agent > .markdown {
+  max-width: 75ch;
 }
 
 .chat-terminal-fallback {
@@ -130,8 +135,8 @@
   max-width: 80%;
   padding: var(--space-3) var(--space-4);
   border: var(--hairline) solid var(--bubble-border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--bg-elevated) 75%, var(--chat-canvas));
   color: var(--text-strong);
   font-size: var(--chat-fs-body);
   line-height: var(--lh-prose);
@@ -610,34 +615,10 @@ ol.markdown-list {
   user-select: none;
 }
 
-/* With a mouse a code block has no header strip: its language and copy control sit over the
-   top right corner and show on hover or focus. Touch keeps the strip, where nothing can
-   cover the code. */
-@media (hover: hover) and (pointer: fine) and (not (any-pointer: coarse)) {
-  .markdown-code {
-    position: relative;
-  }
-
-  .markdown-code-header {
-    position: absolute;
-    top: var(--space-1);
-    right: var(--space-1);
-    min-height: 0;
-    padding: 0 0 0 var(--space-2);
-    gap: var(--space-1);
-    border-bottom: 0;
-    border-radius: var(--radius-md);
-    background: var(--bg-panel);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--dur-fast) var(--ease-out);
-  }
-
-  .markdown-code:hover .markdown-code-header,
-  .markdown-code:focus-within .markdown-code-header {
-    opacity: 1;
-    pointer-events: auto;
-  }
+/* Keep the language and Copy discoverable on every device, above rather than over the code. */
+.markdown-code-header {
+  background: color-mix(in srgb, var(--bg-elevated) 55%, var(--chat-canvas));
+  border-bottom-color: var(--surface-edge);
 }
 
 /* no height cap: an inner scroll hid the rest of the block on phones */
@@ -712,7 +693,7 @@ ol.markdown-list {
 /* a folded block is one row with the exchange's one rule under it, where it closes the work */
 .work-block.is-folded {
   padding-bottom: calc(var(--space-1) + var(--hairline));
-  box-shadow: inset 0 calc(-1 * var(--hairline)) 0 0 var(--border);
+  box-shadow: none;
 }
 
 .work-block-head,
@@ -1190,12 +1171,11 @@ ol.markdown-list {
 
 .chat-new-messages svg { width: var(--icon-size); height: var(--icon-size); }
 
-/* chat mode is ONE surface: the stack, the transcript and the composer region all sit on
-   --bg; the only card is the composer's input box, on the same column as the transcript */
+/* Chat mode is one continuous canvas, including the space under the floating composer. */
 .terminal-stack.is-chat {
   /* a phone's glass header lies over the stack's top: what the stack holds starts below it */
   padding-top: var(--header-over, 0px);
-  background: var(--bg);
+  background: var(--chat-canvas);
 }
 
 .terminal-stack.is-chat .composer {
