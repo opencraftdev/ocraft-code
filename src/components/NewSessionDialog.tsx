@@ -309,7 +309,7 @@ export function NewSessionDialog({ open, beside = false, machines = [], onMachin
     <div className={`new-session-page-scrim${besideStyle ? " is-beside" : ""}`} style={besideStyle} onMouseDown={closeFromScrim}>
       <form ref={surface} className="new-session-page" role="dialog" aria-modal="true" aria-labelledby="new-session-title" tabIndex={-1} onSubmit={(event) => { event.preventDefault(); submit(); }}>
         <div className="new-session-page-main">
-          <h2 className="new-session-page-heading" id="new-session-title">{t(tab ? "New tab" : "New session")}</h2>
+          <h2 className="new-session-page-heading" id="new-session-title">{t(tab ? "New tab" : "New workspace")}</h2>
           <div className="new-session-page-bar">
             <div className="new-session-page-left">
               {/* the environment: which PC the session starts on */}

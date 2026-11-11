@@ -79,5 +79,4 @@ export const WORKSPACE_JA: Record<string, string> = {
   "Remote": "リモート",
   "This computer": "このコンピューター",
   "Open folder…": "フォルダを開く…",
-  "New session": "新しいセッション",
 };
