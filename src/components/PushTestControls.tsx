@@ -66,7 +66,7 @@ export function PushTestControls({ onEnable }: { onEnable: () => Promise<PushAct
         </div>
         <button type="button" className="btn" disabled={mac ? !settings.alertsOn : busy !== null || !settings.alertsOn || !supported || denied || result === "read-only"} onClick={() => {
           if (!mac) { void send(false); return; }
-          sendMacTestNotification("Ovis", t("Test notification. Alerts from your agents look like this."));
+          sendMacTestNotification("OCraft Code", t("Test notification. Alerts from your agents look like this."));
           setMacSent(true);
         }}>{busy === "test" ? t("Sending…") : t("Send test")}</button>
       </div>

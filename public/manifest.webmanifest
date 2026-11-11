@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Ovis",
-  "short_name": "Ovis",
+  "name": "OCraft Code",
+  "short_name": "OCraft",
   "description": "Ovis, the browser and phone client for herdr. Chat with your coding agents and use live herdr terminals.",
   "start_url": "/",
   "scope": "/",

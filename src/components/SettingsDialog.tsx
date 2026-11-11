@@ -1090,7 +1090,7 @@ function AboutPage({ updates, herdrVersion, bridgesFollow }: { updates: UpdatesM
       <SettingsGroup title={t("About")} className="settings-about" section="about">
         <div className="settings-row">
           <div className="settings-row-text">
-            <span className="settings-label">Ovis</span>
+            <span className="settings-label">OCraft Code</span>
             <a className="settings-link" href="https://ovis.sh/" target="_blank" rel="noreferrer">ovis.sh</a>
           </div>
           <a className="btn" href="https://github.com/devswha/ovis" target="_blank" rel="noreferrer"><Star aria-hidden="true" />{t("Star on GitHub")}</a>

@@ -98,7 +98,7 @@ import { useSplitLayout, useSplitRecheck, useSplitState } from "./lib/useSplitVi
 import { linkSelects, useLinkLanding, useMachineGone, useNotificationTargets, useSelectedLayout, useSelectedMachine, useSelectedPane, useSelectionMark, useSelectionState, useSelectPane, useSelectTarget } from "./lib/useSelection.ts";
 import { useAddressBar } from "./lib/useAddressBar.ts";
 
-const APP_TITLE = "Ovis";
+const APP_TITLE = "OCraft Code";
 /** how soon after a key press a focus counts as the user's own (lastKeyAtRef) */
 const KEY_FOCUS_MS = 1000;
 
@@ -352,7 +352,7 @@ export function App() {
     : null;
 
   useEffect(() => {
-    document.title = selectedTitle ? `${selectedTitle} · Ovis` : APP_TITLE;
+    document.title = selectedTitle ? `${selectedTitle} · ${APP_TITLE}` : APP_TITLE;
   }, [selectedTitle]);
 
   // A new tab's workspace: the named one, else the selected pane's. Its folder is the workspace's:
@@ -666,9 +666,9 @@ export function App() {
           >
             <PanelLeft />
           </button>
-          <span className="workspace-brand" aria-label="Ovis">
+          <span className="workspace-brand" aria-label="OCraft Code">
             <img src="/icons/icon-192.png?v=sheep1" alt="" width="22" height="22" />
-            <span>Ovis</span>
+            <span>OCraft Code</span>
           </span>
           <button type="button" className="icon-button palette-button" aria-label={t("Command palette")} title={t("Command palette (⌘⇧K)")} onClick={() => openPalette()}>
             <Search />

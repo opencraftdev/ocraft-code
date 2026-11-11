@@ -1,8 +1,12 @@
 <p align="center">
-  <img src="public/icons/icon-192.png" alt="Ovis" width="100">
+  <img src="public/icons/icon-192.png" alt="OCraft Code" width="100">
 </p>
 
-<h1 align="center">Ovis</h1>
+<h1 align="center">OCraft Code</h1>
+
+<p align="center">
+  <sub>A fork of <a href="https://github.com/devswha/ovis">Ovis</a> by devswha, under the MIT license (see <a href="LICENSE">LICENSE</a>). Claude-desktop style chats, panels and workspaces on top of it.</sub>
+</p>
 
 <p align="center">
   <strong>Every coding agent, on every screen.</strong>
