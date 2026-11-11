@@ -3172,3 +3172,32 @@ button, a, [role="button"] {
 
 /* "Restart it there to load the update" is Settings → Updates' to tell: nothing floats over the chat for it */
 .pane-column > .update-notice.is-warning:has(> a.btn) { display: none; }
+
+/* ── Claude desktop look: a compact right panel ───────────────────────────────────────────────
+   Plain titles, one line per fact: the PC, the folder and the branch; Context with its share; the
+   changes as lines added and removed. Tasks and agents appear only while they run. */
+@media (min-width: 769px) {
+  .agent-panel .agent-panel-section { padding-block: var(--space-1); }
+  .agent-panel .agent-panel-section-head { min-height: var(--control-h); }
+  .agent-panel-environment .agent-panel-disclosure > svg,
+  .agent-panel-changes .agent-panel-disclosure > svg,
+  .agent-panel-tasks .agent-panel-disclosure > svg,
+  .agent-panel-agents .agent-panel-disclosure > svg { display: none; }
+  .agent-panel .agent-panel-environment-row { min-height: calc(var(--control-h) - var(--space-1)); padding-block: 0; }
+  .agent-panel .agent-panel-directory small { display: none; }
+  .agent-panel .agent-panel-changes .agent-panel-section-head .icon-button { opacity: 0; }
+  .agent-panel .agent-panel-changes:hover .agent-panel-section-head .icon-button,
+  .agent-panel .agent-panel-changes .agent-panel-section-head .icon-button:focus-visible { opacity: 1; }
+  .agent-change-summary { gap: var(--space-3); }
+  .agent-change-summary > span { flex: 1; font-variant-numeric: tabular-nums; }
+  .agent-change-added { color: var(--diff-add, var(--status-done)); }
+  .agent-change-removed { color: var(--diff-del, var(--status-blocked)); }
+  .agent-change-review {
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--bg-hover);
+    color: var(--text-dim);
+    font-size: var(--fs-xs);
+  }
+  .agent-change-summary:hover .agent-change-review { color: var(--text); }
+}

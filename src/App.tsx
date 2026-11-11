@@ -201,7 +201,7 @@ export function App() {
   // the Rename tab shortcut and palette action: the tab strip of the selected pane opens its name field
   const { renameRequest, requestRename, clearRenameRequest } = useRenameRequest(selectedMachineId, selectedPaneId);
   // the header's More menu: its button
-  const [more, setMore] = useState<{ anchor: HTMLElement } | null>(null);
+  const [more, setMore] = useState<{ anchor: HTMLElement; start?: boolean } | null>(null);
   const { agentPanelOpen, setAgentPanelOpen, agentPanelTab, setAgentPanelTab, agentDrawerOpen, setAgentDrawerOpen, agentPanelToggle, closeAgentPanel, focusAgent, setFocusAgent, clearFocusAgent } = useAgentPanel(conversationContextKey(selectedMachineId, snapshot?.panes.find(item => item.pane_id === selectedPaneId) ?? null, snapshot?.finish_epoch));
   const closeMore = useCallback(() => setMore(null), []);
   // the pane canvas's actions, for the phone's tab menu (TabStrip)
@@ -663,7 +663,7 @@ export function App() {
         {note !== null ? null : selectedPane && crumb ? (
           <div className="context" title={crumb.tooltip}>
             <button type="button" className="context-title" aria-haspopup="menu" aria-expanded={more !== null}
-              onClick={(event) => { const anchor = event.currentTarget; setMore((open) => (open ? null : { anchor })); }}>
+              onClick={(event) => { const anchor = event.currentTarget; setMore((open) => (open ? null : { anchor, start: true })); }}>
               <span className="context-title-text">{selectedTitle}</span>
               <ChevronDown className="context-title-chevron" aria-hidden="true" />
             </button>
@@ -724,7 +724,7 @@ export function App() {
               aria-label={alertsOffDot ? t("More · alerts are off") : t("More")}
               title={alertsOffDot ? t("More · alerts are off") : t("More")}
               aria-haspopup="menu"
-              aria-expanded={more !== null}
+              aria-expanded={more !== null && !more.start}
               onClick={(event) => {
                 const anchor = event.currentTarget;
                 setMore((open) => (open ? null : { anchor }));
@@ -738,6 +738,8 @@ export function App() {
         {more && (
           <RowMenu
             anchor={more.anchor}
+            // the title's menu drops from under the title, the ⋯ menu from under ⋯
+            align={more.start ? "start" : "end"}
             title={t("More")}
             header={crumb ? (
               <div className="header-more-crumb">

@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ArrowUpRight, ChevronDown, ChevronRight, Folder, FolderOpen, GitBranch, GitCompare, GitFork, Layers, Monitor, PanelRightClose, RefreshCw, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Folder, GitBranch, GitCompare, GitFork, Layers, Monitor, PanelRightClose, RefreshCw, X } from "lucide-react";
 import type { HerdrPane, RepoDiffFile } from "../../shared/protocol.ts";
 import { AgentGraphView, graphStateWord } from "./AgentGraphView.tsx";
 import { agentActivityGroups, sessionGraph, type AgentGraphNode } from "../lib/agentGraph.ts";
 import type { AgentPanelView } from "../lib/useAgentPanel.ts";
 import { useRepoChangesSummary } from "../lib/useRepoChangesSummary.ts";
-import { diffErrorMessage, STATUS_MARK, type RepoComparison } from "../lib/repoDiff.ts";
-import { FileGlyph } from "./FileGlyph.tsx";
+import { diffErrorMessage, type RepoComparison } from "../lib/repoDiff.ts";
 import { useAgentActivity } from "../lib/useAgentActivity.ts";
 import { useMachineId } from "../lib/machineContext.tsx";
 import { usePaneBranch, DETACHED } from "../lib/paneBranch.ts";
@@ -145,7 +144,6 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
           <div className="agent-panel-environment-row"><Monitor aria-hidden="true" /><span title={machineName}>{machineName}</span></div>
           <div className="agent-panel-environment-row agent-panel-directory" title={directory ?? workspaceName}><Folder aria-hidden="true" /><span>{workspaceName}{directory && directory !== workspaceName && <small> · {directory}</small>}</span></div>
           {branch && <div className="agent-panel-environment-row"><GitBranch aria-hidden="true" /><span title={branch === DETACHED ? t("Detached HEAD") : branch}>{branch === DETACHED ? t("Detached HEAD") : branch}</span></div>}
-          <button type="button" className="agent-panel-action" disabled={watching || !online} onClick={() => onBrowseFiles("browse")}><FolderOpen aria-hidden="true" /><span>{t("Browse files")}</span><ArrowUpRight aria-hidden="true" /></button>
         </div>
       </section>
       <section className="agent-panel-section agent-panel-context" aria-label={t("Context")}>
@@ -164,25 +162,39 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
           <button type="button" className="icon-button" disabled={changes.loading || !online} aria-label={t("Refresh changes")} title={t("Refresh changes")} onClick={changes.refresh}><RefreshCw aria-hidden="true" /></button>
         </header>
         <div id={`${id}-changes`} className="agent-panel-launchers" hidden={!changesOpen}>
-          {changes.error ? <p className="agent-panel-note">{diffErrorMessage(t, changes.error)}</p> : changes.loading && !changes.listing ? <p className="agent-panel-note" role="status">{t("Loading…")}</p> : !changes.listing && <p className="agent-panel-note">{t("Changes unavailable")}</p>}
-          {changes.listing?.files.slice(0, 2).map(file => <button key={file.path} type="button" className="agent-panel-action agent-change-row" title={file.path} onClick={() => onOpenDiff({ scope: "workspace", base: null, head: null, comparison: null }, file)}><FileGlyph name={file.path} /><span>{file.path}</span><small>{STATUS_MARK[file.status]}</small></button>)}
-          <button type="button" className="agent-panel-action" onClick={() => onBrowseFiles("changes")}><GitCompare aria-hidden="true" /><span>{t("Review changes")}</span><ChevronRight aria-hidden="true" /></button>
+          {changes.error ? <p className="agent-panel-note">{diffErrorMessage(t, changes.error)}</p>
+            : changes.loading && !changes.listing ? <p className="agent-panel-note" role="status">{t("Loading…")}</p>
+            : !changes.listing ? <p className="agent-panel-note">{t("Changes unavailable")}</p>
+            : changes.listing.files.length === 0 ? <p className="agent-panel-note">{t("No changes")}</p>
+            : <button type="button" className="agent-panel-action agent-change-summary" onClick={() => onBrowseFiles("changes")}>
+              <GitCompare aria-hidden="true" />
+              {(() => {
+                // one line, as Claude desktop sums a branch: lines added and removed, or the file count when git gave no counts
+                const files = changes.listing.files;
+                const added = files.reduce((sum, file) => sum + (file.additions ?? 0), 0), removed = files.reduce((sum, file) => sum + (file.deletions ?? 0), 0);
+                return added + removed > 0
+                  ? <span><span className="agent-change-added">+{added.toLocaleString()}</span> <span className="agent-change-removed">−{removed.toLocaleString()}</span></span>
+                  : <span>{t(files.length === 1 ? "{n} file" : "{n} files", { n: changes.listing.total ?? files.length })}</span>;
+              })()}
+              <small className="agent-change-review">{t("Review")}</small>
+            </button>}
         </div>
       </section>
-      <section className="agent-panel-section agent-panel-tasks" data-expanded={tasksOpen} aria-label={t("Background tasks")}>
+      {/* shown only while work runs: what ended is in the drawer, opened from the chat's strip and chip */}
+      {(runningTasks.length > 0 || activity.runs.some(runGoing)) && <section className="agent-panel-section agent-panel-tasks" data-expanded={tasksOpen} aria-label={t("Background tasks")}>
         <header className="agent-panel-section-head"><h2><button type="button" className="agent-panel-disclosure" aria-expanded={tasksOpen} aria-controls={`${id}-tasks`} onClick={() => setTasksOpen(value => !value)}>{t("Background tasks")}<ChevronDown aria-hidden="true" /></button></h2></header>
         <div id={`${id}-tasks`} className="agent-panel-launchers" hidden={!tasksOpen}>
           {runningTasks.length > 0 ? <ul className="agent-panel-list">{runningTasks.slice(0, 2).map(row)}</ul> : activity.runs.some(runGoing) ? <p className="agent-panel-note">{t("{n} running", { n: activity.runs.filter(runGoing).length })}</p> : <p className="agent-panel-note">{waiting ?? t(activity.stale ? "Task activity unavailable" : "No background tasks reported.")}</p>}
           <button type="button" className="agent-panel-action" aria-expanded={drawerOpen && tab === "tasks"} aria-controls={`${id}-drawer`} onClick={event => openList("tasks", event, endedCount > 0)}><Layers aria-hidden="true" /><span>{endedCount > 0 ? t("{count} finished", { count: endedCount }) : t("View background tasks")}</span><ChevronRight aria-hidden="true" /></button>
         </div>
-      </section>
-      <section className="agent-panel-section agent-panel-agents" data-expanded={agentsOpen} aria-label={t("Agents")}>
+      </section>}
+      {runningAgents.length > 0 && <section className="agent-panel-section agent-panel-agents" data-expanded={agentsOpen} aria-label={t("Agents")}>
         <header className="agent-panel-section-head"><h2><button type="button" className="agent-panel-disclosure" aria-expanded={agentsOpen} aria-controls={`${id}-agents-summary`} onClick={() => setAgentsOpen(value => !value)}>{t("Agents")}<ChevronDown aria-hidden="true" /></button></h2></header>
         <div id={`${id}-agents-summary`} className="agent-panel-launchers" hidden={!agentsOpen}>
           {runningAgents.length > 0 ? <ul className="agent-panel-list">{runningAgents.slice(0, 2).map(row)}</ul> : <p className="agent-panel-note">{waiting ?? t(activity.stale ? "Agent activity unavailable" : "No agents running.")}</p>}
           <button type="button" className="agent-panel-action" aria-expanded={drawerOpen && tab !== "tasks"} aria-controls={`${id}-drawer`} onClick={event => openList("agents", event, endedAgents.length > 0)}><GitFork aria-hidden="true" /><span>{endedAgents.length > 0 ? t("{count} finished", { count: endedAgents.length }) : t("View agents")}</span><ChevronRight aria-hidden="true" /></button>
         </div>
-      </section>
+      </section>}
     </div>
   </aside>
   {drawerOpen && createPortal(<aside ref={drawerRoot} tabIndex={-1} id={`${id}-drawer`} className="workspace-details-drawer agent-details-drawer" aria-labelledby={`${id}-drawer-title`}
