@@ -2986,7 +2986,9 @@ button, a, [role="button"] {
     background: var(--chat-canvas, var(--bg-panel));
     gap: var(--space-1);
   }
-  .app-header .context { margin-left: var(--space-2); }
+  /* the title is one button now, no crumb line to clip: the row holds it whole */
+  .app-header .context { margin-left: var(--space-2); max-height: none; overflow: visible; align-items: center; }
+  .app-header .context-title { min-height: 30px; max-width: 100%; }
   .app-header .context-title {
     gap: var(--space-1);
     min-height: var(--control-h);
