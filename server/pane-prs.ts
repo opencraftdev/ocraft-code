@@ -89,6 +89,31 @@ export class PanePrs {
     if (cached && this.now() - cached.at < CACHE_MS) return cached.value;
     const urls = prUrlsIn(texts);
     const current = await this.gh(["pr", "view", "--json", "url"], cwd, null).then((out) => out ? (JSON.parse(out) as { url?: string }).url ?? null : null).catch(() => null);
+    const value: PanePullRequests = { prs: await this.details(current, urls, cwd) };
+    this.cache.set(paneId, { at: this.now(), value });
+    return value;
+  }
+
+  /**
+   * For a PC whose bridge has no /api/pane/prs: its session's PRs found from here, by the commit its
+   * branch is on (GitHub's search knows the PRs that contain a commit, whatever the repository) and the
+   * PR links its conversation holds.
+   */
+  async lookup(sha: string | null, urls: readonly string[]): Promise<PanePullRequests> {
+    const key = `lookup:${sha ?? ""}:${urls.join(",")}`;
+    const cached = this.cache.get(key);
+    if (cached && this.now() - cached.at < CACHE_MS) return cached.value;
+    let current: string | null = null;
+    if (sha) {
+      const out = await this.gh(["api", "-X", "GET", "search/issues", "-f", `q=${sha} is:pr`, "--jq", "[.items[].html_url]"], process.cwd(), null);
+      try { current = out ? (JSON.parse(out) as string[])[0] ?? null : null; } catch { current = null; }
+    }
+    const value: PanePullRequests = { prs: await this.details(current, urls, process.cwd()) };
+    this.cache.set(key, { at: this.now(), value });
+    return value;
+  }
+
+  private async details(current: string | null, urls: readonly string[], cwd: string): Promise<PanePullRequest[]> {
     const ordered = [...new Set([...(current ? [current] : []), ...urls])].slice(0, MAX_PRS);
     const prs: PanePullRequest[] = [];
     for (const url of ordered) {
@@ -112,16 +137,22 @@ export class PanePrs {
         });
       } catch { /* an answer gh could not give whole: the PR is left out */ }
     }
-    const value: PanePullRequests = { prs };
-    this.cache.set(paneId, { at: this.now(), value });
-    return value;
+    return prs;
   }
 }
 
 const prs = new PanePrs();
 
-/** GET /api/pane/prs?pane_id=: the session's pull requests (PanePrs). */
+/** GET /api/pane/prs?pane_id=: the session's pull requests (PanePrs); GET /api/prs/lookup?sha=&url=: another PC's, found from here. */
 export async function handlePanePrsRequest(request: Request, url: URL, pathname: string): Promise<Response | null> {
+  if (pathname === "/api/prs/lookup") {
+    setRequestRoute(pathname);
+    if (request.method !== "GET") return badRequest("method_not_allowed", "use GET");
+    const sha = url.searchParams.get("sha");
+    if (sha !== null && !/^[0-9a-f]{7,40}$/.test(sha)) return badRequest("invalid_sha", "sha must be a commit hash");
+    const urls = url.searchParams.getAll("url").filter((value) => /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(value)).slice(0, MAX_PRS);
+    return jsonResponse(await prs.lookup(sha, urls).catch(() => ({ prs: [] })));
+  }
   if (pathname !== "/api/pane/prs") return null;
   setRequestRoute(pathname);
   if (request.method !== "GET") return badRequest("method_not_allowed", "use GET");

@@ -105,7 +105,7 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
   const endedCount = endedTasks.length + activity.runs.filter(run => !runGoing(run)).length;
   const changes = useRepoChangesSummary(pane.pane_id, directory ?? "", online, pane.finish_id);
   const [prRefresh, setPrRefresh] = useState(0);
-  const prs = usePanePrs(pane.pane_id, online, pane.finish_id, prRefresh);
+  const prs = usePanePrs(pane.pane_id, directory ?? "", online, pane.finish_id, prRefresh);
   const [prMenu, setPrMenu] = useState<{ anchor: HTMLElement; url: string; title: string } | null>(null);
   const agentListScroll = useRef(0);
   const showAgent = (node: AgentGraphNode, trigger: HTMLButtonElement) => {

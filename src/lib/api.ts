@@ -914,13 +914,22 @@ export async function fetchPaneBackgroundAgent(paneId: string, agentId: string, 
 }
 
 /** GET /api/pane/prs: the session's pull requests (server/pane-prs.ts); none from a PC whose bridge predates it. */
-export async function fetchPanePrs(paneId: string, machineId = "local", signal?: AbortSignal): Promise<import("../../shared/protocol.ts").PanePullRequest[]> {
+export async function fetchPanePrs(paneId: string, machineId = "local", signal?: AbortSignal): Promise<import("../../shared/protocol.ts").PanePullRequest[] | null> {
   try {
     return (await getJson<import("../../shared/protocol.ts").PanePullRequests>(machinePath(machineId, `pane/prs?pane_id=${encodeURIComponent(paneId)}`), signal ? { signal } : undefined)).prs ?? [];
   } catch (error) {
-    if (error instanceof ApiError && error.status === 404) return [];
+    // null: that PC's bridge predates the route (lookupPrs finds its PRs from this one)
+    if (error instanceof ApiError && error.status === 404) return null;
     throw error;
   }
+}
+
+/** GET /api/prs/lookup on this PC: another PC's session PRs, by its branch's commit and the PR links it wrote. */
+export async function lookupPrs(sha: string | null, urls: readonly string[], signal?: AbortSignal): Promise<import("../../shared/protocol.ts").PanePullRequest[]> {
+  const query = new URLSearchParams();
+  if (sha) query.set("sha", sha);
+  for (const url of urls) query.append("url", url);
+  return (await getJson<import("../../shared/protocol.ts").PanePullRequests>(`/api/prs/lookup?${query.toString()}`, signal ? { signal } : undefined)).prs ?? [];
 }
 
 /** GET /api/pane/plan: the plan the pane's Claude Code or Codex session keeps, and that PC's clock. */
