@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
-import { Check, ChevronDown, CornerDownLeft, Folder, FolderOpen, Laptop } from "lucide-react";
+import { Check, ChevronDown, Folder, FolderOpen, Laptop } from "lucide-react";
 
 import "./NewSessionDialog.css";
 
@@ -138,7 +138,6 @@ export function NewSessionDialog({ open, beside = false, machines = [], onMachin
   // folders kept before worktrees and temporary folders were left out are left out here too
   const shownFolders = recentFolders.filter((path) => !passingFolder(path, worktrees)).slice(0, RECENT_FOLDERS_SHOWN);
   const firstFieldRef = useRef<HTMLButtonElement>(null);
-  const promptField = useRef<HTMLTextAreaElement>(null);
   // one Start at a time, whatever the fields' disabled state has rendered yet: a double tap sends one create
   const guard = useRef(inFlightGuard());
   // a path longer than its field is shown from its end, where the folder's name is, whenever it is
@@ -152,7 +151,7 @@ export function NewSessionDialog({ open, beside = false, machines = [], onMachin
   useLayoutEffect(() => {
     if (open && document.activeElement !== cwdField.current) showPathEnd();
   }, [open, cwd]);
-  const surface = useFocusTrap<HTMLFormElement>(open, { initialFocus: promptField });
+  const surface = useFocusTrap<HTMLFormElement>(open, { initialFocus: firstFieldRef });
   useSheetSwipe(surface, pending ? null : onClose);
   const defaultCwdRef = useRef(defaultCwd);
   defaultCwdRef.current = defaultCwd;
@@ -299,9 +298,6 @@ export function NewSessionDialog({ open, beside = false, machines = [], onMachin
     if (!pending && event.target === event.currentTarget) onClose();
   };
 
-  const promptHint = launch?.prompt?.via === "positional" || (prompt.trim() === "" && can.positionalPrompt)
-    ? t("Sent to {agent} as it starts.", { agent: agentLabel })
-    : t("Queued for {agent}'s first turn: sent once it is ready, shown as a pending message until then.", { agent: agentLabel });
 
   // a page like Claude Code's New session: one message box, the folder under it on the left and the
   // agent, model and effort on the right; Enter starts it (Shift+Enter is a new line)
@@ -313,29 +309,7 @@ export function NewSessionDialog({ open, beside = false, machines = [], onMachin
     <div className={`new-session-page-scrim${besideStyle ? " is-beside" : ""}`} style={besideStyle} onMouseDown={closeFromScrim}>
       <form ref={surface} className="new-session-page" role="dialog" aria-modal="true" aria-labelledby="new-session-title" tabIndex={-1} onSubmit={(event) => { event.preventDefault(); submit(); }}>
         <div className="new-session-page-main">
-          <div className="new-session-page-box">
-            <textarea
-              ref={promptField}
-              id="new-session-prompt"
-              className="new-session-page-text"
-              value={prompt}
-              rows={1}
-              maxLength={MAX_COMPOSER_CHARS}
-              disabled={fieldsDisabled}
-              placeholder={t("Describe a task or ask a question")}
-              aria-label={t("First message")}
-              aria-describedby="new-session-prompt-hint"
-              onChange={(event) => setPrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
-                event.preventDefault();
-                submit();
-              }}
-            />
-            <button type="submit" className="new-session-page-send" aria-label={startWord} title={startWord} disabled={pending || fault !== null}>
-              <CornerDownLeft aria-hidden="true" />
-            </button>
-          </div>
+          <h2 className="new-session-page-heading" id="new-session-title">{t(tab ? "New tab" : "New session")}</h2>
           <div className="new-session-page-bar">
             <div className="new-session-page-left">
               {/* the environment: which PC the session starts on */}
@@ -399,6 +373,7 @@ export function NewSessionDialog({ open, beside = false, machines = [], onMachin
               </select>}
             </div>
           </div>
+          <button type="submit" className="btn btn-primary new-session-page-start" disabled={pending || fault !== null}>{startWord}</button>
           {!tab && folderOpen && <div className="new-session-page-folder">
             <div className="new-session-cwd">
               <input ref={cwdField} id="new-session-cwd" className="input" value={cwd} placeholder="~/projects/app" aria-label={t("Directory")} disabled={fieldsDisabled} autoComplete="off" onChange={(event) => setCwd(event.target.value)} onBlur={showPathEnd} />
@@ -412,7 +387,7 @@ export function NewSessionDialog({ open, beside = false, machines = [], onMachin
               onPick={(path) => { setCwd(path); setBrowsing(false); setFolderOpen(false); }} />}
           </div>}
           <p id="new-session-prompt-hint" className={`new-session-page-note${error || fault === "model" ? " new-session-error" : ""}`} role={error ? "alert" : "status"}>
-            {error ? <>{error.message}{error.detail !== null && <><br /><code>{error.detail}</code></>}</> : fault === "model" ? t("One model name, without spaces.") : pending ? pendingLabel : prompt.trim() ? promptHint : null}
+            {error ? <>{error.message}{error.detail !== null && <><br /><code>{error.detail}</code></>}</> : fault === "model" ? t("One model name, without spaces.") : pending ? pendingLabel : null}
           </p>
         </div>
       </form>
