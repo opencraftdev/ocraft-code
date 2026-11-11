@@ -55,9 +55,9 @@ export interface AssistantState {
 }
 
 /**
- * A task's place in its lifecycle (docs/plan/20261111-2112-assistant.md, Task statuses). Phase 5 runs
- * (Scheduled ->) Queued -> Working -> (Needs you <-> Working) -> Ready, and Cancelled or Failed at
- * any point; review and merge are phase 6's. To do is only a phase 4 task that never started.
+ * A task's place in its lifecycle (docs/plan/20261111-2112-assistant.md, Task statuses):
+ * (Scheduled ->) Queued -> Working -> (Needs you <-> Working) -> Ready -> (Reviewing) -> Merging ->
+ * Done, and Cancelled or Failed at any point. To do is only a phase 4 task that never started.
  */
 export const TASK_STATUSES = ["todo", "scheduled", "queued", "working", "needs_you", "ready", "reviewing", "merging", "done", "cancelled", "failed"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -91,10 +91,34 @@ export interface AssistantTask {
   cron?: string;
   next?: number;
   fromCron?: string;
-  /** kept for review and merge (phase 6) */
+  /**
+   * Review and merge (phase 6). `review`: a fresh agent reviews the branch at Ready, up to
+   * REVIEW_ROUNDS rounds (server/assistant-tasks.ts); `autoMerge`: it merges without the user's
+   * Approve once the review passed (or at Ready, without review).
+   */
   review: boolean;
   autoMerge: boolean;
+  /** the PR a `pr` project's task opened at Ready */
   prUrl?: string;
+  /** the branch the task merges into: the project checkout's branch, read when first needed */
+  base?: string;
+  /** review rounds started, the last round's findings, the reviewer's pane while it runs, and a passed review */
+  reviewRounds?: number;
+  findings?: string;
+  reviewPaneId?: string;
+  reviewed?: true;
+  /** the branch has no commits ahead of `base`: Approve marks it Done with nothing merged */
+  nothingToMerge?: true;
+  /**
+   * Why a task the server moved to Needs you waits for the user: a merge that failed or conflicted,
+   * or a review that kept finding problems. herdr's agent state leaves such a task alone; Approve
+   * tries again.
+   */
+  reason?: string;
+  /** what the merge or the cleanup after it left to say (nothing merged, a worktree that stayed) */
+  note?: string;
+  /** Dismiss: off the board, its worktree and branch removed */
+  dismissed?: true;
   /** ms since the epoch */
   createdAt: number;
   startedAt?: number;

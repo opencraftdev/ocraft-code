@@ -60,8 +60,14 @@ user messages you; you read their projects, turn what they write into tasks, and
   and it has no \`ovis-task\`, so never tell it to call \`ovis-task\` or to report back.
 - A task's status comes from its agent: \`working\`, \`needs_you\` (it asks something), \`ready\`
   (it finished its turn), \`failed\` or \`cancelled\`. When one needs the user, say so; answer it
-  only with what the user told you.
-- You never merge or approve a task: only the user does, in the app.
+  only with what the user told you. After \`ready\` come \`reviewing\` (a second agent reviews the
+  branch, when the task has review on), \`merging\` and \`done\`. A \`needs_you\` task with a
+  \`reason\` (a merge that failed or conflicted, or a review that kept finding problems) waits for
+  the user in the app, not for an answer from you; tell the user that reason.
+- You never merge or approve a task, and \`ovis-task\` has no way to: only the user does, with
+  Approve on the task's card in the app. When a task is \`ready\`, tell the user to approve it there
+  (a \`pr\` project's task shows its PR, \`prUrl\`). Only a task created with \`--auto-merge\` merges
+  without that, once its review passed.
 
 ## ovis-task
 
@@ -71,7 +77,11 @@ user messages you; you read their projects, turn what they write into tasks, and
 - \`ovis-task git <project> log|diff|status|show [args]\`
 - \`ovis-task create <project> --title <title> --brief <brief> [--agent claude|codex]\`: queues a
   task (the project's default agent unless \`--agent\` says). A machine that is down keeps it
-  \`queued\` until it comes back. \`--review\` and \`--auto-merge\` are kept on the task for later.
+  \`queued\` until it comes back.
+  - \`--review\`: at \`ready\`, a fresh agent reviews the branch; its findings go back to the task's
+    agent, up to 3 rounds, then to the user.
+  - \`--auto-merge\`: it merges without the user's Approve once it is \`ready\` (and its review
+    passed). Use it only when the user asked for it.
   - \`--after <id>\`: it starts only once task \`<id>\` is \`done\`; it fails if that one fails or is
     cancelled.
   - \`--at <time>\`: \`scheduled\` until then. \`HH:MM\` is the next time the VM's clock shows it

@@ -1,14 +1,15 @@
 import { describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { AssistantProject, AssistantTask } from "../shared/assistant.ts";
 import type { Machine, MachineEvent } from "../shared/machines.ts";
 import type { SessionSnapshot } from "../shared/protocol.ts";
-import { Assistant } from "./assistant.ts";
+import { Assistant, type RunScript } from "./assistant.ts";
 import { AssistantError } from "./assistant.ts";
-import { statusAfter, taskSlug, type TaskBridge } from "./assistant-tasks.ts";
+import { cleanupScript, localMergeScript, parseVerdict, statusAfter, taskSlug, type TaskBridge } from "./assistant-tasks.ts";
+import { shellQuote } from "./machine-security.ts";
 import { cliRequest } from "./ovis-task-cli.ts";
 
 /**
@@ -19,10 +20,10 @@ const PROJECT: AssistantProject = { id: "app", machine: "m1", path: "/home/me/ap
 const snapshot = (panes: { pane_id: string; agent_status: string; agent?: string | null }[], workspaces: unknown[] = []) =>
   ({ panes: panes.map((pane) => ({ workspace_id: "w9", tab_id: "t9", terminal_id: "x", focused: false, revision: 0, agent: "claude", ...pane })), workspaces, tabs: [], agents: [], layouts: [], protocol: 22, version: "0" }) as unknown as SessionSnapshot;
 
-function fixture(options: { stateDir?: string; state?: Machine["state"]; workspaces?: unknown[]; now?: () => number } = {}) {
+function fixture(options: { stateDir?: string; state?: Machine["state"]; workspaces?: unknown[]; now?: () => number; project?: Partial<AssistantProject>; run?: RunScript } = {}) {
   const stateDir = options.stateDir ?? mkdtempSync(join(tmpdir(), "ovis-tasks-"));
   mkdirSync(join(stateDir, "assistant"), { recursive: true });
-  writeFileSync(join(stateDir, "assistant", "projects.json"), JSON.stringify([PROJECT]));
+  writeFileSync(join(stateDir, "assistant", "projects.json"), JSON.stringify([{ ...PROJECT, ...options.project }]));
   const machine: Machine = { id: "m1", herdr_profile_id: "p1", name: "Laptop", kind: "ssh", target: { destination: "laptop.invalid" }, enabled: true, state: options.state ?? "connected", error: null, snapshot: snapshot([], options.workspaces) };
   const calls: { path: string; method?: string; body?: unknown; query?: Record<string, string> }[] = [];
   const answers: Record<string, (body: unknown) => unknown> = {
@@ -32,7 +33,20 @@ function fixture(options: { stateDir?: string; state?: Machine["state"]; workspa
     "pane/read": () => ({ read: { text: "line one\nline two" } }),
     "pane/prompt": () => ({ prompt: { id: "q1", agent: "claude", kind: "question", title: "", question: "Which database?", body: null, options: [{ label: "Postgres", description: null }, { label: "SQLite", description: null }], multi_select: false, custom_option_index: null } }),
     "pane/prompt/answer": () => ({ ok: true }),
+    "pane/input": () => ({ ok: true }),
+    "pane/keys": () => ({ ok: true }),
+    "pane/conversation": () => ({ source: "claude-transcript", turns: [] }),
+    "worktree/remove": () => ({ ok: true }),
   };
+  // every script a machine is asked to run, answered as a machine whose checkout is on main and whose gh works
+  const scripts: string[] = [];
+  const run: RunScript = options.run ?? (async (_machine, script) => {
+    scripts.push(script);
+    if (script.includes("symbolic-ref --short HEAD") && !script.includes("rev-list")) return "main\n";
+    if (script.includes("gh pr create")) return "ok\nhttps://github.com/me/app/pull/7\n";
+    if (script.includes("gh pr merge") || script.includes("worktree prune")) return "ok\n";
+    return "herdr\nclaude\n";
+  });
   const bridge: TaskBridge = async (machineId, path, request = {}) => {
     expect(machineId).toBe("m1");
     calls.push({ path, ...request });
@@ -41,13 +55,13 @@ function fixture(options: { stateDir?: string; state?: Machine["state"]; workspa
   let started = 0;
   let listener: ((event: MachineEvent) => void) | undefined;
   const assistant = new Assistant(stateDir, { list: () => [machine], subscribe: (next) => { listener = next; return () => { listener = undefined; }; }, retryNow: () => {} },
-    async () => "herdr\nclaude\n", { bridge, timer: () => () => {}, intervalMs: 1000, ...(options.now ? { now: options.now } : {}) });
+    run, { bridge, timer: () => () => {}, intervalMs: 1000, ...(options.now ? { now: options.now } : {}) });
   // the watcher learns of the machine as Remote PCs tells it
   listener!({ type: "machines", machines: [machine] });
   const frame = (message: unknown) => listener!({ type: "machine-message", machine_id: "m1", message } as MachineEvent);
   const task = (id = "1") => assistant.tasks.get(id);
   const done = () => { assistant.stop(); rmSync(stateDir, { recursive: true, force: true }); };
-  return { assistant, machine, calls, answers, frame, task, stateDir, done, machinesChanged: () => listener!({ type: "machines", machines: [machine] }) };
+  return { assistant, machine, calls, answers, scripts, frame, task, stateDir, done, machinesChanged: () => listener!({ type: "machines", machines: [machine] }) };
 }
 
 const create = (assistant: Assistant, body: Record<string, unknown> = {}) => assistant.tasks.create({ project: "app", title: "Fix login", brief: "The login form\nrejects valid emails.", ...body });
@@ -393,5 +407,313 @@ describe("ovis-task's task commands", () => {
 
   it("refuses approve: only the user approves, in the app", () => {
     expect(cliRequest(["approve", "3"])).toEqual({ refused: "ovis-task approve is refused: only the user approves a task, in the app" });
+  });
+});
+
+/** a task at rest after it worked: Ready, and the steps Ready starts have run */
+async function ready(fx: ReturnType<typeof fixture>, pane = "p1") {
+  fx.frame({ type: "pane-status", pane_id: pane, agent_status: "working" });
+  fx.frame({ type: "pane-status", pane_id: pane, agent_status: "done" });
+  await fx.assistant.tasks.settled();
+}
+const reply = (text: string) => ({ source: "claude-transcript", turns: [{ role: "user", ts: null, parts: [{ kind: "text", text: "Review ... REVIEW: PASS ..." }] }, { role: "assistant", ts: null, parts: [{ kind: "text", text }] }] });
+/** reviewers start as panes r1, r2, ... */
+function reviewers(fx: ReturnType<typeof fixture>) {
+  let opened = 0;
+  fx.answers["workspace/create"] = () => ({ workspace_id: `wr${opened + 1}`, pane_id: `r${(opened += 1)}`, agent_started: true });
+}
+async function verdict(fx: ReturnType<typeof fixture>, pane: string, text: string) {
+  fx.answers["pane/conversation"] = () => reply(text);
+  fx.frame({ type: "pane-status", pane_id: pane, agent_status: "done" });
+  await fx.assistant.tasks.settled();
+}
+
+describe("review", () => {
+  it("starts a fresh reviewer in the worktree at Ready, and a pass makes the task Ready (reviewed) and opens its PR", async () => {
+    const fx = fixture();
+    try {
+      await create(fx.assistant, { review: true });
+      reviewers(fx);
+      await ready(fx);
+      expect(fx.task()).toMatchObject({ status: "reviewing", reviewPaneId: "r1", reviewRounds: 1, base: "main" });
+      const opened = fx.calls.filter((call) => call.path === "workspace/create").at(-1)!;
+      expect(opened.body).toMatchObject({ cwd: "/home/me/.herdr/worktrees/app/assistant-1-fix-login", agent: { kind: "claude" } });
+      const prompt = (opened.body as { agent: { args: string[] } }).agent.args[1]!;
+      expect(prompt).toContain("git diff main...HEAD");
+      expect(prompt).toContain("REVIEW: PASS");
+      // no verdict yet (it has not answered): it waits
+      await verdict(fx, "r1", "Reading the diff now.");
+      expect(fx.task().status).toBe("reviewing");
+      await verdict(fx, "r1", "All good.\n**REVIEW: PASS**");
+      expect(fx.task()).toMatchObject({ status: "ready", reviewed: true, prUrl: "https://github.com/me/app/pull/7" });
+      expect(fx.task().reviewPaneId).toBeUndefined();
+      expect(fx.calls).toContainEqual({ path: "pane/close", method: "POST", body: { pane_id: "r1" } });
+      expect(fx.scripts.find((script) => script.includes("gh pr create"))).toContain("Reviewed by a second agent: passed after 1 round(s).");
+      // Approve is the user's: nothing merged by itself
+      expect(fx.scripts.some((script) => script.includes("gh pr merge"))).toBe(false);
+    } finally { fx.done(); }
+  });
+
+  it("sends findings back to the task's agent, and after three rounds hands them to the user", async () => {
+    const fx = fixture();
+    try {
+      await create(fx.assistant, { review: true });
+      reviewers(fx);
+      await ready(fx);
+      for (const round of [1, 2]) {
+        await verdict(fx, `r${round}`, `Some notes.\nREVIEW: FINDINGS\n- round ${round}: the test is missing`);
+        expect(fx.task()).toMatchObject({ status: "working", findings: `- round ${round}: the test is missing`, reviewRounds: round });
+        const typed = fx.calls.filter((call) => call.path === "pane/input").at(-1)!;
+        expect(typed.body).toEqual({ pane_id: "p1", text: `A reviewer found problems in your changes. Fix them and commit: - round ${round}: the test is missing` });
+        expect(fx.calls.at(-1)).toEqual({ path: "pane/keys", method: "POST", body: { pane_id: "p1", keys: ["Enter"] } });
+        await ready(fx);
+        expect(fx.task()).toMatchObject({ status: "reviewing", reviewPaneId: `r${round + 1}`, reviewRounds: round + 1 });
+      }
+      await verdict(fx, "r3", "REVIEW: FINDINGS still no test");
+      expect(fx.task()).toMatchObject({ status: "needs_you", reason: "The review still found problems after 3 rounds", findings: "still no test", reviewRounds: 3 });
+      expect(fx.calls.filter((call) => call.path === "pane/input")).toHaveLength(2);
+      // herdr's agent state leaves it with the user
+      fx.frame({ type: "pane-status", pane_id: "p1", agent_status: "working" });
+      fx.frame({ type: "pane-status", pane_id: "p1", agent_status: "idle" });
+      await fx.assistant.tasks.settled();
+      expect(fx.task().status).toBe("needs_you");
+      // the user may approve it anyway
+      expect(await fx.assistant.tasks.approve("1")).toMatchObject({ status: "done" });
+    } finally { fx.done(); }
+  });
+
+  it("reads the verdict from the reviewer's last reply line", () => {
+    expect(parseVerdict("REVIEW: PASS")).toEqual({ pass: true });
+    expect(parseVerdict("> REVIEW: FINDINGS\n1. a\n2. b")).toEqual({ pass: false, findings: "1. a\n2. b" });
+    expect(parseVerdict("I will end with REVIEW: PASS")).toBeNull();
+    expect(parseVerdict("REVIEW: FINDINGS x\nREVIEW: PASS")).toEqual({ pass: true });
+  });
+});
+
+describe("merge, pr project", () => {
+  it("opens the PR at Ready with shell-quoted commands, and only Approve merges it; Done removes the worktree and branch", async () => {
+    const fx = fixture();
+    try {
+      await create(fx.assistant, { title: "Fix O'Brien's login" });
+      await ready(fx);
+      expect(fx.task()).toMatchObject({ status: "ready", prUrl: "https://github.com/me/app/pull/7" });
+      const pr = fx.scripts.find((script) => script.includes("gh pr create"))!;
+      expect(pr).toContain(`gh pr create --head ${shellQuote("assistant/1-fix-o-brien-s-login")} --base ${shellQuote("main")} --title ${shellQuote("Fix O'Brien's login")} --body ${shellQuote("The login form\nrejects valid emails.\n\nNot reviewed.\n\nOpened by the Ovis Assistant (task #1).")}`);
+      expect(pr).toContain(`git push -u origin ${shellQuote("assistant/1-fix-o-brien-s-login")}`);
+      fx.calls.length = 0;
+      expect(await fx.assistant.tasks.approve("1")).toMatchObject({ status: "done", worktree: null, paneId: null });
+      expect(fx.scripts.find((script) => script.includes("gh pr merge"))).toContain(`gh pr merge ${shellQuote("7")} --repo ${shellQuote("me/app")} --squash --delete-branch`);
+      // herdr's own removal, so its workspace goes too; then the branch herdr keeps
+      expect(fx.calls).toContainEqual({ path: "worktree/remove", method: "POST", body: { workspace_id: "w2" } });
+      expect(fx.scripts.at(-1)).toContain(`git branch -D ${shellQuote("assistant/1-fix-o-brien-s-login")}`);
+      expect(fx.scripts.at(-1)).not.toContain("git worktree remove");
+      expect(await refusal(fx.assistant.tasks.approve("1"))).toBe("not_ready");
+    } finally { fx.done(); }
+  });
+
+  it("makes a failed merge a Needs you card with gh's words, and Approve tries again", async () => {
+    let refuse = true;
+    const fx = fixture({ run: async (_machine, script) => {
+      if (script.includes("symbolic-ref --short HEAD")) return "main\n";
+      if (script.includes("gh pr create")) return "ok\nhttps://github.com/me/app/pull/7\n";
+      if (script.includes("gh pr merge")) return refuse ? "failed\nPull request is not mergeable: checks failing\n" : "ok\n";
+      return script.includes("worktree prune") ? "ok\n" : "herdr\nclaude\n";
+    } });
+    try {
+      await create(fx.assistant);
+      await ready(fx);
+      expect(await fx.assistant.tasks.approve("1")).toMatchObject({ status: "needs_you", reason: "The PR could not be merged: Pull request is not mergeable: checks failing" });
+      refuse = false;
+      expect(await fx.assistant.tasks.approve("1")).toMatchObject({ status: "done" });
+      expect(fx.task().reason).toBeUndefined();
+    } finally { fx.done(); }
+  });
+
+  it("refuses Approve before Ready", async () => {
+    const fx = fixture();
+    try {
+      await create(fx.assistant);
+      expect(await refusal(fx.assistant.tasks.approve("1"))).toBe("not_ready");
+    } finally { fx.done(); }
+  });
+});
+
+describe("autoMerge", () => {
+  it("merges at Ready without review, and unblocks a task --after it", async () => {
+    const fx = fixture();
+    try {
+      await create(fx.assistant, { autoMerge: true });
+      await create(fx.assistant, { title: "Then this", after: "1" });
+      expect(fx.task("2").status).toBe("queued");
+      await ready(fx);
+      expect(fx.task()).toMatchObject({ status: "done", worktree: null });
+      await fx.assistant.tasks.runQueue();
+      expect(fx.task("2").status).toBe("working");
+    } finally { fx.done(); }
+  });
+
+  it("with review on, merges only once the review passed", async () => {
+    const fx = fixture();
+    try {
+      await create(fx.assistant, { autoMerge: true, review: true });
+      reviewers(fx);
+      await ready(fx);
+      expect(fx.task().status).toBe("reviewing");
+      expect(fx.scripts.some((script) => script.includes("gh pr"))).toBe(false);
+      await verdict(fx, "r1", "REVIEW: PASS");
+      expect(fx.task()).toMatchObject({ status: "done", reviewed: true });
+      expect(fx.scripts.some((script) => script.includes("gh pr merge"))).toBe(true);
+    } finally { fx.done(); }
+  });
+
+  it("without autoMerge, waits at Ready", async () => {
+    const fx = fixture({ project: { mergeMode: "local" } });
+    try {
+      await create(fx.assistant);
+      await ready(fx);
+      expect(fx.task()).toMatchObject({ status: "ready", base: "main" });
+      expect(fx.scripts.some((script) => script.includes("merge"))).toBe(false);
+    } finally { fx.done(); }
+  });
+});
+
+describe("cleanup", () => {
+  it("keeps a Ready task Ready when its pane is gone", async () => {
+    const fx = fixture({ project: { mergeMode: "local" } });
+    try {
+      await create(fx.assistant);
+      await ready(fx);
+      fx.frame({ type: "pane-exited", pane_id: "p1" });
+      fx.assistant.tasks.checkPanes(fx.machine, -1);
+      expect(fx.task().status).toBe("ready");
+    } finally { fx.done(); }
+  });
+
+  it("refuses to remove a worktree while an agent works in it, and Dismiss removes it once it stopped", async () => {
+    const fx = fixture();
+    try {
+      await create(fx.assistant);
+      fx.frame({ type: "pane-exited", pane_id: "p1" });
+      expect(fx.task().status).toBe("failed");
+      fx.machine.snapshot = snapshot([{ pane_id: "p7", agent_status: "working", workspace_id: "w2" } as never]);
+      expect(await refusal(fx.assistant.tasks.dismiss("1"))).toBe("agent_working");
+      expect(fx.calls.some((call) => call.path === "worktree/remove")).toBe(false);
+      expect(fx.assistant.tasks.list()).toHaveLength(1);
+      fx.machine.snapshot = snapshot([{ pane_id: "p7", agent_status: "idle", workspace_id: "w2" } as never]);
+      expect(await fx.assistant.tasks.dismiss("1")).toMatchObject({ dismissed: true, worktree: null });
+      expect(fx.calls).toContainEqual({ path: "worktree/remove", method: "POST", body: { workspace_id: "w2" } });
+      expect(fx.assistant.tasks.list()).toEqual([]);
+    } finally { fx.done(); }
+  });
+
+  it("dismisses a cancelled task, and refuses one still running", async () => {
+    const fx = fixture();
+    try {
+      await create(fx.assistant);
+      expect(await refusal(fx.assistant.tasks.dismiss("1"))).toBe("not_finished");
+      await fx.assistant.tasks.cancel("1");
+      await fx.assistant.tasks.dismiss("1");
+      expect(fx.scripts.at(-1)).toContain("git branch -D");
+      expect(fx.assistant.tasks.list()).toEqual([]);
+    } finally { fx.done(); }
+  });
+});
+
+describe("merge, local project (real temporary repositories)", () => {
+  // the user's own git config (signing, hooks) stays out of it
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+  const git = (cwd: string, ...args: string[]) => Bun.spawnSync(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe", env }).stdout.toString().trim();
+  function local() {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "ovis-merge-")));
+    const repo = join(root, "repo");
+    const worktree = join(root, "wt");
+    mkdirSync(repo);
+    git(repo, "init", "-q", "-b", "main");
+    git(repo, "config", "user.email", "t@example.invalid");
+    git(repo, "config", "user.name", "T");
+    writeFileSync(join(repo, "a.txt"), "one\n");
+    git(repo, "add", ".");
+    git(repo, "commit", "-q", "-m", "first");
+    // a machine that is this test's shell, in these folders only
+    const run: RunScript = async (_machine, script) => {
+      if (script.includes("status server")) return "herdr\nclaude\n";
+      const child = Bun.spawnSync(["sh", "-c", script], { stdout: "pipe", stderr: "pipe", env });
+      if (child.exitCode !== 0) throw new Error(child.stderr.toString());
+      return child.stdout.toString();
+    };
+    const fx = fixture({ project: { mergeMode: "local", path: repo }, run });
+    fx.answers["worktree/create"] = () => { git(repo, "worktree", "add", "-q", "-b", "assistant/1-fix-login", worktree); return { workspace_id: "w2", pane_id: "p1", path: worktree, agent_started: true }; };
+    // herdr no longer has the workspace: git's own removal runs
+    fx.answers["worktree/remove"] = () => { throw new AssistantError("not_found", "no such workspace", 404); };
+    const commit = (cwd: string, file: string, text: string) => { writeFileSync(join(cwd, file), text); git(cwd, "add", "."); git(cwd, "commit", "-q", "-m", `edit ${file}`); };
+    return { ...fx, repo, worktree, commit, done: () => { fx.done(); rmSync(root, { recursive: true, force: true }); } };
+  }
+
+  it("merges the branch into the checkout's branch with --no-ff, then removes the worktree and branch", async () => {
+    const fx = local();
+    try {
+      await create(fx.assistant);
+      fx.commit(fx.worktree, "b.txt", "new\n");
+      await ready(fx);
+      expect(fx.task()).toMatchObject({ status: "ready", base: "main" });
+      expect(await fx.assistant.tasks.approve("1")).toMatchObject({ status: "done", worktree: null });
+      expect(fx.task().note).toBeUndefined();
+      expect(readFileSync(join(fx.repo, "b.txt"), "utf8")).toBe("new\n");
+      expect(git(fx.repo, "log", "-1", "--format=%s|%p")).toMatch(/^Merge task #1: Fix login\|\w+ \w+$/);
+      expect(existsSync(fx.worktree)).toBe(false);
+      expect(git(fx.repo, "branch", "--list", "assistant/*")).toBe("");
+    } finally { fx.done(); }
+  });
+
+  it("aborts a conflict, never forces it, and names the conflicting files", async () => {
+    const fx = local();
+    try {
+      await create(fx.assistant);
+      fx.commit(fx.worktree, "a.txt", "theirs\n");
+      fx.commit(fx.repo, "a.txt", "ours\n");
+      const head = git(fx.repo, "rev-parse", "HEAD");
+      await ready(fx);
+      const task = await fx.assistant.tasks.approve("1");
+      expect(task.status).toBe("needs_you");
+      expect(task.reason).toContain("conflicts in: a.txt");
+      expect(git(fx.repo, "rev-parse", "HEAD")).toBe(head);
+      expect(git(fx.repo, "status", "--porcelain")).toBe("");
+      expect(readFileSync(join(fx.repo, "a.txt"), "utf8")).toBe("ours\n");
+      expect(existsSync(fx.worktree)).toBe(true);
+    } finally { fx.done(); }
+  });
+
+  it("refuses a checkout with uncommitted changes", async () => {
+    const fx = local();
+    try {
+      await create(fx.assistant);
+      fx.commit(fx.worktree, "b.txt", "new\n");
+      writeFileSync(join(fx.repo, "a.txt"), "unsaved\n");
+      const head = git(fx.repo, "rev-parse", "HEAD");
+      await ready(fx);
+      expect((await fx.assistant.tasks.approve("1")).reason).toContain("has uncommitted changes");
+      expect(git(fx.repo, "rev-parse", "HEAD")).toBe(head);
+      expect(readFileSync(join(fx.repo, "a.txt"), "utf8")).toBe("unsaved\n");
+    } finally { fx.done(); }
+  });
+
+  it("marks a branch with nothing ahead Done with nothing merged", async () => {
+    const fx = local();
+    try {
+      await create(fx.assistant);
+      const head = git(fx.repo, "rev-parse", "HEAD");
+      await ready(fx);
+      expect(await fx.assistant.tasks.approve("1")).toMatchObject({ status: "done", note: "Nothing merged: assistant/1-fix-login has no commits ahead of main" });
+      expect(git(fx.repo, "rev-parse", "HEAD")).toBe(head);
+      expect(existsSync(fx.worktree)).toBe(false);
+    } finally { fx.done(); }
+  });
+
+  it("builds a merge that is never forced", () => {
+    const script = localMergeScript("/r", "main", { id: "1", branch: "assistant/1-x", title: "X" });
+    expect(script).toContain("git merge --no-ff --no-edit");
+    expect(script).toContain("git merge --abort");
+    expect(script).not.toMatch(/--force|-X|-s ours|reset --hard/);
+    expect(cleanupScript("/r", "/wt", "assistant/1-x")).not.toMatch(/--force|-f\b/);
   });
 });

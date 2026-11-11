@@ -11,16 +11,23 @@
  * connected with a free slot, its `after` task is Done and its `at` time has passed, oldest first per
  * machine. A cron template's next fire time is kept on it in the same file, written in the same write
  * as the task it fires, so a restart neither fires a slot twice nor loses the last one it missed.
- * Review and merge (phase 6) only have their fields stored yet.
+ *
+ * Review and merge (phase 6): at Ready a task with `review` gets a fresh reviewer agent in its
+ * worktree, whose verdict line passes it or sends its findings back to the task's agent. A `pr`
+ * project's task then pushes its branch and opens a PR; the user's Approve (only in the app, never
+ * `ovis-task`) or `autoMerge` merges it: `gh pr merge --squash`, or for a `local` project a
+ * `git merge --no-ff` into the checkout's branch, which keeps the task's commits and a merge commit
+ * naming it. A conflict is aborted, never forced. Done removes the worktree and the branch.
  */
 import { ASSISTANT_AGENTS, TASK_STATUSES, type AssistantAgent, type AssistantProject, type AssistantTask, type TaskStatus } from "../shared/assistant.ts";
 import { argumentText, firstMessageFault, MAX_FIRST_MESSAGE_CHARS } from "../shared/launch-rules.ts";
 import type { Machine } from "../shared/machines.ts";
 import { alertStatus } from "../shared/notify-policy.ts";
-import type { AgentStatus, InteractivePrompt, PromptAnswer, ServerMessage } from "../shared/protocol.ts";
+import type { AgentStatus, ConversationResponse, InteractivePrompt, PromptAnswer, ServerMessage } from "../shared/protocol.ts";
 import { AssistantError, readDocument } from "./assistant.ts";
 import { isJsonObject } from "./http.ts";
 import { slowMachinePath } from "./machine-api.ts";
+import { shellQuote } from "./machine-security.ts";
 import { nextFire, parseCron } from "./cron.ts";
 import { writePrivateState } from "./private-state.ts";
 
@@ -56,6 +63,8 @@ const LIVE: readonly TaskStatus[] = ["working", "needs_you", "ready"];
 /** a pane gone or an agent stopped in these is a failed task; a Ready one already did its work */
 const RUNNING: readonly TaskStatus[] = ["working", "needs_you"];
 const FINISHED: readonly TaskStatus[] = ["done", "cancelled"];
+/** herdr's agent state moves the task: not one the server moved to Needs you itself (a merge or review that needs the user) */
+const agentLed = (task: AssistantTask): boolean => LIVE.includes(task.status) && task.reason === undefined;
 
 /** What herdr's agent state makes of a live task: working is Working, blocked Needs you, at rest after work Ready. */
 export function statusAfter(task: Pick<AssistantTask, "status" | "worked">, agent: AgentStatus): Pick<AssistantTask, "status" | "worked"> | null {
@@ -75,6 +84,107 @@ export const launchPrompt = (text: string): string => text.replace(/\s*[\r\n\t]+
 /** the title as a branch name's tail: lowercase ASCII words joined by hyphens */
 export function taskSlug(title: string): string {
   return title.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "") || "task";
+}
+
+/** review rounds before the findings go to the user. ponytail: fixed at the plan's 3; a per-task setting when one is asked for */
+export const REVIEW_ROUNDS = 3;
+/** a push, `gh pr create`, `gh pr merge` or a merge can take longer than a health check */
+const MERGE_TIMEOUT_MS = 120_000;
+const q = shellQuote;
+/** a failed step's own words as the script's answer; every script exits 0 and says how it went on its first line */
+const failed = (variable: string) => `{ echo failed; printf '%s\\n' "$${variable}"; exit 0; }`;
+
+/** the checkout's branch: what a task's branch was made from and merges back into */
+export const baseScript = (path: string): string => `cd -- ${q(path)} && git symbolic-ref --short HEAD`;
+
+/** pushes the task's branch and opens its PR, in its worktree; `nothing` when it has no commits ahead of the base */
+export function prScript(task: Pick<AssistantTask, "branch" | "title"> & { worktree: string }, base: string, body: string): string {
+  return [
+    `cd -- ${q(task.worktree)} 2>/dev/null || { echo failed; echo "The task's worktree is gone"; exit 0; }`,
+    `n=$(git rev-list --count ${q(`${base}..HEAD`)} 2>&1) || ${failed("n")}`,
+    `[ "$n" != 0 ] || { echo nothing; exit 0; }`,
+    `out=$(git push -u origin ${q(task.branch)} 2>&1) || ${failed("out")}`,
+    // a PR already open for the branch is named in gh's refusal, which is as good
+    `out=$(gh pr create --head ${q(task.branch)} --base ${q(base)} --title ${q(task.title)} --body ${q(body)} 2>&1)`,
+    `echo ok; printf '%s\\n' "$out"`,
+  ].join("\n");
+}
+
+/** the PR a task opened, from gh's output */
+export const prUrlOf = (output: string): string | null => output.match(/https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/g)?.pop() ?? null;
+
+/**
+ * Pushes what the task added since (when its worktree is there), then squash-merges its PR. `--repo`
+ * keeps gh from switching or deleting a local branch, which another worktree holds: the cleanup does that.
+ */
+export function prMergeScript(task: Pick<AssistantTask, "worktree" | "branch">, prUrl: string): string {
+  const [, repo, number] = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)$/.exec(prUrl) ?? [];
+  if (!repo || !number) throw new AssistantError("invalid_pr", "The task's PR address is not a GitHub PR");
+  return [
+    ...(task.worktree === null ? [] : [`if cd -- ${q(task.worktree)} 2>/dev/null; then out=$(git push origin ${q(task.branch)} 2>&1) || ${failed("out")}; fi`]),
+    `out=$(gh pr merge ${q(number)} --repo ${q(repo)} --squash --delete-branch 2>&1) || ${failed("out")}`,
+    "echo ok",
+  ].join("\n");
+}
+
+/**
+ * Merges the task's branch into the checkout's base branch with `--no-ff`. Refused (`dirty`) when the
+ * checkout has uncommitted changes; `nothing` when the branch has no commits ahead; a conflict is
+ * aborted and answered `conflict` with the conflicting files. Never forced.
+ */
+export function localMergeScript(path: string, base: string, task: Pick<AssistantTask, "id" | "branch" | "title">): string {
+  return [
+    `cd -- ${q(path)} 2>/dev/null || { echo failed; echo "The project's folder is gone"; exit 0; }`,
+    `cur=$(git symbolic-ref --short HEAD 2>&1) || ${failed("cur")}`,
+    `[ "$cur" = ${q(base)} ] || { echo failed; printf 'The checkout is on %s, not %s\\n' "$cur" ${q(base)}; exit 0; }`,
+    `[ -z "$(git status --porcelain)" ] || { echo dirty; exit 0; }`,
+    `n=$(git rev-list --count ${q(`${base}..${task.branch}`)} 2>&1) || ${failed("n")}`,
+    `[ "$n" != 0 ] || { echo nothing; exit 0; }`,
+    `if out=$(git merge --no-ff --no-edit -m ${q(`Merge task #${task.id}: ${task.title}`)} ${q(task.branch)} 2>&1); then echo ok; exit 0; fi`,
+    `files=$(git diff --name-only --diff-filter=U)`,
+    `git merge --abort >/dev/null 2>&1`,
+    `if [ -n "$files" ]; then echo conflict; printf '%s\\n' "$files"; else echo failed; printf '%s\\n' "$out"; fi`,
+  ].join("\n");
+}
+
+/** git's way to remove a worktree herdr no longer has a workspace for, and the task's branch (herdr keeps it); a dirty worktree stays */
+export function cleanupScript(path: string, worktree: string | null, branch: string): string {
+  return [
+    `cd -- ${q(path)} 2>/dev/null || { echo failed; echo "The project's folder is gone"; exit 0; }`,
+    ...(worktree === null ? [] : [`if [ -e ${q(worktree)} ]; then out=$(git worktree remove ${q(worktree)} 2>&1) || ${failed("out")}; fi`]),
+    "git worktree prune",
+    `if git show-ref --verify --quiet ${q(`refs/heads/${branch}`)}; then out=$(git branch -D ${q(branch)} 2>&1) || ${failed("out")}; fi`,
+    "echo ok",
+  ].join("\n");
+}
+
+/** what a script printed: the word on its first line and the rest */
+function outcome(printed: string): { word: string; rest: string } {
+  const text = printed.trim();
+  const at = text.indexOf("\n");
+  return { word: at < 0 ? text : text.slice(0, at).trim(), rest: (at < 0 ? "" : text.slice(at + 1).trim()).slice(-2000) };
+}
+
+/** The reviewer's first prompt: the branch against its base, and the verdict line it must end with. */
+export function reviewPrompt(task: Pick<AssistantTask, "title" | "brief" | "branch">, base: string): string {
+  const ask = (brief: string) => launchPrompt(`Review another agent's work with fresh eyes, and change no file. Its task: ${task.title}.${brief} `
+    + `Its changes are on branch ${task.branch}, made from ${base}: read \`git diff ${base}...HEAD\` and \`git log ${base}..HEAD\`, and the code around them. `
+    + "Look for bugs, parts of the task that are missing, and broken tests. End your reply with one line: REVIEW: PASS when it is ready to merge, "
+    + "or REVIEW: FINDINGS followed by the findings, one per line.");
+  const full = ask(` ${task.brief}`);
+  return full.length <= MAX_FIRST_MESSAGE_CHARS ? full : ask("");
+}
+
+/** The verdict a reviewer's reply ends with: its last `REVIEW:` line, and for findings what follows it. null: none yet. */
+export function parseVerdict(reply: string): { pass: true } | { pass: false; findings: string } | null {
+  const lines = reply.split("\n");
+  for (let at = lines.length - 1; at >= 0; at -= 1) {
+    const match = /^[\s*_`>#-]*REVIEW:\s*(PASS|FINDINGS)\b[\s*_`:]*(.*)$/.exec(lines[at]!);
+    if (!match) continue;
+    if (match[1] === "PASS") return { pass: true };
+    return { pass: false, findings: [match[2]!, ...lines.slice(at + 1)].join("\n").trim().slice(0, 8000) || "The reviewer named no findings" };
+  }
+  return null;
 }
 
 const validTask = (item: unknown): item is AssistantTask => isJsonObject(item) && typeof item.id === "string" && typeof item.title === "string"
@@ -109,6 +219,8 @@ export interface TaskDeps {
   /** the machine's Max running tasks */
   maxRunning(id: string): number;
   bridge: TaskBridge;
+  /** a POSIX script on a machine (MachineManager.runScript): the merge and cleanup steps */
+  run(machine: Machine, script: string, timeoutMs?: number): Promise<string>;
   now(): number;
 }
 
@@ -122,7 +234,7 @@ export class AssistantTasks {
 
   list(status?: string): AssistantTask[] {
     if (status !== undefined && !(TASK_STATUSES as readonly string[]).includes(status)) throw new AssistantError("invalid_status", `A status is one of ${TASK_STATUSES.join(", ")}`);
-    return this.tasks.filter((task) => status === undefined || task.status === status).sort((a, b) => b.createdAt - a.createdAt || Number(b.id) - Number(a.id));
+    return this.tasks.filter((task) => !task.dismissed && (status === undefined || task.status === status)).sort((a, b) => b.createdAt - a.createdAt || Number(b.id) - Number(a.id));
   }
 
   get(id: unknown): AssistantTask {
@@ -148,6 +260,9 @@ export class AssistantTasks {
       return next;
     }));
     if (moved) void this.runQueue();
+    // Ready leads on to review, the PR and an automatic merge
+    // (a step after the one that moved it has let go of the task)
+    if (moved && next!.status === "ready") this.track(Promise.resolve().then(() => this.afterReady(id)));
     return next!;
   }
 
@@ -250,7 +365,7 @@ export class AssistantTasks {
       // a machine that is down keeps its tasks Queued; it coming back runs the queue again
       const machine = this.deps.machine(task.machine);
       if (machine?.state !== "connected") continue;
-      if (this.tasks.filter((other) => other.machine === task.machine && RUNNING.includes(other.status)).length >= this.deps.maxRunning(task.machine)) continue;
+      if (this.tasks.filter((other) => other.machine === task.machine && (other.status === "reviewing" || (RUNNING.includes(other.status) && other.reason === undefined))).length >= this.deps.maxRunning(task.machine)) continue;
       this.starting = id;
       // a start that failed marked the task Failed
       await this.start(task, project, machine).catch(() => undefined).finally(() => { this.starting = null; });
@@ -281,7 +396,13 @@ export class AssistantTasks {
   /** a frame of a machine's observer (MachineManager.observe): a task pane's agent state, or its end */
   heard(machineId: string, frame: ServerMessage): void {
     if (frame.type !== "pane-status" && frame.type !== "pane-exited") return;
-    const task = this.tasks.find((candidate) => candidate.machine === machineId && candidate.paneId === frame.pane_id && LIVE.includes(candidate.status));
+    const reviewing = this.tasks.find((candidate) => candidate.machine === machineId && candidate.status === "reviewing" && candidate.reviewPaneId === frame.pane_id);
+    if (reviewing) {
+      if (frame.type === "pane-exited") this.update(reviewing.id, { status: "needs_you", reason: "The reviewer's pane closed before it gave a verdict" }, ["reviewPaneId"]);
+      else if (["done", "idle"].includes(alertStatus(frame.agent_status, frame.background_wait))) this.track(this.readReview(reviewing.id));
+      return;
+    }
+    const task = this.tasks.find((candidate) => candidate.machine === machineId && candidate.paneId === frame.pane_id && agentLed(candidate));
     if (!task) return;
     if (frame.type === "pane-exited") {
       if (RUNNING.includes(task.status)) this.update(task.id, { status: "failed", error: "The agent's pane closed" });
@@ -300,7 +421,14 @@ export class AssistantTasks {
     if (machine.state !== "connected" || !machine.snapshot) return;
     const settled = this.deps.now() - graceMs;
     for (const task of this.tasks) {
-      if (task.machine !== machine.id || task.paneId === null || !LIVE.includes(task.status)) continue;
+      if (task.machine !== machine.id) continue;
+      if (task.status === "reviewing" && task.reviewPaneId !== undefined) {
+        // a verdict a lost frame missed; a reviewer's pane gone is caught by its pane-exited frame
+        const reviewer = machine.snapshot.panes.find((candidate) => candidate.pane_id === task.reviewPaneId);
+        if (reviewer && ["done", "idle"].includes(alertStatus(reviewer.agent_status, reviewer.background_wait))) this.track(this.readReview(task.id));
+        continue;
+      }
+      if (task.paneId === null || !agentLed(task)) continue;
       const pane = machine.snapshot.panes.find((candidate) => candidate.pane_id === task.paneId);
       const old = (task.startedAt ?? task.createdAt) < settled;
       if (!pane) {
@@ -347,20 +475,206 @@ export class AssistantTasks {
 
   /**
    * `ovis-task cancel` and the card's Cancel: the task's pane is closed; its worktree and branch stay
-   * (merge and cleanup are phase 6). A Queued or Scheduled task never starts, and a cron template
+   * (Dismiss removes them). A Queued or Scheduled task never starts, and a cron template
    * fires no more.
    */
   async cancel(id: unknown): Promise<AssistantTask> {
     const task = this.get(id);
     if (FINISHED.includes(task.status)) throw new AssistantError("finished", "That task has already ended", 409);
     if (this.starting === task.id) throw new AssistantError("starting", "That task is starting; cancel it again in a moment", 409);
-    if (task.paneId !== null && task.status !== "failed") {
-      await this.deps.bridge(task.machine, "pane/close", { method: "POST", body: { pane_id: task.paneId } }).catch((error: unknown) => {
+    if (this.busy.has(task.id)) throw new AssistantError("busy", "That task is being reviewed or merged right now; cancel it again in a moment", 409);
+    for (const pane of task.status === "failed" ? [] : [task.paneId, task.reviewPaneId]) {
+      if (pane === null || pane === undefined) continue;
+      await this.deps.bridge(task.machine, "pane/close", { method: "POST", body: { pane_id: pane } }).catch((error: unknown) => {
         // a pane already gone is closed
         if (!(error instanceof AssistantError && error.status === 404)) throw error;
       });
     }
-    return this.update(task.id, { status: "cancelled" });
+    return this.update(task.id, { status: "cancelled" }, ["reviewPaneId"]);
+  }
+
+  private pending = new Set<Promise<unknown>>();
+  private track(work: Promise<unknown>): void {
+    this.pending.add(work);
+    void work.finally(() => this.pending.delete(work));
+  }
+  /** waits for the review, PR, merge and cleanup steps started so far (tests, and a clean stop) */
+  async settled(): Promise<void> {
+    while (this.pending.size > 0) await Promise.allSettled([...this.pending]);
+  }
+
+  /** a task the review, PR or merge steps are working on: one step at a time per task */
+  private busy = new Set<string>();
+
+  /** the server moves a task to Needs you itself: herdr's agent state leaves it there until the user acts */
+  private needsYou(id: string, reason: string, drop: (keyof AssistantTask)[] = []): AssistantTask {
+    return this.update(id, { status: "needs_you", reason: reason.slice(0, 2000) }, ["reviewPaneId", ...drop]);
+  }
+
+  private where(task: AssistantTask): { machine: Machine; project: AssistantProject } {
+    const project = this.deps.project(task.project);
+    if (!project) throw new AssistantError("unknown_project", "The task's project was removed", 404);
+    const machine = this.deps.machine(task.machine);
+    if (machine?.state !== "connected") throw new AssistantError("machine_offline", "The task's machine is not connected", 503);
+    return { machine, project };
+  }
+
+  /** the branch the task merges into, read once from the project's checkout */
+  private async baseOf(task: AssistantTask): Promise<string> {
+    if (task.base !== undefined) return task.base;
+    const { machine, project } = this.where(task);
+    const base = (await this.deps.run(machine, baseScript(project.path))).trim();
+    if (!/^[\w./-]+$/.test(base) || base.startsWith("-")) throw new AssistantError("no_base", `The project's checkout is on no branch to merge into (${base.slice(0, 200)})`);
+    this.update(task.id, { base });
+    return base;
+  }
+
+  /** At Ready: the review when it is on and has not passed, then a `pr` project's PR, then autoMerge's merge. */
+  private async afterReady(id: string): Promise<void> {
+    if (this.busy.has(id)) return;
+    this.busy.add(id);
+    try {
+      const task = this.get(id);
+      if (task.status !== "ready") return;
+      if (task.review && !task.reviewed) { await this.startReview(task); return; }
+      // the card says what it merges into
+      await this.baseOf(task).catch(() => undefined);
+      const project = this.deps.project(task.project);
+      if (project?.mergeMode === "pr" && task.prUrl === undefined && !task.nothingToMerge) await this.openPr(this.get(id));
+      if (task.autoMerge && this.get(id).status === "ready") await this.merge(id);
+    } catch (error) {
+      this.needsYou(id, message(error));
+    } finally { this.busy.delete(id); }
+  }
+
+  /** a fresh agent in the task's worktree, in a workspace of its own, that reviews the branch and ends with a verdict line */
+  private async startReview(task: AssistantTask): Promise<void> {
+    if (task.worktree === null) throw new AssistantError("no_worktree", "The task has no worktree to review");
+    const base = await this.baseOf(task);
+    const opened = await this.deps.bridge(task.machine, "workspace/create", { method: "POST", body: {
+      cwd: task.worktree, label: task.title, agent: { kind: task.agent, args: ["--", reviewPrompt(task, base)] },
+    } }) as { workspace_id: string; pane_id: string; agent_started?: boolean; error?: { message?: string } };
+    if (opened.agent_started === false) {
+      await this.deps.bridge(task.machine, "pane/close", { method: "POST", body: { pane_id: opened.pane_id } }).catch(() => undefined);
+      throw new AssistantError("agent_not_started", `The reviewer did not start: ${opened.error?.message ?? "no reason given"}`, 502);
+    }
+    this.update(task.id, { status: "reviewing", reviewPaneId: opened.pane_id, reviewRounds: (task.reviewRounds ?? 0) + 1 });
+  }
+
+  /**
+   * The reviewer at rest: its last reply's verdict line. PASS closes it and makes the task Ready
+   * (reviewed); FINDINGS go to the task's agent, which works again, until REVIEW_ROUNDS rounds found
+   * some: then they go to the user. No verdict yet (it has not answered) waits.
+   */
+  private async readReview(id: string): Promise<void> {
+    if (this.busy.has(id)) return;
+    this.busy.add(id);
+    try {
+      const task = this.get(id);
+      if (task.status !== "reviewing" || task.reviewPaneId === undefined) return;
+      const conversation = await this.deps.bridge(task.machine, "pane/conversation", { query: { pane_id: task.reviewPaneId } }) as ConversationResponse;
+      const reply = [...conversation.turns].reverse().find((turn) => turn.role === "assistant");
+      const verdict = reply ? parseVerdict(reply.parts.flatMap((part) => part.kind === "text" ? [part.text] : []).join("\n")) : null;
+      if (verdict === null) return;
+      await this.deps.bridge(task.machine, "pane/close", { method: "POST", body: { pane_id: task.reviewPaneId } }).catch(() => undefined);
+      if (verdict.pass) { this.update(id, { status: "ready", reviewed: true }, ["reviewPaneId", "findings"]); return; }
+      const rounds = task.reviewRounds ?? 1;
+      this.update(id, { findings: verdict.findings }, ["reviewPaneId"]);
+      if (rounds >= REVIEW_ROUNDS) { this.needsYou(id, `The review still found problems after ${rounds} rounds`); return; }
+      if (task.paneId === null) { this.needsYou(id, "The review found problems, and the task's agent is gone"); return; }
+      // typed, then Enter as its own key: an agent's input box takes a pasted line and its Enter apart
+      await this.deps.bridge(task.machine, "pane/input", { method: "POST", body: { pane_id: task.paneId, text: launchPrompt(`A reviewer found problems in your changes. Fix them and commit: ${verdict.findings}`) } });
+      await this.deps.bridge(task.machine, "pane/keys", { method: "POST", body: { pane_id: task.paneId, keys: ["Enter"] } });
+      this.update(id, { status: "working" });
+    } catch (error) {
+      this.needsYou(id, `The review could not go on: ${message(error)}`);
+    } finally { this.busy.delete(id); }
+  }
+
+  /** pushes the branch and opens the PR; a branch with nothing ahead of its base is marked so instead */
+  private async openPr(task: AssistantTask): Promise<AssistantTask> {
+    if (task.worktree === null) throw new AssistantError("no_worktree", "The task has no worktree to push from");
+    const base = await this.baseOf(task);
+    const { machine } = this.where(task);
+    const body = `${task.brief}\n\n${task.reviewed ? `Reviewed by a second agent: passed after ${task.reviewRounds ?? 1} round(s).` : "Not reviewed."}\n\nOpened by the Ovis Assistant (task #${task.id}).`;
+    const { word, rest } = outcome(await this.deps.run(machine, prScript({ ...task, worktree: task.worktree }, base, body), MERGE_TIMEOUT_MS));
+    if (word === "nothing") return this.update(task.id, { nothingToMerge: true });
+    const prUrl = word === "ok" ? prUrlOf(rest) : null;
+    if (prUrl === null) throw new AssistantError("pr_failed", `The PR could not be opened: ${rest || word}`, 502);
+    return this.update(task.id, { prUrl });
+  }
+
+  /** Done, then its worktree and branch go; a cleanup that cannot run now leaves a note and Dismiss for later */
+  private async finish(id: string, note?: string): Promise<AssistantTask> {
+    const done = this.update(id, { status: "done", ...(note === undefined ? {} : { note }) }, ["reason"]);
+    await this.cleanup(done).catch((error: unknown) => {
+      this.update(id, { note: `${note === undefined ? "" : `${note}. `}The worktree stays: ${message(error)}` });
+    });
+    return this.get(id);
+  }
+
+  /** Approve's merge (or autoMerge's): the PR on GitHub, or the branch into the checkout's base branch. A failure is Needs you. */
+  private async merge(id: string): Promise<AssistantTask> {
+    let task = this.get(id);
+    try {
+      const { machine, project } = this.where(task);
+      const base = await this.baseOf(task);
+      task = this.update(id, { status: "merging" }, ["reason"]);
+      const nothing = `Nothing merged: ${task.branch} has no commits ahead of ${base}`;
+      if (project.mergeMode === "pr") {
+        if (task.prUrl === undefined && !task.nothingToMerge) task = await this.openPr(task);
+        if (task.nothingToMerge) return await this.finish(id, nothing);
+        const { word, rest } = outcome(await this.deps.run(machine, prMergeScript(task, task.prUrl!), MERGE_TIMEOUT_MS));
+        if (word !== "ok") return this.needsYou(id, `The PR could not be merged: ${rest || word}`);
+        return await this.finish(id);
+      }
+      const { word, rest } = outcome(await this.deps.run(machine, localMergeScript(project.path, base, task), MERGE_TIMEOUT_MS));
+      switch (word) {
+        case "ok": return await this.finish(id);
+        case "nothing": return await this.finish(id, nothing);
+        case "dirty": return this.needsYou(id, `The checkout at ${project.path} has uncommitted changes. Commit or stash them there, then approve again`);
+        case "conflict": return this.needsYou(id, `Merging into ${base} conflicts in: ${rest.split("\n").join(", ")}. The merge was aborted and nothing changed. Resolve it on the branch, then approve again`);
+        default: return this.needsYou(id, `The merge failed: ${rest || word}`);
+      }
+    } catch (error) {
+      return this.needsYou(id, message(error));
+    }
+  }
+
+  /** Approve, only on the user's click in the app (no ovis-task route reaches it): merges a Ready task, or tries again one a merge or review left in Needs you. */
+  async approve(id: unknown): Promise<AssistantTask> {
+    const task = this.get(id);
+    if (task.status !== "ready" && !(task.status === "needs_you" && task.reason !== undefined)) throw new AssistantError("not_ready", "Only a Ready task can be approved", 409);
+    if (this.busy.has(task.id)) throw new AssistantError("busy", "That task is being reviewed or merged right now", 409);
+    this.busy.add(task.id);
+    try { return await this.merge(task.id); } finally { this.busy.delete(task.id); }
+  }
+
+  /**
+   * Removes a task's worktree on its machine (herdr's way first, so its workspace goes with it; git's
+   * when that workspace is gone) and its branch. Refused while an agent works in it.
+   */
+  private async cleanup(task: AssistantTask): Promise<AssistantTask> {
+    if (task.worktree === null) return task;
+    const { machine, project } = this.where(task);
+    const working = machine.snapshot?.panes.some((pane) => pane.agent_status === "working"
+      && (pane.pane_id === task.paneId || pane.pane_id === task.reviewPaneId || pane.workspace_id === task.workspaceId));
+    if (working) throw new AssistantError("agent_working", "An agent is working in the task's worktree; it stays until that agent stops", 409);
+    if (task.reviewPaneId !== undefined) await this.deps.bridge(task.machine, "pane/close", { method: "POST", body: { pane_id: task.reviewPaneId } }).catch(() => undefined);
+    const removed = task.workspaceId !== null && await this.deps.bridge(task.machine, "worktree/remove", { method: "POST", body: { workspace_id: task.workspaceId } }).then(() => true, () => false);
+    const { word, rest } = outcome(await this.deps.run(machine, cleanupScript(project.path, removed ? null : task.worktree, task.branch)));
+    if (word !== "ok") throw new AssistantError("cleanup_failed", rest || word, 502);
+    return this.update(task.id, { worktree: null, workspaceId: null, paneId: null }, ["reviewPaneId"]);
+  }
+
+  /** Dismiss, on the user's click: an ended task leaves the board, its worktree and branch removed first. */
+  async dismiss(id: unknown): Promise<AssistantTask> {
+    const task = this.get(id);
+    if (!["done", "cancelled", "failed"].includes(task.status)) throw new AssistantError("not_finished", "Only a done, cancelled or failed task can be dismissed", 409);
+    if (this.busy.has(task.id)) throw new AssistantError("busy", "That task is being merged right now", 409);
+    // a project removed since leaves no folder to clean up in
+    if (this.deps.project(task.project)) await this.cleanup(task);
+    return this.update(task.id, { dismissed: true });
   }
 
   /**

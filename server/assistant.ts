@@ -20,7 +20,7 @@ import { BUNDLE_DIR } from "./remote-host.ts";
 import { readStateDocument, setAsideDamaged } from "./state-document.ts";
 
 /** Runs a POSIX script on a machine and returns its output (MachineManager.runScript; tests run it locally). */
-export type RunScript = (machine: Machine, script: string) => Promise<string>;
+export type RunScript = (machine: Machine, script: string, timeoutMs?: number) => Promise<string>;
 /** Calls `run` after `ms`; returns what cancels it. Tests pass their own clock. */
 export type Timer = (run: () => void, ms: number) => () => void;
 export interface AssistantMachines {
@@ -169,6 +169,7 @@ export class Assistant {
       machine: (id) => this.watchable().find((machine) => machine.id === id),
       maxRunning: (id) => this.settings[id]?.maxRunning ?? DEFAULT_MAX_RUNNING,
       bridge: options.bridge ?? (() => Promise.reject(new AssistantError("machine_offline", "This server reaches no machines", 503))),
+      run: (machine, script, timeoutMs) => this.run(machine, script, timeoutMs),
       now: this.now,
     });
     this.unsubscribe = machines.subscribe((event) => {
@@ -339,10 +340,10 @@ export async function handleAssistantRequest(request: Request, pathname: string,
   const route = parts.length === 0 ? "" : collection === "projects" && parts.length <= 2 ? (id ? "/projects/:id" : "/projects")
     : collection === "machines" && id && (parts.length === 2 || (parts.length === 3 && action === "fix")) ? (action ? "/machines/:id/fix" : "/machines/:id")
     : collection === "sessions" && parts.length <= 2 ? (id ? "/sessions/:name" : "/sessions")
-    : collection === "tasks" && id && parts.length === 3 && (action === "restart" || action === "cancel") ? `/tasks/:id/${action}` : null;
+    : collection === "tasks" && id && parts.length === 3 && ["restart", "cancel", "approve", "dismiss"].includes(action!) ? `/tasks/:id/${action}` : null;
   if (route === null) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
   setRequestRoute(`/api/assistant${route}`);
-  const allowed: Record<string, string[]> = { "": ["GET"], "/projects": ["POST"], "/projects/:id": ["PATCH", "DELETE"], "/machines/:id": ["PATCH"], "/machines/:id/fix": ["POST"], "/sessions": ["POST"], "/sessions/:name": ["GET"], "/tasks/:id/restart": ["POST"], "/tasks/:id/cancel": ["POST"] };
+  const allowed: Record<string, string[]> = { "": ["GET"], "/projects": ["POST"], "/projects/:id": ["PATCH", "DELETE"], "/machines/:id": ["PATCH"], "/machines/:id/fix": ["POST"], "/sessions": ["POST"], "/sessions/:name": ["GET"], "/tasks/:id/restart": ["POST"], "/tasks/:id/cancel": ["POST"], "/tasks/:id/approve": ["POST"], "/tasks/:id/dismiss": ["POST"] };
   if (!allowed[route]!.includes(request.method)) return jsonResponse({ error: { code: "method_not_allowed", message: `use ${allowed[route]!.join(" or ")}` } }, 405, { allow: allowed[route]!.join(", ") });
   if (request.method !== "GET" && !request.headers.get("origin")) return jsonResponse({ error: { code: "browser_only", message: "Use Assistant controls from this app" } }, 403);
   const body = request.method === "GET" || request.method === "DELETE" ? null : await request.json().catch(() => null);
@@ -363,6 +364,9 @@ export async function handleAssistantRequest(request: Request, pathname: string,
       // Restart agent: only on the user's click, in this app (decision 16); ovis-task has no such route
       case "POST /tasks/:id/restart": await assistant.tasks.restart(id!); return jsonResponse(assistant.state());
       case "POST /tasks/:id/cancel": await assistant.tasks.cancel(id!); return jsonResponse(assistant.state());
+      // Approve merges: only the user, in this app. ovis-task has no such route, so the Assistant never merges
+      case "POST /tasks/:id/approve": await assistant.tasks.approve(id!); return jsonResponse(assistant.state());
+      case "POST /tasks/:id/dismiss": await assistant.tasks.dismiss(id!); return jsonResponse(assistant.state());
       default: await assistant.fix(id!, body); return jsonResponse(assistant.state());
     }
   } catch (error) {

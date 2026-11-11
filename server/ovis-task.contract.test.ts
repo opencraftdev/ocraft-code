@@ -101,6 +101,19 @@ describe("ovis-task routes", () => {
     } finally { close(); }
   });
 
+  it("cannot approve a task with the CLI token, through its own routes or the app's", async () => {
+    const { base, token, task, close } = await fixture();
+    try {
+      expect(await code(await task("approve", { id: "1" }))).toEqual({ status: 403, code: "ui_only" });
+      expect(cliRequest(["approve", "1"])).toEqual({ refused: "ovis-task approve is refused: only the user approves a task, in the app" });
+      // the app's Approve takes a browser page's Origin, which ovis-task never sends
+      for (const action of ["approve", "dismiss"]) {
+        const response = await fetch(`${base}/api/assistant/tasks/1/${action}`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: "{}" });
+        expect(await code(response)).toEqual({ status: 403, code: "browser_only" });
+      }
+    } finally { close(); }
+  });
+
   it("reads inside the project and refuses every way out of it", async () => {
     const { task, close } = await fixture();
     try {
