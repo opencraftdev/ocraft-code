@@ -14,7 +14,9 @@ evidence/
 remote-bundles/
 
 # the release's Rust PTY host, installed by scripts/pty-sidecar.ts
-/bin/
+/bin/*
+# the Assistant's ovis-task CLI (server/ovis-task-cli.ts) is committed beside it
+!/bin/ovis-task
 /pty-sidecar/
 
 # README demo videos: uploaded to GitHub, not committed (docs/development.md)

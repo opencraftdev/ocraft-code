@@ -784,7 +784,22 @@ export function App() {
         )}
       </header>
 
-      {!codeMode ? <div className="app-body"><AssistantView vm={health?.web_ui?.assistant === true} /></div> : (
+      {!codeMode ? <div className="app-body"><AssistantView vm={health?.web_ui?.assistant === true} renderChat={(paneId) => {
+        // the Assistant's pane is on this VM's own herdr: Code mode's chat lens over it, composer and all
+        const local = machines.find((machine) => machine.id === "local");
+        const item = local?.snapshot?.panes.find((candidate) => candidate.pane_id === paneId);
+        if (!item) return null;
+        return (
+          <MachineContext.Provider value="local">
+            <PaneTerminal paneId={item.restore_error ? null : item.pane_id} terminalId={item.terminal_id ?? null} restoreError={item.restore_error ?? null}
+              mirrored={health?.herdr ? health.herdr.terminal_attach === false || health.herdr.terminal_mirror === true : null}
+              title={displayPaneTitle(item)} agent={item.agent ?? null} agentStatus={item.agent_status} cwd={item.cwd ?? null} workspaceId={item.workspace_id}
+              machineName={local?.name ?? "local"} view="chat" active
+              terminalFontSize={settings.terminalFontSize} terminalWheelSpeed={settings.terminalWheelSpeed} terminalFontFamily={settings.terminalFontFamily}
+              theme={resolvedEntry.mode} palette={resolvedEntry.id} />
+          </MachineContext.Provider>
+        );
+      }} /></div> : (
       <div className="app-body" id="ovis-workspace">
         <aside id="workspace-drawer" className={`sidebar${drawerOpen ? " is-open" : ""}`}>
           {error && <div className="error-state" role="alert"><p>{error}</p><button className="btn" onClick={() => void load()}>{t("Retry")}</button></div>}

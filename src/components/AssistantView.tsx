@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 
-import type { AssistantAgent, AssistantMachine, AssistantProblem, AssistantProject, AssistantState, MergeMode, ProjectChange } from "../../shared/assistant.ts";
-import { addAssistantProject, ApiError, changeAssistantProject, fetchAssistant, fixAssistantMachine, removeAssistantProject, setAssistantMaxRunning } from "../lib/api.ts";
+import type { AssistantAgent, AssistantMachine, AssistantProblem, AssistantProject, AssistantSession, AssistantState, AssistantTranscript, MergeMode, ProjectChange } from "../../shared/assistant.ts";
+import { addAssistantProject, ApiError, changeAssistantProject, fetchAssistant, fetchAssistantTranscript, fixAssistantMachine, removeAssistantProject, setAssistantMaxRunning, startAssistantSession } from "../lib/api.ts";
 import { ASSISTANT_INSTALL_COMMAND, assistantLink, storeAssistantAddress, storedAssistantAddress } from "../lib/assistantMode.ts";
 import { useT, type Translate } from "../lib/i18n.ts";
 import { Command } from "./PhonePanel.tsx";
@@ -13,8 +13,8 @@ import "./AssistantView.css";
  * `web_ui.assistant`) the layout later phases fill; on any other Ovis the setup page. The switch
  * between the two modes is the Claude app's Chat | Code one.
  */
-export function AssistantView({ vm }: { vm: boolean }) {
-  return vm ? <AssistantLayout /> : <AssistantSetup />;
+export function AssistantView({ vm, renderChat }: { vm: boolean; renderChat?: (paneId: string) => ReactNode }) {
+  return vm ? <AssistantLayout renderChat={renderChat} /> : <AssistantSetup />;
 }
 
 function AssistantSetup() {
@@ -38,9 +38,11 @@ function AssistantSetup() {
   );
 }
 
-function AssistantLayout() {
+function AssistantLayout({ renderChat }: { renderChat?: (paneId: string) => ReactNode }) {
   const t = useT();
   const [state, setState] = useState<AssistantState | null>(null);
+  // the archived session shown read only; null: the current one, live
+  const [shown, setShown] = useState<string | null>(null);
   const refresh = useCallback(() => fetchAssistant().then(setState, () => {}), []);
   // the server checks each machine every 30 s; this only reads what it found
   useEffect(() => {
@@ -50,6 +52,8 @@ function AssistantLayout() {
   }, [refresh]);
   const machines = state?.machines ?? [];
   const projects = state?.projects ?? [];
+  const sessions = state?.sessions ?? [];
+  const current = sessions.find((session) => session.archived_at === undefined) ?? null;
   return (
     <div className="assistant-layout" data-testid="assistant-layout">
       <nav className="assistant-sidebar" aria-label={t("Assistant")}>
@@ -60,12 +64,63 @@ function AssistantLayout() {
           {projects.map((project) => <ProjectRow key={project.id} project={project} machine={machines.find((machine) => machine.id === project.machine)} refresh={refresh} />)}
           {machines.length > 0 && <AddProject machines={machines} refresh={refresh} />}
         </Section>
-        <Section title={t("Sessions")} empty />
+        <Section title={t("Sessions")} empty={sessions.length === 0}>
+          {sessions.map((session) => (
+            <button key={session.name} type="button" className="assistant-session" aria-current={(shown ?? current?.name) === session.name ? "true" : undefined}
+              onClick={() => setShown(session === current ? null : session.name)}>
+              {session.name}{session === current && <span className="assistant-dim"> · {t("Current")}</span>}
+            </button>
+          ))}
+        </Section>
       </nav>
-      <main className="assistant-chat" aria-label={t("Chat")} />
+      <main className="assistant-chat" aria-label={t("Chat")}>
+        <SessionBar current={current} onStarted={(next) => { setState(next); setShown(null); }} />
+        {shown !== null ? <ArchivedSession key={shown} name={shown} />
+          : current === null ? <p className="assistant-chat-note">{t("No Assistant session yet. Start one with New chat.")}</p>
+          : (current.pane_id !== null && renderChat?.(current.pane_id)) || <p className="assistant-chat-note">{t("The Assistant's pane is not open. Start a new chat.")}</p>}
+      </main>
       <aside className="assistant-board" aria-label={t("Tasks")}>
         <Section title={t("Tasks")} empty />
       </aside>
+    </div>
+  );
+}
+
+/** New session: only on this click. The pane before it is archived and stays readable in Sessions. */
+function SessionBar({ current, onStarted }: { current: AssistantSession | null; onStarted(state: AssistantState): void }) {
+  const t = useT();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const start = () => {
+    setBusy(true); setError(null);
+    startAssistantSession().then(onStarted, (failure: unknown) => setError(failure instanceof ApiError ? failure.detail : String(failure))).finally(() => setBusy(false));
+  };
+  return (
+    <div className="assistant-chat-bar">
+      <span className="assistant-row-name">{current?.name ?? t("Assistant")}</span>
+      {error !== null && <span className="assistant-error" role="alert">{error}</span>}
+      <button type="button" className="btn" disabled={busy} onClick={start}>{t("New chat")}</button>
+    </div>
+  );
+}
+
+/** An archived session, read only: the conversation saved as it was archived. */
+function ArchivedSession({ name }: { name: string }) {
+  const t = useT();
+  const [transcript, setTranscript] = useState<AssistantTranscript | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { fetchAssistantTranscript(name).then(setTranscript, (failure: unknown) => setError(failure instanceof ApiError ? failure.detail : String(failure))); }, [name]);
+  if (error !== null) return <p className="assistant-error assistant-chat-note" role="alert">{error}</p>;
+  if (transcript === null) return <p className="assistant-dim assistant-chat-note">{t("Loading…")}</p>;
+  return (
+    <div className="assistant-transcript" aria-label={t("Archived session")}>
+      {transcript.turns.map((turn, index) => (
+        <div key={index} className={`assistant-turn is-${turn.role}`}>
+          <span className="assistant-dim">{turn.role === "user" ? t("You") : t("Assistant")}</span>
+          <p>{turn.text}</p>
+        </div>
+      ))}
+      {transcript.turns.length === 0 && (transcript.text ? <pre className="assistant-screen">{transcript.text}</pre> : <p className="assistant-dim">{t("Nothing was said in this session.")}</p>)}
     </div>
   );
 }

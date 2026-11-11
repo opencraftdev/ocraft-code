@@ -1,0 +1,4 @@
+#!/bin/sh
+# The Assistant's one tool (server/ovis-task-cli.ts). Its pane has this folder first on PATH,
+# OVIS_BUN set to the Bun that runs the server, and the token the server gave it.
+exec "${OVIS_BUN:-bun}" "$(dirname "$0")/../server/ovis-task-cli.ts" "$@"

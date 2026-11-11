@@ -147,7 +147,7 @@ After=herdr.service
 [Service]
 WorkingDirectory=$CHECKOUT
 ExecStart=/bin/sh $CHECKOUT/scripts/with-bun.sh run start
-Environment=HOST=127.0.0.1 PORT=$PORT OVIS_ASSISTANT=1
+Environment=HOST=127.0.0.1 PORT=$PORT OVIS_ASSISTANT=1 OVIS_ASSISTANT_AGENT=$agent
 Restart=on-failure
 
 [Install]
