@@ -1,0 +1,69 @@
+/* Assistant mode: the setup page, or the VM's layout (sidebar, chat, task board) */
+.assistant-setup {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-4);
+}
+
+.assistant-setup-inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.assistant-title {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-medium);
+}
+
+.assistant-setup-inner p {
+  margin: 0;
+  color: var(--text);
+}
+
+.assistant-address {
+  margin: var(--space-2) 0 0;
+}
+
+.assistant-layout {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.assistant-sidebar,
+.assistant-board {
+  flex: 0 0 var(--sidebar-shown-w);
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
+  background: var(--sidebar-surface);
+}
+
+.assistant-sidebar { border-right: var(--hairline) solid var(--surface-edge); }
+.assistant-board { border-left: var(--hairline) solid var(--surface-edge); }
+
+.assistant-chat {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.assistant-section { margin-bottom: var(--space-3); }
+
+.assistant-empty {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+}
+
+/* a phone: the three regions stack, the chat between the lists */
+@media (max-width: 768px) {
+  .assistant-layout { flex-direction: column; overflow-y: auto; }
+  .assistant-sidebar,
+  .assistant-board { flex: none; border: 0; }
+  .assistant-chat { min-height: 40vh; }
+}

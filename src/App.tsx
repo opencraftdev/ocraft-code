@@ -69,6 +69,8 @@ import { RepoDiffViewer } from "./components/RepoDiffViewer.tsx";
 import { OpenFileContext } from "./lib/filePaths.ts";
 import { useAccessState, useLockedRef } from "./lib/useAccess.ts";
 import { useLocalHealth } from "./lib/useLocalHealth.ts";
+import { useAppMode } from "./lib/assistantMode.ts";
+import { AssistantView } from "./components/AssistantView.tsx";
 import { useMachinesRef, useRecentFolderMemory, useRefetchTimer, useRosterError, useRosterEvents, useRosterLoader, useRosterState } from "./lib/useMachineRoster.ts";
 import { useMachineDialog } from "./lib/useMachineDialog.ts";
 import { useNewSessionMachine, useNewSessionState, useSessionHistoryList } from "./lib/useNewSessionDialog.ts";
@@ -177,6 +179,9 @@ export function App() {
   const { machineDialog, setMachineDialog, addPcFocusReturn, closeMachineDialog } = useMachineDialog();
   const { newSessionMachineId, setNewSessionMachineId } = useNewSessionMachine();
   const { health, localFreshness, shownHealth, readLocalHealth } = useLocalHealth();
+  // the header's Assistant | Code switch, per device; Code mode is the app as it always was
+  const [appMode, chooseMode] = useAppMode();
+  const codeMode = appMode === "code";
   const { error, setError } = useRosterError();
   const { layoutNotice, setLayoutNotice } = useLayoutNotice();
   const { locked, setLocked, lockReason, pairCode, auth, canSignOut, pairedFromAddress, security, readBridgeHealth } = useAccessState();
@@ -675,7 +680,7 @@ export function App() {
           </button>
         </div>
         <HeaderNote note={note} />
-        {note !== null ? null : selectedPane && crumb ? (
+        {note !== null || !codeMode ? null : selectedPane && crumb ? (
           <div className="context" title={crumb.tooltip}>
             <button type="button" className="context-title" aria-haspopup="menu" aria-expanded={more !== null}
               onClick={(event) => { const anchor = event.currentTarget; setMore((open) => (open ? null : { anchor, start: true })); }}>
@@ -686,7 +691,7 @@ export function App() {
         ) : (
           <><Brand /><span className="machine-context-name">{selectedMachine?.name ?? selectedMachineId}</span></>
         )}
-        {selectedPane && (
+        {codeMode && selectedPane && (
           <div className="segmented view-switch" role="group" aria-label="Pane view">
             <button type="button" aria-label={t("Chat")} aria-pressed={view === "chat"} onClick={() => { setView("chat"); setDrawerOpen(false); }} title={t("Chat transcript (⌘⇧J)")}>
               <List aria-hidden="true" />
@@ -704,7 +709,7 @@ export function App() {
             </button>
           </div>
         )}
-        {selectedPane && wideScreen && (
+        {codeMode && selectedPane && wideScreen && (
           <>
             {/* opens Files, it is no third lens: set apart from the switch by a hairline */}
             <button type="button" className="icon-button header-files-button" aria-label={t("Review changes")} title={t("Review changes")} aria-pressed={filesOpen && filesTab === "changes"} onClick={() => toggleRightFiles("changes")}>
@@ -716,7 +721,11 @@ export function App() {
           </>
         )}
         <div className="header-meta">
-          {selectedPane?.agent && <button ref={agentPanelToggle} type="button" className="icon-button" aria-label={t(pinnedAgentPanel ? "Workspace and agents" : agentPanelShown ? "Hide agent panel" : "Show agent panel")} title={t("Workspace and agents")} aria-expanded={agentPanelShown} aria-controls="agent-details-panel" onClick={() => {
+          <div className="segmented app-mode-switch" role="group" aria-label={t("App mode")}>
+            <button type="button" aria-pressed={!codeMode} onClick={() => chooseMode("assistant")}>{t("Assistant")}</button>
+            <button type="button" aria-pressed={codeMode} onClick={() => chooseMode("code")}>{t("Code")}</button>
+          </div>
+          {codeMode && selectedPane?.agent && <button ref={agentPanelToggle} type="button" className="icon-button" aria-label={t(pinnedAgentPanel ? "Workspace and agents" : agentPanelShown ? "Hide agent panel" : "Show agent panel")} title={t("Workspace and agents")} aria-expanded={agentPanelShown} aria-controls="agent-details-panel" onClick={() => {
             if (pinnedAgentPanel) document.getElementById("agent-details-panel")?.focus({ preventScroll: true });
             else if (agentPanelShown) { setAgentPanelOpen(false); closeAgentView(); }
             else {
@@ -775,6 +784,7 @@ export function App() {
         )}
       </header>
 
+      {!codeMode ? <div className="app-body"><AssistantView vm={health?.web_ui?.assistant === true} /></div> : (
       <div className="app-body" id="ovis-workspace">
         <aside id="workspace-drawer" className={`sidebar${drawerOpen ? " is-open" : ""}`}>
           {error && <div className="error-state" role="alert"><p>{error}</p><button className="btn" onClick={() => void load()}>{t("Retry")}</button></div>}
@@ -976,6 +986,7 @@ export function App() {
         {!agentDrawerOpen && fileSurface && <WorkspaceFileDrawer browser={filesOpen} covered={Boolean(diffViewing || (viewing && !fileDocked))}
           onClose={() => { if (filesOpen) setFilesOpen(false); else if (viewing && fileDocked) closeFile(); else setWebPage(null); }}>{fileSurface}</WorkspaceFileDrawer>}
       </div>
+      )}
 
       <MachineContext.Provider value={newSessionMachineId}><NewSessionDialog
         key={newSessionMachineId}
