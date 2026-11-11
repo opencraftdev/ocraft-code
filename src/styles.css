@@ -3108,7 +3108,7 @@ button, a, [role="button"] {
     box-shadow: none;
   }
   .composer .composer-surface:focus-within { border-color: var(--border-strong, var(--surface-edge)); box-shadow: none; }
-  .composer .composer-text { min-height: 0; padding-block: var(--space-3); }
+  .composer .composer-text { min-height: 0; }
   .composer .composer-controls { padding-block: 0; }
   .composer .composer-status {
     position: absolute;
@@ -3240,9 +3240,13 @@ button, a, [role="button"] {
   /* send is the return key's glyph, quiet until there is something to send */
   .composer .composer-send { background: transparent; color: var(--text-dim); opacity: 1; }
   .composer .composer-send::before { display: none; }
+  /* a long message grows the box upward; send stays on its last line */
+  .composer .composer-controls-right { align-self: end; padding-bottom: 6px; }
   .composer .composer-send:not(:disabled) { color: var(--text-strong); }
   .composer .composer-send:not(:disabled):hover { background: var(--bg-hover); }
-  .composer .composer-text { font-size: 15px; padding-block: 11px; }
+  /* the field and its hidden twin (the height it grows to) share every metric, or it scrolls instead of growing */
+  .composer .composer-text,
+  .composer .composer-measure { font-size: 15px; padding-block: 10px; max-height: 50vh; }
   /* the field scrolls by wheel and caret; a track beside the send button reads as a stray bar */
   .composer .composer-text { scrollbar-width: none; }
   .app-header .icon-button[aria-expanded="true"],
