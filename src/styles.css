@@ -3283,6 +3283,21 @@ button, a, [role="button"] {
   .app-header .view-switch > button svg { color: inherit; }
   .composer .composer-pill .agent-mark { display: none; }
   .composer .composer-pill { gap: var(--space-1); padding-inline: 0; }
+  /* the ring is the row's one control: a hover fill with room around it, not tight on the ring */
+  .composer .composer-context { width: 24px; height: 24px; justify-content: center; border-radius: var(--radius-md); }
+  .composer .composer-context:hover,
+  .composer .composer-context[aria-expanded="true"] { background: var(--bg-hover); }
+}
+
+/* ── Claude desktop look: hover fills keep their padding ─────────────────────────────────────
+   A row's fill reaches 8px past its content on each side, so the content stays on the column's edge
+   and never touches the edge of the fill. */
+@media (min-width: 769px) {
+  .agent-panel .agent-panel-action,
+  .agent-panel .agent-panel-row { width: calc(100% + var(--space-4)); margin-inline: calc(var(--space-2) * -1); padding-inline: var(--space-2); }
+  .agent-panel .agent-pr { margin-inline: calc(var(--space-2) * -1); }
+  .agent-panel .agent-pr-main { padding-inline-start: var(--space-2); }
+  .agent-panel .agent-pr-more { right: var(--space-1); }
 }
 
 /* ── Claude desktop look: a workspace's other sessions (a fork) under its row ─────────────────

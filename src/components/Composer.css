@@ -376,9 +376,7 @@
 /* the ring pressed: the plan's usage limits over the composer, as Claude's shows them */
 .composer-context-anchor { position: relative; display: inline-flex; }
 .composer-limits {
-  position: absolute;
-  right: calc(var(--space-2) * -1);
-  bottom: calc(100% + var(--space-3));
+  position: fixed;
   z-index: var(--z-drawer);
   width: 300px;
   padding: var(--space-3) var(--space-4);

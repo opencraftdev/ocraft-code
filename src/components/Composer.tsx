@@ -11,7 +11,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { CornerDownLeft, FileText, Folder, FolderGit2, GitBranch, LoaderCircle, MessageSquarePlus, Package, Plus, Puzzle, Square, TriangleAlert, UserRound, X, type LucideIcon } from "lucide-react";
 
 import "./Composer.css";
@@ -179,9 +179,17 @@ function readSlashUsage(): Record<string, number> {
 function ContextRing({ context, shown, readOnly = false, usage, onToggle }: { context: NonNullable<ConversationMetadata["context"]>; shown: boolean; readOnly?: boolean; usage: ProviderUsage | undefined; onToggle: () => void }) {
   const t = useT();
   const root = useRef<HTMLSpanElement>(null);
+  const card = useRef<HTMLDivElement>(null);
+  // the card is drawn on the page, not in the status row, which clips what leaves it: placed over the ring
+  const [place, setPlace] = useState<{ right: number; bottom: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!shown) { setPlace(null); return; }
+    const box = root.current?.getBoundingClientRect();
+    if (box) setPlace({ right: Math.max(8, window.innerWidth - box.right - 8), bottom: window.innerHeight - box.top + 8 });
+  }, [shown]);
   useEffect(() => {
     if (!shown) return;
-    const away = (event: globalThis.PointerEvent) => { if (!root.current?.contains(event.target as Node)) onToggle(); };
+    const away = (event: globalThis.PointerEvent) => { const target = event.target as Node; if (!root.current?.contains(target) && !card.current?.contains(target)) onToggle(); };
     const key = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") onToggle(); };
     window.addEventListener("pointerdown", away);
     window.addEventListener("keydown", key);
@@ -206,7 +214,7 @@ function ContextRing({ context, shown, readOnly = false, usage, onToggle }: { co
     <button type="button" className={`composer-context${left <= 20 ? " is-low" : ""}`} aria-label={`${label} · ${detail}`} title={`${label} · ${detail}`} aria-expanded={shown} onClick={onToggle}>
       {ring}
     </button>
-    {shown && <div className="composer-limits" role="dialog" aria-label={t("Plan usage limits")}>
+    {shown && place && createPortal(<div ref={card} className="composer-limits" role="dialog" aria-label={t("Plan usage limits")} style={{ right: place.right, bottom: place.bottom }}>
       <p className="composer-limits-head">{t("Plan usage limits")}{usage?.plan && <> · <span className="composer-limits-plan">{usage.plan}</span></>}</p>
       {usage && usage.windows.length > 0 ? usage.windows.map((window) => {
         const reset = formatResetIn(window.resets_at, Date.now());
@@ -216,7 +224,7 @@ function ContextRing({ context, shown, readOnly = false, usage, onToggle }: { co
           <span className="composer-limit-bar" aria-hidden="true"><span style={{ transform: `scaleX(${Math.min(window.used_percent, 100) / 100})` }} /></span>
         </div>;
       }) : <p className="composer-limits-none">{t("Usage limits unavailable")}</p>}
-    </div>}
+    </div>, document.body)}
   </span>;
 }
 
