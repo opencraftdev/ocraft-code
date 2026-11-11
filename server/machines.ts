@@ -18,7 +18,7 @@ import { sameSshSession, type HerdrMachineProfile } from "./herdr-profiles.ts";
 import { validateTarget } from "./machine-security.ts";
 import { writePrivateState } from "./private-state.ts";
 import { holdsDocument, readStateDocument, setAsideDamaged } from "./state-document.ts";
-import { detectHost, HERDR_INSTALL_CMD, installLockOwner, type RemoteHost } from "./remote-host.ts";
+import { detectHost, HERDR_INSTALL_CMD, installLockOwner, REMOTE_PATH, type RemoteHost } from "./remote-host.ts";
 import { REVISION, type UpdateStatus } from "../shared/update.ts";
 import { discard, readCappedJson, REMOTE_LIMITS } from "./remote-json.ts";
 import { SshConnection, sshClient } from "./ssh.ts";
@@ -1170,6 +1170,19 @@ export class MachineManager {
   endpoint(id: string): { url: string; token: string } | undefined {
     const runtime = this.machines.get(id);
     return runtime?.machine.enabled && runtime.machine.state === "connected" ? runtime.endpoint : undefined;
+  }
+  /**
+   * Runs a POSIX script on a PC (the Assistant's health checks and folder checks, server/assistant.ts):
+   * over its open SSH connection, or else one opened for this script alone and closed after it.
+   * Only for a PC the user let connect, and never with a prompt: the saved key or agent only.
+   */
+  async runScript(id: string, script: string, timeout = 30_000): Promise<string> {
+    const runtime = this.machines.get(id);
+    if (!runtime?.machine.enabled || !runtime.machine.target) throw new Error("PC not found");
+    if (!this.mayConnect(runtime)) throw new MachineActionRequired("Connect this machine first", "connect");
+    if (runtime.ssh?.connected()) return runtime.ssh.run(REMOTE_PATH + script, undefined, timeout);
+    const ssh = new SshConnection(runtime.machine.target, this.sshDir, join(this.sshDir, id));
+    try { await ssh.start(); return await ssh.run(REMOTE_PATH + script, undefined, timeout); } finally { ssh.close(); }
   }
   trackTerminal(id: string, close: () => void): () => void {
     const runtime = this.machines.get(id);

@@ -54,6 +54,7 @@ import { handleVoiceRequest, VoiceService } from "./voice.ts";
 import { BRIDGE_PROTOCOL } from "../shared/machines.ts";
 import { bridgeIdentity, loopbackRelay, registerBridge, relayTarget } from "./bridge.ts";
 import { handleMachineRequest, nonCanonicalPath, slowMachinePath } from "./machine-api.ts";
+import { Assistant, handleAssistantRequest, type RunScript } from "./assistant.ts";
 import { handleSessionHistoryRequest, handleSessionResumeRequest, SESSION_HISTORY_PATH, SESSION_RESUME_PATH } from "./session-history-routes.ts";
 import { HerdrSidebarConfig, herdrConfigPath, snapshotWithoutHiddenTokens } from "./herdr-sidebar.ts";
 import { readHerdrUi } from "./herdr-ui.ts";
@@ -208,6 +209,8 @@ export function createServer(
     shellAgents?: ShellAgentLocator;
     /** whether this server is the Assistant VM (scripts/install-assistant.sh); unset, OVIS_ASSISTANT=1 says so (its systemd unit sets it) */
     assistant?: boolean;
+    /** how the Assistant runs its checks on a machine (server/assistant.ts); unset, over Remote PCs' SSH. Tests run them in a local shell. */
+    assistantRun?: RunScript;
   } = {},
 ): ServerInstance {
   /**
@@ -259,6 +262,8 @@ export function createServer(
   const browserSnapshot = <S extends SessionSnapshot>(snapshot: S): S => options.bridgeOnly ? snapshot : snapshotWithoutHiddenTokens(herdrSidebar.get(), snapshot);
   const core = createCore({ options: { ...options, stateDir, openCodeState, orderSequence }, devices, preferences, usage, usageLogin, browserSnapshot, TYPED_SETTLE_MS, KEY_SETTLE_MS, SUBMIT_DEADLINE_MS, SUBMIT_DELAY_MS, DRAFT_CLEAR_WAIT_MS, DRAFT_CLEAR_POLL_MS });
   const { sidecar, serialize, push, logPushError, omo, claudeAgents, opencodeAgents, plans, clientSnapshot, machines, broadcastAll, collector, queueFirstMessage } = core;
+  // the Assistant VM's machines and projects: only on the VM, and only beside a PC manager to watch
+  const assistantService = assistant && machines ? new Assistant(stateDir, machines, options.assistantRun ?? ((machine, script) => machines.runScript(machine.id, script))) : null;
   // read finishes are kept for the herdr run each PC told this server it is in
   const seen = new SeenStore(stateDir, () => machines?.finishEpochs() ?? new Map());
   // started after createCore's Node probe (server/pty/sidecar.ts), which can hold the thread up to 3 s: that wait
@@ -392,6 +397,10 @@ export function createServer(
         setRequestRoute(pathname);
         if (token === "" && !bridgeAuthorized) return unauthorizedJson();
         try { return jsonResponse(await bridgeIdentity(sidecar)); } catch (error) { return errorResponse(error); }
+      }
+      if (pathname === "/api/assistant" || pathname.startsWith("/api/assistant/")) {
+        if (!assistantService) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
+        return handleAssistantRequest(request, pathname, assistantService);
       }
       if (pathname === "/api/machines" || pathname.startsWith("/api/machines/")) {
         if (!machines) return jsonResponse({ error: { code: "bridge_only", message: "Manage PCs on the connection server" } }, 404);
@@ -680,6 +689,7 @@ export function createServer(
       settlePortalStartup({ ok: false, error: new Error("Server stopped before Portal startup cleanup completed") });
       core.stop(() => {
         clearInterval(draftTimer);
+        assistantService?.stop();
         openCodeState.clear();
         void options.portal?.shutdown();
         registration?.close();

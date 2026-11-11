@@ -14,7 +14,6 @@ export const USAGE_KO: Record<string, string> = {
   "an existing account": "기존 계정",
   "Choose OpenCode Go or Zen for plan limits.": "요금제 한도는 OpenCode Go나 Zen을 고르세요.",
   "Follow the steps in the new tab.": "새 탭의 안내를 따르세요.",
-  "Remove": "제거",
   "Hub request failed": "허브 요청에 실패했어요",
   "Sign-in timed out. Try again.": "로그인 시간이 지났어요. 다시 시도하세요.",
   "Allow popups to sign in": "로그인하려면 팝업을 허용하세요",

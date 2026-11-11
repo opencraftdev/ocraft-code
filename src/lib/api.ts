@@ -1,6 +1,7 @@
 import { apiFetch as fetch } from "./api-request-id.ts";
 import type { PreferencesChange, SharedPreferences } from "../../shared/preferences.ts";
 import type { SeenFinish } from "../../shared/seen.ts";
+import type { AddProjectRequest, AssistantFix, AssistantProject, AssistantState, ProjectChange } from "../../shared/assistant.ts";
 import { resumeConnectionTraces } from "./connectionTrace.ts";
 import { machinePath, type BridgeHealth, type HerdrIdentity, type Machine, type MachineRoster, type SetupAction, type SetupJob, type SetupRequest } from "../../shared/machines.ts";
 import type {
@@ -515,6 +516,32 @@ async function sendJson(url: string, method: "POST" | "PATCH" | "DELETE", body: 
   });
   if (!response.ok) throw await errorFrom(url, response);
   return response;
+}
+
+/** GET /api/assistant: the Assistant VM's machines (with their health) and projects. */
+export function fetchAssistant(): Promise<AssistantState> {
+  return getJson<AssistantState>("/api/assistant");
+}
+
+export async function addAssistantProject(request: AddProjectRequest): Promise<AssistantProject> {
+  return (await sendJson("/api/assistant/projects", "POST", request)).json() as Promise<AssistantProject>;
+}
+
+export async function changeAssistantProject(id: string, change: ProjectChange): Promise<void> {
+  await sendJson(`/api/assistant/projects/${encodeURIComponent(id)}`, "PATCH", change);
+}
+
+export async function removeAssistantProject(id: string): Promise<void> {
+  await sendJson(`/api/assistant/projects/${encodeURIComponent(id)}`, "DELETE", {});
+}
+
+export async function setAssistantMaxRunning(machineId: string, maxRunning: number): Promise<void> {
+  await sendJson(`/api/assistant/machines/${encodeURIComponent(machineId)}`, "PATCH", { maxRunning });
+}
+
+/** Runs a fix on the machine: only ever from the user's click. */
+export async function fixAssistantMachine(machineId: string, fix: AssistantFix): Promise<AssistantState> {
+  return (await sendJson(`/api/assistant/machines/${encodeURIComponent(machineId)}/fix`, "POST", { fix })).json() as Promise<AssistantState>;
 }
 
 /** GET /api/plugins/actions: the PC's herdr plugins and the actions it can run. */

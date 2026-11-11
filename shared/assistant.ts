@@ -1,0 +1,59 @@
+import type { MachineState } from "./machines.ts";
+
+/** The agent CLIs a task can run with (and the Assistant itself). */
+export const ASSISTANT_AGENTS = ["claude", "codex"] as const;
+export type AssistantAgent = (typeof ASSISTANT_AGENTS)[number];
+/** "pr": the task's branch lands as a GitHub PR; "local": it merges into the checkout's base branch */
+export type MergeMode = "pr" | "local";
+
+/** One registered project folder (stateDir/assistant/projects.json). Only the UI adds one. */
+export interface AssistantProject {
+  id: string;
+  /** the Remote PCs machine id (a herdr saved machine's stable id) */
+  machine: string;
+  /** the folder, resolved on that machine (symlinks followed): a git repository's top folder */
+  path: string;
+  mergeMode: MergeMode;
+  defaultAgent: AssistantAgent;
+}
+
+/**
+ * What the watcher found wrong on a machine. `not_connected`: Remote PCs has not been allowed to
+ * connect to it yet; `unreachable`: SSH failed; the rest come from a check that ran there.
+ */
+export type AssistantProblem = "not_connected" | "unreachable" | "herdr_stopped" | "no_agent" | "gh_signed_out";
+/** A fix runs only on the user's click (POST /api/assistant/machines/:id/fix), never by itself. */
+export type AssistantFix = "start_herdr";
+
+export interface MachineHealth {
+  /** ms since the epoch */
+  checked_at: number;
+  problems: AssistantProblem[];
+  /** the agent CLIs found on the machine; empty when it could not be checked */
+  agents: AssistantAgent[];
+  /** SSH's own words when the machine was unreachable */
+  error?: string;
+}
+
+export interface AssistantMachine {
+  id: string;
+  name: string;
+  state: MachineState;
+  /** null until its first check finished */
+  health: MachineHealth | null;
+  maxRunning: number;
+}
+
+/** GET /api/assistant */
+export interface AssistantState {
+  machines: AssistantMachine[];
+  projects: AssistantProject[];
+}
+
+/** POST /api/assistant/projects */
+export interface AddProjectRequest { machine: string; path: string; defaultAgent?: AssistantAgent }
+/** PATCH /api/assistant/projects/:id */
+export interface ProjectChange { mergeMode?: MergeMode; defaultAgent?: AssistantAgent }
+
+/** Why a folder was refused as a project (the error code of POST /api/assistant/projects). */
+export type ProjectRefusal = "invalid_path" | "missing" | "not_git" | "root" | "home" | "home_parent" | "duplicate" | "unknown_machine";

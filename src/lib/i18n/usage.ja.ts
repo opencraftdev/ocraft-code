@@ -14,7 +14,6 @@ export const USAGE_JA: Record<string, string> = {
   "an existing account": "既存のアカウント",
   "Choose OpenCode Go or Zen for plan limits.": "プラン上限にはOpenCode GoかZenを選んでください。",
   "Follow the steps in the new tab.": "新しいタブの案内に従ってください。",
-  "Remove": "削除",
   "Hub request failed": "ハブのリクエストに失敗しました",
   "Sign-in timed out. Try again.": "ログインがタイムアウトしました。再試行してください。",
   "Allow popups to sign in": "ログインにはポップアップを許可してください",

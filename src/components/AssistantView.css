@@ -60,6 +60,44 @@
   font-size: var(--fs-sm);
 }
 
+/* a machine or project row, and the add-project form */
+.assistant-row,
+.assistant-add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  border-bottom: var(--hairline) solid var(--surface-edge);
+}
+
+.assistant-row-name {
+  color: var(--text-strong);
+  font-weight: var(--fw-medium);
+  overflow-wrap: anywhere;
+}
+
+.assistant-dim,
+.assistant-error {
+  margin: 0;
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.assistant-dim { color: var(--text-dim); }
+.assistant-error { color: var(--status-blocked); }
+
+.assistant-problem,
+.assistant-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+}
+
+.assistant-problem { color: var(--status-blocked); }
+.assistant-inline .input[type="number"] { width: 5em; }
+
 /* a phone: the three regions stack, the chat between the lists */
 @media (max-width: 768px) {
   .assistant-layout { flex-direction: column; overflow-y: auto; }
