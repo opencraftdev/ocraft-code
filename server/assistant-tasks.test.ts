@@ -27,7 +27,7 @@ function fixture(options: { stateDir?: string; state?: Machine["state"]; workspa
   const calls: { path: string; method?: string; body?: unknown; query?: Record<string, string> }[] = [];
   const answers: Record<string, (body: unknown) => unknown> = {
     "workspace/create": () => ({ workspace_id: "w1", pane_id: "p0", agent_started: false }),
-    "worktree/create": () => ({ workspace_id: "w2", pane_id: "p1", path: "/home/me/.herdr/worktrees/app/assistant-1-fix-login", branch: "assistant/1-fix-login", agent_started: true }),
+    "worktree/create": () => ({ workspace_id: "w2", pane_id: `p${(started += 1)}`, path: "/home/me/.herdr/worktrees/app/assistant-1-fix-login", branch: "assistant/1-fix-login", agent_started: true }),
     "pane/close": () => ({ ok: true }),
     "pane/read": () => ({ read: { text: "line one\nline two" } }),
     "pane/prompt": () => ({ prompt: { id: "q1", agent: "claude", kind: "question", title: "", question: "Which database?", body: null, options: [{ label: "Postgres", description: null }, { label: "SQLite", description: null }], multi_select: false, custom_option_index: null } }),
@@ -38,6 +38,7 @@ function fixture(options: { stateDir?: string; state?: Machine["state"]; workspa
     calls.push({ path, ...request });
     return answers[path]!(request.body);
   };
+  let started = 0;
   let listener: ((event: MachineEvent) => void) | undefined;
   const assistant = new Assistant(stateDir, { list: () => [machine], subscribe: (next) => { listener = next; return () => { listener = undefined; }; }, retryNow: () => {} },
     async () => "herdr\nclaude\n", { bridge, timer: () => () => {}, intervalMs: 1000, ...(options.now ? { now: options.now } : {}) });
@@ -46,7 +47,7 @@ function fixture(options: { stateDir?: string; state?: Machine["state"]; workspa
   const frame = (message: unknown) => listener!({ type: "machine-message", machine_id: "m1", message } as MachineEvent);
   const task = (id = "1") => assistant.tasks.get(id);
   const done = () => { assistant.stop(); rmSync(stateDir, { recursive: true, force: true }); };
-  return { assistant, machine, calls, answers, frame, task, stateDir, done };
+  return { assistant, machine, calls, answers, frame, task, stateDir, done, machinesChanged: () => listener!({ type: "machines", machines: [machine] }) };
 }
 
 const create = (assistant: Assistant, body: Record<string, unknown> = {}) => assistant.tasks.create({ project: "app", title: "Fix login", brief: "The login form\nrejects valid emails.", ...body });
@@ -56,8 +57,8 @@ describe("starting a task", () => {
   it("makes a worktree on the project's machine with a full-auto agent and the brief as its first prompt", async () => {
     const { assistant, calls, stateDir, done } = fixture({ workspaces: [{ workspace_id: "w0", worktree: { checkout_path: PROJECT.path, is_linked_worktree: false } }] });
     try {
-      const task = await create(assistant, { review: true, cron: "0 9 * * 1" });
-      expect(task).toMatchObject({ id: "1", status: "working", paneId: "p1", workspaceId: "w2", worktree: "/home/me/.herdr/worktrees/app/assistant-1-fix-login", branch: "assistant/1-fix-login", agent: "claude", review: true, autoMerge: false, cron: "0 9 * * 1" });
+      const task = await create(assistant, { review: true });
+      expect(task).toMatchObject({ id: "1", status: "working", paneId: "p1", workspaceId: "w2", worktree: "/home/me/.herdr/worktrees/app/assistant-1-fix-login", branch: "assistant/1-fix-login", agent: "claude", review: true, autoMerge: false });
       // the workspace already open on the checkout is the source; no other workspace is made
       expect(calls).toEqual([{ path: "worktree/create", method: "POST", body: {
         workspace_id: "w0", branch: "assistant/1-fix-login", label: "Fix login", agent: { kind: "claude", args: ["--", "The login form rejects valid emails."] },
@@ -91,15 +92,11 @@ describe("starting a task", () => {
       expect(await refusal(create(assistant, { after: "9" }))).toBe("unknown_task");
       expect(await refusal(create(assistant, { at: "someday" }))).toBe("invalid_at");
       expect(await refusal(create(assistant, { cron: "every day" }))).toBe("invalid_cron");
-      expect(calls).toEqual([]);
-      expect(assistant.tasks.list()).toEqual([]);
-    } finally { done(); }
-  });
-
-  it("refuses a task while its machine is down", async () => {
-    const { assistant, calls, done } = fixture({ state: "reconnecting" });
-    try {
-      expect(await refusal(create(assistant))).toBe("machine_offline");
+      expect(await refusal(create(assistant, { cron: "61 * * * *" }))).toBe("invalid_cron");
+      // a date no calendar has
+      expect(await refusal(create(assistant, { cron: "0 0 31 2 *" }))).toBe("invalid_cron");
+      expect(await refusal(create(assistant, { cron: "0 9 * * *", at: "09:00" }))).toBe("invalid_cron");
+      expect(await refusal(create(assistant, { at: "25:00" }))).toBe("invalid_at");
       expect(calls).toEqual([]);
       expect(assistant.tasks.list()).toEqual([]);
     } finally { done(); }
@@ -109,8 +106,7 @@ describe("starting a task", () => {
     const { assistant, answers, calls, task, done } = fixture();
     try {
       answers["worktree/create"] = () => ({ workspace_id: "w2", pane_id: "p1", path: "/wt/1", agent_started: false, error: { message: "claude: not found" } });
-      expect(await refusal(create(assistant))).toBe("agent_not_started");
-      expect(task()).toMatchObject({ status: "failed", worktree: "/wt/1", error: "claude: not found" });
+      expect(await create(assistant)).toMatchObject({ status: "failed", worktree: "/wt/1", error: "claude: not found" });
       calls.length = 0;
       answers["workspace/create"] = () => ({ workspace_id: "w3", pane_id: "p3", agent_started: true });
       expect(await assistant.tasks.restart("1")).toMatchObject({ status: "working", paneId: "p3", workspaceId: "w3" });
@@ -245,6 +241,140 @@ describe("answering and cancelling", () => {
       expect(await refusal(assistant.tasks.cancel("1"))).toBe("finished");
       expect(task().status).toBe("cancelled");
     } finally { done(); }
+  });
+});
+
+describe("the queue", () => {
+  // 08:00 on a Thursday, the VM's local time
+  const MORNING = new Date(2026, 10, 12, 8, 0).getTime();
+  const MINUTE = 60_000;
+  const clock = (start = MORNING) => { const state = { now: start }; return { state, now: () => state.now }; };
+  const statuses = (assistant: Assistant) => Object.fromEntries(assistant.tasks.list().map((task) => [task.id, task.status]));
+
+  it("keeps to the machine's Max running and starts the oldest waiting task first", async () => {
+    const { assistant, frame, done } = fixture();
+    try {
+      assistant.setMachine("m1", { maxRunning: 2 });
+      for (const title of ["One", "Two", "Three", "Four"]) await create(assistant, { title });
+      expect(statuses(assistant)).toEqual({ 1: "working", 2: "working", 3: "queued", 4: "queued" });
+      // Needs you still holds its slot
+      frame({ type: "pane-status", pane_id: "p1", agent_status: "blocked" });
+      await assistant.tasks.runQueue();
+      expect(statuses(assistant)).toMatchObject({ 3: "queued" });
+      // Ready frees it, for the oldest of the waiting ones
+      frame({ type: "pane-status", pane_id: "p1", agent_status: "done" });
+      await assistant.tasks.runQueue();
+      expect(statuses(assistant)).toEqual({ 1: "ready", 2: "working", 3: "working", 4: "queued" });
+      // a higher Max running starts the rest at once
+      assistant.setMachine("m1", { maxRunning: 3 });
+      await assistant.tasks.runQueue();
+      expect(statuses(assistant)[4]).toBe("working");
+    } finally { done(); }
+  });
+
+  it("keeps a task Queued while its machine is down, and starts it when the machine is back", async () => {
+    const { assistant, machine, calls, machinesChanged, done } = fixture({ state: "reconnecting" });
+    try {
+      expect(await create(assistant)).toMatchObject({ status: "queued", paneId: null });
+      await assistant.tasks.runQueue();
+      expect(calls).toEqual([]);
+      machine.state = "connected";
+      machinesChanged();
+      await assistant.tasks.runQueue();
+      expect(assistant.tasks.get("1")).toMatchObject({ status: "working", paneId: "p1" });
+    } finally { done(); }
+  });
+
+  it("waits for an --after task to be Done, and fails when that one is cancelled", async () => {
+    const first = fixture();
+    const stateDir = first.stateDir;
+    await create(first.assistant, { title: "First" });
+    expect(await create(first.assistant, { title: "Second", after: "1" })).toMatchObject({ status: "queued", after: "1" });
+    first.frame({ type: "pane-status", pane_id: "p1", agent_status: "working" });
+    first.frame({ type: "pane-status", pane_id: "p1", agent_status: "done" });
+    await first.assistant.tasks.runQueue();
+    // Ready is not Done
+    expect(first.task("2").status).toBe("queued");
+    first.assistant.stop();
+    // phase 6's merge makes a task Done; here the file says so
+    const path = join(stateDir, "assistant", "tasks.json");
+    writeFileSync(path, JSON.stringify((JSON.parse(readFileSync(path, "utf8")) as AssistantTask[]).map((task) => task.id === "1" ? { ...task, status: "done" } : task)));
+    const second = fixture({ stateDir });
+    try {
+      await second.assistant.tasks.runQueue();
+      expect(second.task("2").status).toBe("working");
+      await create(second.assistant, { title: "Third", after: "2" });
+      await second.assistant.tasks.cancel("2");
+      await second.assistant.tasks.runQueue();
+      expect(second.task("3")).toMatchObject({ status: "failed", error: "Task #2, which it waited for, was cancelled" });
+    } finally { second.done(); }
+  });
+
+  it("holds an --at task Scheduled until its time, then queues and starts it", async () => {
+    const time = clock();
+    const { assistant, calls, done } = fixture({ now: time.now });
+    try {
+      const task = await create(assistant, { at: "09:30" });
+      expect(task).toMatchObject({ status: "scheduled", at: new Date(2026, 10, 12, 9, 30).toISOString() });
+      time.state.now += 89 * MINUTE;
+      await assistant.tasks.runQueue();
+      expect(calls).toEqual([]);
+      time.state.now += MINUTE;
+      await assistant.tasks.runQueue();
+      expect(assistant.tasks.get("1").status).toBe("working");
+      // a clock time already passed today is tomorrow's; one in the past is queued at once
+      expect(await create(assistant, { title: "Tomorrow", at: "07:00" })).toMatchObject({ status: "scheduled", at: new Date(2026, 10, 13, 7, 0).toISOString() });
+      expect((await create(assistant, { title: "Late", at: "2026-11-01T09:00" })).status).toBe("working");
+    } finally { done(); }
+  });
+
+  it("fires a cron template once per slot into a new task, and cancelling the template stops it", async () => {
+    const time = clock();
+    const { assistant, calls, done } = fixture({ now: time.now });
+    try {
+      const template = await create(assistant, { cron: "0 9 * * *", review: true });
+      expect(template).toMatchObject({ status: "scheduled", cron: "0 9 * * *", next: new Date(2026, 10, 12, 9, 0).getTime() });
+      expect(calls).toEqual([]);
+      time.state.now = new Date(2026, 10, 12, 9, 0, 20).getTime();
+      await assistant.tasks.runQueue();
+      await assistant.tasks.runQueue();
+      expect(assistant.tasks.list().map(({ id, status, fromCron, cron }) => ({ id, status, fromCron, cron }))).toEqual([
+        { id: "2", status: "working", fromCron: "1", cron: undefined },
+        { id: "1", status: "scheduled", fromCron: undefined, cron: "0 9 * * *" },
+      ]);
+      expect(assistant.tasks.get("2")).toMatchObject({ title: "Fix login", review: true, branch: "assistant/2-fix-login" });
+      expect(assistant.tasks.get("1").next).toBe(new Date(2026, 10, 13, 9, 0).getTime());
+      // an --after names a task, not a template
+      expect(await refusal(create(assistant, { after: "1" }))).toBe("invalid_after");
+      expect(await assistant.tasks.cancel("1")).toMatchObject({ status: "cancelled" });
+      time.state.now = new Date(2026, 10, 14, 9, 0).getTime();
+      await assistant.tasks.runQueue();
+      expect(assistant.tasks.list().length).toBe(2);
+    } finally { done(); }
+  });
+
+  it("after a restart neither fires a slot twice nor once per missed slot", async () => {
+    const time = clock();
+    const first = fixture({ now: time.now });
+    const stateDir = first.stateDir;
+    await create(first.assistant, { cron: "*/10 * * * *" });
+    time.state.now = MORNING + 10 * MINUTE;
+    await first.assistant.tasks.runQueue();
+    expect(first.assistant.tasks.list().length).toBe(2);
+    first.assistant.stop();
+    // the same minute again: already fired
+    const again = fixture({ stateDir, now: time.now });
+    await again.assistant.tasks.runQueue();
+    expect(again.assistant.tasks.list().length).toBe(2);
+    again.assistant.stop();
+    // down for five slots: the start fires once for them, and the next fire time is after now
+    time.state.now = MORNING + 65 * MINUTE;
+    const later = fixture({ stateDir, now: time.now });
+    try {
+      await later.assistant.tasks.runQueue();
+      expect(later.assistant.tasks.list().filter((task) => task.fromCron === "1").length).toBe(2);
+      expect(later.task("1").next).toBe(MORNING + 70 * MINUTE);
+    } finally { later.done(); }
   });
 });
 

@@ -554,6 +554,11 @@ export async function restartAssistantTask(taskId: string): Promise<AssistantSta
   return (await sendJson(`/api/assistant/tasks/${encodeURIComponent(taskId)}/restart`, "POST", {})).json() as Promise<AssistantState>;
 }
 
+/** Cancel: a task's pane closes, or a Queued or Scheduled task (a cron template too) never starts. */
+export async function cancelAssistantTask(taskId: string): Promise<AssistantState> {
+  return (await sendJson(`/api/assistant/tasks/${encodeURIComponent(taskId)}/cancel`, "POST", {})).json() as Promise<AssistantState>;
+}
+
 /** An archived Assistant session's saved conversation. */
 export function fetchAssistantTranscript(name: string): Promise<AssistantTranscript> {
   return getJson<AssistantTranscript>(`/api/assistant/sessions/${encodeURIComponent(name)}`);

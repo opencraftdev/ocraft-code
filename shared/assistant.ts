@@ -55,9 +55,9 @@ export interface AssistantState {
 }
 
 /**
- * A task's place in its lifecycle (docs/plan/20261111-2112-assistant.md, Task statuses). Phase 4 runs
- * To do -> Working -> (Needs you <-> Working) -> Ready, and Cancelled or Failed at any point; the
- * others belong to the queue, review and merge of later phases.
+ * A task's place in its lifecycle (docs/plan/20261111-2112-assistant.md, Task statuses). Phase 5 runs
+ * (Scheduled ->) Queued -> Working -> (Needs you <-> Working) -> Ready, and Cancelled or Failed at
+ * any point; review and merge are phase 6's. To do is only a phase 4 task that never started.
  */
 export const TASK_STATUSES = ["todo", "scheduled", "queued", "working", "needs_you", "ready", "reviewing", "merging", "done", "cancelled", "failed"] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -79,10 +79,18 @@ export interface AssistantTask {
   workspaceId: string | null;
   /** `assistant/<id>-<slug>` */
   branch: string;
-  /** kept for the queue (phase 5): another task's id, a time, a cron line */
+  /**
+   * The queue (phase 5): a Queued task starts once the task `after` names is Done (it fails when that
+   * one fails or is cancelled), and a Scheduled one becomes Queued at `at` (an ISO time). A task with
+   * `cron` (five fields, the VM's local time) is a template that never runs itself: it stays
+   * Scheduled, and at each fire time (`next`, ms since the epoch) a copy of it, `fromCron` its id, is
+   * queued.
+   */
   after?: string;
   at?: string;
   cron?: string;
+  next?: number;
+  fromCron?: string;
   /** kept for review and merge (phase 6) */
   review: boolean;
   autoMerge: boolean;

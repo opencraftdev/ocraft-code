@@ -167,13 +167,17 @@ export class Assistant {
     this.tasks = new AssistantTasks(join(directory, "tasks.json"), {
       project: (id) => this.projects.find((project) => project.id === id),
       machine: (id) => this.watchable().find((machine) => machine.id === id),
+      maxRunning: (id) => this.settings[id]?.maxRunning ?? DEFAULT_MAX_RUNNING,
       bridge: options.bridge ?? (() => Promise.reject(new AssistantError("machine_offline", "This server reaches no machines", 503))),
       now: this.now,
     });
     this.unsubscribe = machines.subscribe((event) => {
-      if (event.type === "machines") this.sync();
+      // a machine connected again resumes its queue by itself (decision 16)
+      if (event.type === "machines") { this.sync(); void this.tasks.runQueue(); }
       if (event.type === "machine-message") this.tasks.heard(event.machine_id, event.message);
     });
+    // a restart catches up at once: a cron slot missed while down fires once
+    void this.tasks.runQueue();
   }
 
   /** herdr's saved machines, the only ones the Assistant runs tasks on */
@@ -225,6 +229,9 @@ export class Assistant {
       if (this.stopped || this.watched.get(id) !== watch) return;
       watch.health = health;
       this.tasks.checkPanes(this.watchable().find((candidate) => candidate.id === id) ?? machine, this.intervalMs);
+      // the queue's clock is this check: `at` and cron times are seen within one interval of each machine's
+      // ponytail: a template whose machine is down (backed off up to 5 min) or out of the catalog fires late; its task could not start sooner anyway
+      void this.tasks.runQueue();
       watch.failures = health.problems.includes("unreachable") ? watch.failures + 1 : 0;
       watch.cancel = this.timer(() => void this.check(id), nextCheckDelay(this.intervalMs, watch.failures));
     })().finally(() => { watch.busy = undefined; });
@@ -293,6 +300,7 @@ export class Assistant {
     const settings = { ...this.settings, [id]: { maxRunning: body.maxRunning } };
     writePrivateState(this.settingsPath, settings);
     this.settings = settings;
+    void this.tasks.runQueue();
   }
 
   /** Only on the user's click: starts herdr there when it is not running, then checks again. */
@@ -331,10 +339,10 @@ export async function handleAssistantRequest(request: Request, pathname: string,
   const route = parts.length === 0 ? "" : collection === "projects" && parts.length <= 2 ? (id ? "/projects/:id" : "/projects")
     : collection === "machines" && id && (parts.length === 2 || (parts.length === 3 && action === "fix")) ? (action ? "/machines/:id/fix" : "/machines/:id")
     : collection === "sessions" && parts.length <= 2 ? (id ? "/sessions/:name" : "/sessions")
-    : collection === "tasks" && id && parts.length === 3 && action === "restart" ? "/tasks/:id/restart" : null;
+    : collection === "tasks" && id && parts.length === 3 && (action === "restart" || action === "cancel") ? `/tasks/:id/${action}` : null;
   if (route === null) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
   setRequestRoute(`/api/assistant${route}`);
-  const allowed: Record<string, string[]> = { "": ["GET"], "/projects": ["POST"], "/projects/:id": ["PATCH", "DELETE"], "/machines/:id": ["PATCH"], "/machines/:id/fix": ["POST"], "/sessions": ["POST"], "/sessions/:name": ["GET"], "/tasks/:id/restart": ["POST"] };
+  const allowed: Record<string, string[]> = { "": ["GET"], "/projects": ["POST"], "/projects/:id": ["PATCH", "DELETE"], "/machines/:id": ["PATCH"], "/machines/:id/fix": ["POST"], "/sessions": ["POST"], "/sessions/:name": ["GET"], "/tasks/:id/restart": ["POST"], "/tasks/:id/cancel": ["POST"] };
   if (!allowed[route]!.includes(request.method)) return jsonResponse({ error: { code: "method_not_allowed", message: `use ${allowed[route]!.join(" or ")}` } }, 405, { allow: allowed[route]!.join(", ") });
   if (request.method !== "GET" && !request.headers.get("origin")) return jsonResponse({ error: { code: "browser_only", message: "Use Assistant controls from this app" } }, 403);
   const body = request.method === "GET" || request.method === "DELETE" ? null : await request.json().catch(() => null);
@@ -354,6 +362,7 @@ export async function handleAssistantRequest(request: Request, pathname: string,
       case "GET /sessions/:name": return jsonResponse(sessions().transcript(id!));
       // Restart agent: only on the user's click, in this app (decision 16); ovis-task has no such route
       case "POST /tasks/:id/restart": await assistant.tasks.restart(id!); return jsonResponse(assistant.state());
+      case "POST /tasks/:id/cancel": await assistant.tasks.cancel(id!); return jsonResponse(assistant.state());
       default: await assistant.fix(id!, body); return jsonResponse(assistant.state());
     }
   } catch (error) {
