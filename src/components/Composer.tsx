@@ -12,11 +12,11 @@ import {
   type ReactNode,
 } from "react";
 import { flushSync } from "react-dom";
-import { CornerDownLeft, FileText, Folder, FolderGit2, GitBranch, LoaderCircle, MessageSquarePlus, Minimize2, Package, Plus, Puzzle, Square, TriangleAlert, UserRound, X, type LucideIcon } from "lucide-react";
+import { CornerDownLeft, FileText, Folder, FolderGit2, GitBranch, LoaderCircle, MessageSquarePlus, Package, Plus, Puzzle, Square, TriangleAlert, UserRound, X, type LucideIcon } from "lucide-react";
 
 import "./Composer.css";
 
-import type { AgentStatus, ClientRole, ConversationMetadata, PlanSummary, SlashCommand } from "../../shared/protocol.ts";
+import type { AgentStatus, ClientRole, ConversationMetadata, PlanSummary, ProviderUsage, SlashCommand } from "../../shared/protocol.ts";
 import { skillSyntax } from "../../shared/skill-syntax.ts";
 import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
 import { composerDrafts } from "../lib/composerDraft.ts";
@@ -46,7 +46,6 @@ import {
   terminalCommand,
   typedTerminalCommand,
 } from "../lib/compose.ts";
-import { compactCommandText } from "../lib/compactContext.ts";
 import { composerStrip } from "../lib/composerStrip.ts";
 import { composerLabelDraw } from "../lib/composerLabelFit.ts";
 import { composerFull, formatChars, pasteOverflow } from "../lib/composerLength.ts";
@@ -172,49 +171,53 @@ function readSlashUsage(): Record<string, number> {
 }
 
 /**
- * What is left of the context, as a ring filled by what is used (as Codex's app shows it):
- * red when little is left. The number is on hover, and on a tap beside the ring (a touch
- * screen has no hover). A window the transcript does not name draws no ring. Whether the number
- * is open is the composer's to keep: its text takes room in the row the model label is fitted to.
+ * What is left of the context, as a ring filled by what is used (as Codex's app shows it): red
+ * when little is left, the number on hover. Pressed, it opens the plan's usage limits (as
+ * Claude's does): each window's share used and when it resets. A window the transcript does not
+ * name draws no ring.
  */
-function ContextRing({ context, shown, readOnly = false, onToggle, onCompact }: { context: NonNullable<ConversationMetadata["context"]>; shown: boolean; readOnly?: boolean; onToggle: () => void; onCompact?: (() => void) | undefined }) {
+function ContextRing({ context, shown, readOnly = false, usage, onToggle }: { context: NonNullable<ConversationMetadata["context"]>; shown: boolean; readOnly?: boolean; usage: ProviderUsage | undefined; onToggle: () => void }) {
   const t = useT();
+  const root = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!shown) return;
+    const away = (event: globalThis.PointerEvent) => { if (!root.current?.contains(event.target as Node)) onToggle(); };
+    const key = (event: globalThis.KeyboardEvent) => { if (event.key === "Escape") onToggle(); };
+    window.addEventListener("pointerdown", away);
+    window.addEventListener("keydown", key);
+    return () => { window.removeEventListener("pointerdown", away); window.removeEventListener("keydown", key); };
+  }, [shown, onToggle]);
   const left = contextLeftPercent(context);
   if (left === null || context.window === null) return null;
   const label = t("Context {percent}% left", { percent: left });
   const detail = t("{used} of {window} tokens", { used: formatTokens(context.used), window: formatTokens(context.window) });
   const radius = 6;
   const circumference = 2 * Math.PI * radius;
+  const ring = <svg viewBox="0 0 16 16" aria-hidden="true">
+    <circle className="composer-context-track" cx="8" cy="8" r={radius} />
+    <circle className="composer-context-used" cx="8" cy="8" r={radius}
+      strokeDasharray={`${circumference * (100 - left) / 100} ${circumference}`} transform="rotate(-90 8 8)" />
+  </svg>;
   if (readOnly) return <span className={`composer-context composer-context-readonly${left <= 20 ? " is-low" : ""}`}>
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <circle className="composer-context-track" cx="8" cy="8" r={radius} />
-      <circle className="composer-context-used" cx="8" cy="8" r={radius}
-        strokeDasharray={`${circumference * (100 - left) / 100} ${circumference}`} transform="rotate(-90 8 8)" />
-    </svg>
+    {ring}
     <span className="visually-hidden">{label} · {detail}</span>
   </span>;
-  return (
-    <>
-    <button
-      type="button"
-      className={`composer-context${left <= 20 ? " is-low" : ""}`}
-      aria-label={`${label} · ${detail}`}
-      title={`${label} · ${detail}`}
-      aria-expanded={shown}
-      onClick={onToggle}
-    >
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        <circle className="composer-context-track" cx="8" cy="8" r={radius} />
-        <circle className="composer-context-used" cx="8" cy="8" r={radius}
-          strokeDasharray={`${circumference * (100 - left) / 100} ${circumference}`} transform="rotate(-90 8 8)" />
-      </svg>
-      {shown && <span className="composer-context-text">{label}</span>}
+  return <span ref={root} className="composer-context-anchor">
+    <button type="button" className={`composer-context${left <= 20 ? " is-low" : ""}`} aria-label={`${label} · ${detail}`} title={`${label} · ${detail}`} aria-expanded={shown} onClick={onToggle}>
+      {ring}
     </button>
-    {shown && onCompact && <button type="button" className="composer-compact" title={t("Compact context")} aria-label={t("Compact context")} onClick={onCompact}>
-      <Minimize2 aria-hidden="true" />
-    </button>}
-    </>
-  );
+    {shown && <div className="composer-limits" role="dialog" aria-label={t("Plan usage limits")}>
+      <p className="composer-limits-head">{t("Plan usage limits")}{usage?.plan && <> · <span className="composer-limits-plan">{usage.plan}</span></>}</p>
+      {usage && usage.windows.length > 0 ? usage.windows.map((window) => {
+        const reset = formatResetIn(window.resets_at, Date.now());
+        return <div key={`${window.kind}:${window.scope ?? ""}`} className={`composer-limit${window.used_percent >= HIGH_PERCENT ? " is-high" : ""}`}>
+          <span className="composer-limit-name">{windowLabel(window)}</span>
+          <span className="composer-limit-meta">{reset && t("Resets in {time}", { time: reset })} <b>{formatPercent(window.used_percent)}</b></span>
+          <span className="composer-limit-bar" aria-hidden="true"><span style={{ transform: `scaleX(${Math.min(window.used_percent, 100) / 100})` }} /></span>
+        </div>;
+      }) : <p className="composer-limits-none">{t("Usage limits unavailable")}</p>}
+    </div>}
+  </span>;
 }
 
 function useMediaQuery(query: string): boolean {
@@ -267,9 +270,13 @@ export function Composer({
   const { fetchPaneFiles } = useMachineApi();
   const { settings, resolvedLanguage } = useSettings();
   const mobile = useMediaQuery("(max-width: 640px), (pointer: coarse)");
-  const usageEnabled = settings.showUsage && !mobile && machineId === "local" && providerForAgent(agent) !== null;
-  const { report: usageReport } = useUsage(usageEnabled);
-  const usage = usageEnabled && usageReport !== null ? composerUsage(usageReport.providers, agent, settings.usageOrder, settings.usageHidden) : undefined;
+  const [contextShown, setContextShown] = useState(false);
+  // the plan's limits are read for the inline meter (Settings) and while the ring's popover is open; only this PC's sign-ins are known
+  const usageReadable = !mobile && machineId === "local" && providerForAgent(agent) !== null;
+  const usageEnabled = settings.showUsage && usageReadable;
+  const { report: usageReport } = useUsage(usageEnabled || (usageReadable && contextShown));
+  const planUsage = usageReport !== null && usageReadable ? composerUsage(usageReport.providers, agent, settings.usageOrder, settings.usageHidden) : undefined;
+  const usage = usageEnabled ? planUsage : undefined;
   const usageWindows = usage === undefined ? [] : statusWindows(usage);
   const usageLimit = usageWindows[0];
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -279,7 +286,7 @@ export function Composer({
   const hintRef = useRef<HTMLSpanElement | null>(null);
   /** the card's own width: a narrow one shows the task chip's count */
   const [cardWidth, setCardWidth] = useState(0);
-  const [contextShown, setContextShown] = useState(false);
+  const toggleContext = useCallback(() => setContextShown((open) => !open), []);
   const composingRef = useRef(false);
   // the chat lens's input surface takes the keyboard when it appears (a pane switch remounts
   // it), as the grid does in the terminal lens: a pane picked from the drawer is typed into
@@ -1058,9 +1065,6 @@ export function Composer({
   );
 
   const isWorking = agentStatus === "working";
-  // an explicit click sends /compact the way a typed message goes; only where the agent lists it, never while it works
-  const compactText = compactCommandText(commands);
-  const compactNow = compactText !== null && connected && !sending && !isWorking && agentStatus !== "blocked" ? () => sendQuick(compactText) : undefined;
   // what the status line says; what may be sent, queued or stopped goes by the agent's own status
   const shownStatus = paneStatus({ agent_status: agentStatus, ...(backgroundWait ? { background_wait: true as const } : {}) });
   const statusCompact = composerStatusCompact(cardWidth);
@@ -1088,9 +1092,8 @@ export function Composer({
   // Fit only changes to drawn content. Streaming context usage is a fixed-size ring unless
   // its number is open on desktop; transcript/status refreshes need no measurement layout.
   useLayoutEffect(fitStatus, [fitStatus, agent, metadata?.model, metadata?.reasoning_effort,
-    metadata?.context?.window, contextShown && !mobile && metadata?.context ? contextLeftPercent(metadata.context) : null,
-    contextShown, mobile, usageCaption, usage?.problem, hintText, dictation.shown, backgroundTasks,
-    plan?.done, plan?.total, plan?.current, statusCompact, compactNow !== undefined, facesLoaded, t]);
+    metadata?.context?.window, mobile, usageCaption, usage?.problem, hintText, dictation.shown, backgroundTasks,
+    plan?.done, plan?.total, plan?.current, statusCompact, facesLoaded, t]);
   const menuId = `composer-menu-${paneId}`;
   // the suggestions' own close, for a pointer or a phone, which has no Escape: it does what Escape does, and the
   // text and the focus stay in the box (a press never takes the focus; a key on it hands it back)
@@ -1438,7 +1441,7 @@ export function Composer({
                   </>}
                 </span>
               </span>}
-              {metadata?.context && <ContextRing context={metadata.context} shown={contextShown} readOnly={mobile} onToggle={() => setContextShown((open) => !open)} onCompact={compactNow} />}
+              {metadata?.context && <ContextRing context={metadata.context} shown={contextShown} readOnly={mobile} usage={planUsage} onToggle={toggleContext} />}
               {usage !== undefined && usage.problem === null && usageLimit !== undefined && <span
                 className={`composer-usage${usageLimit.used_percent >= HIGH_PERCENT ? " is-high" : ""}${usage.problem ? " has-problem" : ""}`}
                 title={`${usageName(usage)}\n${usageDetail}`}

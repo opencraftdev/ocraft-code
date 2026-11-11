@@ -343,11 +343,6 @@
   flex: none;
 }
 
-.composer-context-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
 .composer-context-track,
 .composer-context-used {
@@ -378,27 +373,34 @@
   cursor: default;
 }
 
-/* Compact context: beside the opened number, desktop only (the mobile ring is inert) */
-.composer-compact {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-
-.composer-compact svg {
-  width: 14px;
-  height: 14px;
-}
-
-.composer-compact:hover,
-.composer-compact:focus-visible {
+/* the ring pressed: the plan's usage limits over the composer, as Claude's shows them */
+.composer-context-anchor { position: relative; display: inline-flex; }
+.composer-limits {
+  position: absolute;
+  right: calc(var(--space-2) * -1);
+  bottom: calc(100% + var(--space-3));
+  z-index: var(--z-drawer);
+  width: 300px;
+  padding: var(--space-3) var(--space-4);
+  border: var(--hairline) solid var(--surface-edge);
+  border-radius: var(--radius-lg);
+  background: var(--composer-surface-bg);
+  box-shadow: var(--shadow-pop);
   color: var(--text);
+  font-size: var(--fs-sm);
+  text-align: start;
+  white-space: normal;
+  cursor: default;
 }
+.composer-limits-head, .composer-limits-none { margin: 0 0 var(--space-2); color: var(--text-dim); }
+.composer-limits-none { margin: 0; }
+.composer-limits-plan { text-transform: capitalize; }
+.composer-limit { display: grid; grid-template-columns: 1fr auto; gap: var(--space-1) var(--space-2); padding-block: var(--space-2); }
+.composer-limit-meta { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.composer-limit-meta b { margin-inline-start: var(--space-1); font-weight: inherit; }
+.composer-limit-bar { grid-column: 1 / -1; height: 4px; overflow: hidden; border-radius: 2px; background: var(--border); }
+.composer-limit-bar > span { display: block; height: 100%; background: var(--accent); transform-origin: left; }
+.composer-limit.is-high .composer-limit-bar > span { background: var(--status-blocked); }
 
 .composer-usage {
   flex: none;
