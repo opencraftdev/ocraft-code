@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Ellipsis, FolderOpen, Link, Menu, MessageSquare, PanelLeft, PanelRight, Search, SquareTerminal, X } from "lucide-react";
+import { Bell, Bot, ChevronDown, Ellipsis, FileDiff, FolderOpen, Link, List, Menu, MessageSquare, PanelLeft, PanelRight, Pencil, Search, SquareTerminal, X } from "lucide-react";
 
 import type { HerdrPane } from "../shared/protocol.ts";
 import { authenticate, createTab, moveTabToWorkspace, pairDevice, shareSeen, signOut, splitPane, swapPaneWith, zoomPane } from "./lib/api.ts";
@@ -12,7 +12,6 @@ import { paneCovered, paneContentKey, paneContentPresented } from "./lib/panePre
 import { PANE_TABPANEL_ID, paneTabPanelLabel } from "./lib/paneRegion.ts";
 import { worktreeRepoName } from "./lib/composerStrip.ts";
 import { AccessGate } from "./components/AccessGate.tsx";
-import { AgentMark } from "./components/AgentMark.tsx";
 import { AgentPanel } from "./components/AgentPanel.tsx";
 import { WorkspaceFileDrawer } from "./components/WorkspaceFileDrawer.tsx";
 import { useAgentPanel } from "./lib/useAgentPanel.ts";
@@ -551,6 +550,11 @@ export function App() {
   const keyboardLikely = useMediaQuery("(hover: hover) and (pointer: fine)");
   const paletteKeys = keyboardLikely ? formatKeys(shortcutDisplayKeys("palette", settings.shortcutOverrides)).join("+") : "";
   const moreItems: RowMenuItem[] = [
+    // the title's menu (the header has no tab strip): the pane's tab is renamed in the strip, drawn only while it edits
+    ...(selectedPane && !selectedPane.restore_error ? [
+      { id: "rename", label: t("Rename"), icon: Pencil, run: actions.renameTab },
+      { id: "new-agent", label: t("New tab with agent…"), icon: Bot, run: () => actions.openNewTab() },
+    ] : []),
     // first at every width: a phone's header has no palette button, and a touch screen no shortcut
     { id: "palette", label: t("Search panes and actions"), icon: Search, ...(paletteKeys ? { hint: paletteKeys } : {}), run: () => openPalette() },
     ...(selectedPane && !selectedPane.restore_error ? [{ id: "find", label: t("Find in terminal"), icon: Search, run: actions.openFind }] : []),
@@ -658,21 +662,11 @@ export function App() {
         <HeaderNote note={note} />
         {note !== null ? null : selectedPane && crumb ? (
           <div className="context" title={crumb.tooltip}>
-            <div className="context-title">
-              {selectedAgent && <AgentMark agent={selectedAgent} size={18} />}
+            <button type="button" className="context-title" aria-haspopup="menu" aria-expanded={more !== null}
+              onClick={(event) => { const anchor = event.currentTarget; setMore((open) => (open ? null : { anchor })); }}>
               <span className="context-title-text">{selectedTitle}</span>
-            </div>
-            <div className="context-sub">
-              {/* one PC needs no name: the sidebar leaves it out too, and More still says it */}
-              {crumb.showMachine && <><span className="machine-context-name">{crumb.machine}</span><span className="context-sep" aria-hidden="true">›</span></>}
-              <span>{crumb.workspace}</span>
-              {crumb.folder !== null && (
-                <>
-                  <span className="context-sep" aria-hidden="true">›</span>
-                  <span>{crumb.folder}</span>
-                </>
-              )}
-            </div>
+              <ChevronDown className="context-title-chevron" aria-hidden="true" />
+            </button>
           </div>
         ) : (
           <><Brand /><span className="machine-context-name">{selectedMachine?.name ?? selectedMachineId}</span></>
@@ -680,12 +674,10 @@ export function App() {
         {selectedPane && (
           <div className="segmented view-switch" role="group" aria-label="Pane view">
             <button type="button" aria-label={t("Chat")} aria-pressed={view === "chat"} onClick={() => { setView("chat"); setDrawerOpen(false); }} title={t("Chat transcript (⌘⇧J)")}>
-              <MessageSquare aria-hidden="true" />
-              <span className="header-desktop-only">{t("Chat")}</span>
+              <List aria-hidden="true" />
             </button>
             <button type="button" aria-label={t("Terminal")} aria-pressed={view === "terminal"} onClick={() => { setView("terminal"); setDrawerOpen(false); }} title={terminalAttach ? t("Live terminal (⌘⇧J)") : t("Live terminal: coming to Windows PCs once herdr can attach there")}>
               <SquareTerminal aria-hidden="true" />
-              <span className="header-desktop-only">{t("Terminal")}</span>
               {!terminalAttach && <span className="pill pill-soon">{t("soon")}</span>}
             </button>
           </div>
@@ -693,7 +685,9 @@ export function App() {
         {selectedPane && wideScreen && (
           <>
             {/* opens Files, it is no third lens: set apart from the switch by a hairline */}
-            <span className="header-divider" aria-hidden="true" />
+            <button type="button" className="icon-button header-files-button" aria-label={t("Review changes")} title={t("Review changes")} onClick={() => showWorkspaceFiles("changes")}>
+              <FileDiff />
+            </button>
             <button type="button" className="icon-button header-files-button" aria-label={t("Browse files")} title={t("Browse files")} onClick={() => showWorkspaceFiles()}>
               <FolderOpen />
             </button>
@@ -876,7 +870,7 @@ export function App() {
                     No tabIndex - the terminal (PaneTerminal) and the composer are the focusable things inside it. */}
                 <main className="terminal-host">
                   <div id={slotPanelId} className="terminal-tabpanel" role={slotPanelLabel === null ? undefined : "tabpanel"} aria-label={slotPanelLabel ?? undefined}>
-                  <PaneCanvas key={machineId} snapshot={slotSnapshot} pane={pane} selectedPaneId={paneId} onSelect={onSelect} onChanged={actions.refresh} actionsRef={active ? paneActionsRef : undefined}
+                  <PaneCanvas key={machineId} snapshot={slotSnapshot} pane={pane} selectedPaneId={paneId} onSelect={onSelect} onChanged={actions.refresh} actionsRef={active ? paneActionsRef : undefined} solo={showsChat(pane, slotView)}
                     mirrored={herdr?.terminal_attach === false || herdr?.terminal_mirror === true}
                     onOpenInHalf={wideScreen ? (id, side) => dockSide({ machineId, paneId: id }, side) : undefined}
                     onRecoverUnsent={(target) => openUnsent({ machineId, pane: target })}

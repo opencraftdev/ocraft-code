@@ -2976,3 +2976,64 @@ button {
 button, a, [role="button"] {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* ── Claude desktop look: one quiet header row ─────────────────────────────────────────────
+   The title is a menu button (rename, new tab, files, link…); the lenses and the panels are
+   icons on the right. herdr's tabs stay mounted for their rename field and keyboard, but are not
+   drawn outside a split: the sidebar and the title menu reach every tab. */
+@media (min-width: 769px) {
+  .app-header.is-zoned {
+    background: var(--chat-canvas, var(--bg-panel));
+    gap: var(--space-1);
+  }
+  .app-header .context { margin-left: var(--space-2); }
+  .app-header .context-title {
+    gap: var(--space-1);
+    min-height: var(--control-h);
+    padding: 0 var(--space-2);
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-strong);
+    font: inherit;
+    font-size: var(--fs-md);
+    font-weight: var(--fw-medium);
+    cursor: pointer;
+  }
+  .app-header .context-title:hover,
+  .app-header .context-title[aria-expanded="true"] { background: var(--bg-hover); }
+  .context-title-chevron { flex: none; width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); color: var(--text-dim); }
+  .app-header .view-switch { gap: var(--space-1); }
+  .app-header .view-switch > button {
+    width: var(--control-h);
+    min-width: var(--control-h);
+    height: var(--control-h);
+    padding: 0;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-dim);
+  }
+  .app-header .view-switch > button svg { display: block; }
+  .app-header .view-switch > button:hover { color: var(--text); background: var(--bg-hover); }
+  .app-header .view-switch > button[aria-pressed="true"] { color: var(--text-strong); background: var(--bg-hover); }
+  .app-header .header-files-button,
+  .app-header .header-meta > .icon-button,
+  .app-header .header-more-button { color: var(--text-dim); }
+  .pane-split:not(.is-split) .tab-strip:not(:has(.is-editing)) { display: none; }
+  /* an update is a quiet pill over the pane's top right corner, not a band across it */
+  .pane-column { position: relative; }
+  .pane-column > .update-notice.is-line {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-4);
+    z-index: 5;
+    flex-wrap: nowrap;
+    max-width: min(32rem, calc(100% - 2 * var(--space-4)));
+    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+    border: var(--hairline) solid var(--border);
+    border-radius: var(--radius-pill);
+    box-shadow: var(--shadow-card);
+  }
+  .pane-column > .update-notice.is-line > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}

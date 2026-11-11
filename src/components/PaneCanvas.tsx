@@ -40,6 +40,8 @@ interface Props {
   mirrored?: boolean;
   /** opens Recover unsent text for the pane, offered while earlier herdrs' panes left some (UnsentText) */
   onRecoverUnsent?: (target: HerdrPane) => void;
+  /** draw the selected pane alone, as a phone does: the chat shows one conversation */
+  solo?: boolean;
 }
 type Menu = { paneId: string; anchor: HTMLElement; point?: { x: number; y: number }; previousFocus: HTMLElement | null };
 interface Drag {
@@ -62,7 +64,7 @@ interface Drag {
 }
 
 /** The active tab, drawn from herdr's rectangles. No browser-owned layout or PTY state. */
-export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged, renderPane, actionsRef, onOpenInHalf, mirrored = false, onRecoverUnsent }: Props) {
+export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged, renderPane, actionsRef, onOpenInHalf, mirrored = false, onRecoverUnsent, solo = false }: Props) {
   const t = useT();
   const { settings, update: updateSettings } = useSettings();
   const narrowScreen = useMediaQuery(MIRROR_WRAP_QUERY);
@@ -231,7 +233,7 @@ export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged
     flush(current);
   };
   const cells = layout ? layoutCells(layout) : pane ? [{ paneId: pane.pane_id, left: 0, top: 0, width: 100, height: 100, focused: true }] : [];
-  const alone = soloPane(layout, cells.map((cell) => cell.paneId), selectedPaneId, narrow);
+  const alone = soloPane(layout, cells.map((cell) => cell.paneId), selectedPaneId, narrow || solo);
   const stacked = alone !== null && !layout?.zoomed;
   for (const cell of cells) lastCells.current.set(cell.paneId, alone === cell.paneId || stacked
     ? { ...cell, left: 0, top: 0, width: 100, height: 100 } : cell);
