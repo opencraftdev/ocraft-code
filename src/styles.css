@@ -3377,3 +3377,34 @@ button, a, [role="button"] {
   }
   .app:has(.workspace-file-drawer) .pane-column { margin-right: min(44rem, 42vw); }
 }
+
+/* ── Claude desktop look: Changes lists the session's pull requests with their CI ────────────── */
+.agent-pr-list { display: flex; flex-direction: column; gap: var(--hairline); margin: 0 0 var(--space-1); padding: 0; list-style: none; }
+.agent-pr { position: relative; display: flex; align-items: flex-start; border-radius: 8px; }
+.agent-pr:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.agent-pr-main {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2) var(--space-6) var(--space-2) var(--space-1);
+  color: var(--text);
+  text-decoration: none;
+}
+.agent-pr-icon { flex: none; width: 16px; height: 16px; margin-top: 2px; }
+.agent-pr.state-open .agent-pr-icon { color: var(--diff-add, var(--status-done)); }
+.agent-pr.state-merged .agent-pr-icon { color: #a371f7; }
+.agent-pr.state-closed .agent-pr-icon { color: var(--diff-del, var(--status-blocked)); }
+.agent-pr.state-draft .agent-pr-icon { color: var(--text-dim); }
+.agent-pr-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.agent-pr-title { overflow: hidden; color: var(--text-strong); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.agent-pr-meta { overflow: hidden; color: var(--text-dim); font-size: 13px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.agent-pr-ci { display: inline-flex; align-items: center; gap: 6px; flex: none; align-self: flex-end; margin-bottom: 1px; color: var(--text-dim); font-size: 13px; font-variant-numeric: tabular-nums; }
+.agent-pr-ci-dot { width: 7px; height: 7px; border-radius: var(--radius-pill); background: var(--text-dim); }
+.agent-pr-ci.is-passed .agent-pr-ci-dot { background: var(--diff-add, var(--status-done)); }
+.agent-pr-ci.is-failed { color: var(--diff-del, var(--status-blocked)); }
+.agent-pr-ci.is-failed .agent-pr-ci-dot { background: var(--diff-del, var(--status-blocked)); }
+.agent-pr-ci.is-pending .agent-pr-ci-dot { background: var(--notice, var(--text-dim)); }
+.agent-pr-more { position: absolute; top: var(--space-1); right: 0; width: 26px; height: 26px; color: var(--text-dim); opacity: 0.8; }
+.agent-pr-more:hover { opacity: 1; }

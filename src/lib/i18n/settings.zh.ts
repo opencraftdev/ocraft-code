@@ -312,7 +312,6 @@ export const SETTINGS_ZH: Record<string, string> = {
   "Whether the server has a token configured. Its value is never shown.": "服务器是否配置了令牌。令牌的值从不显示。",
   "Pairing gate": "配对门槛",
   "Not yet closed": "尚未关闭",
-  "Closed": "已关闭",
   "Unavailable": "无法确认",
   "No device has been paired yet, so no pairing code is asked for.": "尚未配对任何设备，因此不会要求配对码。",
   "A new browser needs a pairing code or the token.": "新的浏览器需要配对码或令牌。",

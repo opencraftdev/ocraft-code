@@ -25,6 +25,7 @@ import { requestOrigin, serveStatic } from "./static.ts";
 import { compressResponse } from "./compress.ts";
 import { handleTasksRequest } from "./tasks-routes.ts";
 import { handlePlanRequest } from "./plan-routes.ts";
+import { handlePanePrsRequest } from "./pane-prs.ts";
 import { ShellAgentLocator } from "./shell-agent.ts";
 import { handleAgentsRequest } from "./agents-routes.ts";
 import { forgetPageMedia } from "./file-view.ts";
@@ -595,6 +596,8 @@ export function createServer(
         return handleBackgroundAgentRequest(request, url, { paneGet, omoPane: (paneId) => omo.sessionOf(paneId) !== null, claudeAgents, read: options.backgroundAgentRead });
       }
 
+      const prsResponse = await handlePanePrsRequest(request, url, pathname);
+      if (prsResponse) return prsResponse;
       const planResponse = await handlePlanRequest(request, url, pathname, { omo, claudeAgents, plans });
       if (planResponse) return planResponse;
 

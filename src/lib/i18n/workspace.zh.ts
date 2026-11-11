@@ -45,7 +45,6 @@ export const WORKSPACE_ZH: Record<string, string> = {
   "Directory": "目录",
   "Name": "名称",
   "Workspace label; follows the branch until you change it": "工作区名称；修改之前跟随分支名",
-  "Open": "打开",
   "The workspace opened, but {agent} did not start. Check that it is installed on the PC, then open it again.": "工作区已打开，但 {agent} 未能启动。请确认 PC 上已安装它，然后再次打开。",
   "{agent} started, but its first message was not queued. It is in the new tab's message box: open the tab and send it.": "{agent} 已启动，但第一条消息未能排队。消息在新标签页的输入框中：请打开该标签页并发送。",
   "{agent} started, but this PC's bridge does not take a first message yet. It is in the new tab's message box: open the tab and send it.": "{agent} 已启动，但这台 PC 的桥接尚不接收第一条消息。消息在新标签页的输入框中：请打开该标签页并发送。",

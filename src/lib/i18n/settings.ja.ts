@@ -312,7 +312,6 @@ export const SETTINGS_JA: Record<string, string> = {
   "Whether the server has a token configured. Its value is never shown.": "サーバーにトークンが設定されているかどうかです。値は表示しません。",
   "Pairing gate": "ペアリングゲート",
   "Not yet closed": "まだ閉じていません",
-  "Closed": "閉じています",
   "Unavailable": "確認できません",
   "No device has been paired yet, so no pairing code is asked for.": "まだペアリングしたデバイスがないため、ペアリングコードは求められません。",
   "A new browser needs a pairing code or the token.": "新しいブラウザーにはペアリングコードかトークンが必要です。",

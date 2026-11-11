@@ -27,7 +27,6 @@ export const SIDEBAR_ZH: Record<string, string> = {
   "Reorder workspace {name}": "调整工作区 {name} 的顺序",
   "Drag to reorder · Alt+↑/↓": "拖动以调整顺序 · Alt+↑/↓",
   "Resize sidebar": "调整侧边栏宽度",
-  "More for {title}": "{title} 的更多操作",
   "Rename workspace": "重命名工作区",
   "Close workspace": "关闭工作区",
   "New worktree": "新建工作树",

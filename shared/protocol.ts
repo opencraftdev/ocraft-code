@@ -1018,3 +1018,21 @@ export type { SessionHistoryAgent, SessionResumeSource, SessionHistoryRow, Sessi
 /** herdr's default socket, under XDG_CONFIG_HOME when set, as herdr itself resolves it. */
 export const HERDR_SOCKET_PATH = `${process.env["XDG_CONFIG_HOME"] || `${process.env["HOME"] ?? ""}/.config`}/herdr/herdr.sock`;
 export const DEFAULT_PORT = 7317;
+
+/** GET /api/pane/prs (server/pane-prs.ts): a session's pull requests, its branch's and those its agent linked. */
+export interface PanePullRequest {
+  number: number;
+  title: string;
+  state: "open" | "draft" | "merged" | "closed";
+  url: string;
+  /** the repository's name, without its owner */
+  repo: string;
+  branch: string | null;
+  additions: number;
+  deletions: number;
+  /** CI: checks passed out of all; null when the PR has none */
+  checks: { passed: number; failed: number; pending: number; total: number } | null;
+  /** the PR of the folder's current branch */
+  current: boolean;
+}
+export interface PanePullRequests { prs: PanePullRequest[] }

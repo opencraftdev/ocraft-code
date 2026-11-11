@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ChevronDown, ChevronRight, FileDiff, Folder, GitBranch, GitFork, Layers, Monitor, PanelRightClose, RefreshCw, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Ellipsis, ExternalLink, FileDiff, Folder, GitBranch, GitFork, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, Layers, Link, Monitor, PanelRightClose, RefreshCw, X } from "lucide-react";
 import type { HerdrPane, RepoDiffFile } from "../../shared/protocol.ts";
 import { AgentGraphView, graphStateWord } from "./AgentGraphView.tsx";
 import { agentActivityGroups, sessionGraph, type AgentGraphNode } from "../lib/agentGraph.ts";
@@ -21,6 +21,9 @@ import { BackgroundTaskCards } from "./BackgroundTaskCards.tsx";
 import { useBackgroundTaskReceipts } from "../lib/backgroundTaskReceipts.ts";
 import { useActivityClock } from "../lib/useActivityClock.ts";
 import { formatElapsed, runGoing, taskElapsedMs } from "../lib/omoTasks.ts";
+import { usePanePrs } from "../lib/usePanePrs.ts";
+import { RowMenu } from "./RowMenu.tsx";
+import { copyText } from "../lib/clipboard.ts";
 import "./AgentPanel.css";
 
 type PanelTab = AgentPanelView;
@@ -101,6 +104,9 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
   const now = useActivityClock(runningAgents.length > 0 || runningTasks.length > 0 || activity.runs.some(runGoing), activity.clockOffset);
   const endedCount = endedTasks.length + activity.runs.filter(run => !runGoing(run)).length;
   const changes = useRepoChangesSummary(pane.pane_id, directory ?? "", online, pane.finish_id);
+  const [prRefresh, setPrRefresh] = useState(0);
+  const prs = usePanePrs(pane.pane_id, online, pane.finish_id, prRefresh);
+  const [prMenu, setPrMenu] = useState<{ anchor: HTMLElement; url: string; title: string } | null>(null);
   const agentListScroll = useRef(0);
   const showAgent = (node: AgentGraphNode, trigger: HTMLButtonElement) => {
     if (drawerRoot.current?.contains(trigger)) agentListScroll.current = drawerRoot.current.querySelector(".agent-drawer-body")?.scrollTop ?? 0;
@@ -159,13 +165,36 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
       <section className="agent-panel-section agent-panel-changes" data-expanded={changesOpen} aria-label={t("Changes")}>
         <header className="agent-panel-section-head">
           <h2><button type="button" className="agent-panel-disclosure" aria-expanded={changesOpen} aria-controls={`${id}-changes`} onClick={() => setChangesOpen(value => !value)}>{t("Changes")}<ChevronDown aria-hidden="true" />{changes.listing && <span className="agent-panel-count">{changes.listing.total ?? `${changes.listing.files.length}${changes.listing.truncated ? "+" : ""}`}</span>}</button></h2>
-          <button type="button" className="icon-button" disabled={changes.loading || !online} aria-label={t("Refresh changes")} title={t("Refresh changes")} onClick={changes.refresh}><RefreshCw aria-hidden="true" /></button>
+          <button type="button" className="icon-button" disabled={changes.loading || !online} aria-label={t("Refresh changes")} title={t("Refresh changes")} onClick={() => { changes.refresh(); setPrRefresh((value) => value + 1); }}><RefreshCw aria-hidden="true" /></button>
         </header>
         <div id={`${id}-changes`} className="agent-panel-launchers" hidden={!changesOpen}>
+          {/* the session's pull requests, each with its CI (checks passed of all), as Claude's Changes lists them */}
+          {prs.length > 0 && <ul className="agent-pr-list">
+            {prs.map((pr) => {
+              const ci = pr.checks;
+              const tone = !ci ? "" : ci.failed > 0 ? " is-failed" : ci.pending > 0 ? " is-pending" : " is-passed";
+              const Icon = pr.state === "merged" ? GitMerge : pr.state === "closed" ? GitPullRequestClosed : pr.state === "draft" ? GitPullRequestDraft : GitPullRequest;
+              return <li key={pr.url} className={`agent-pr state-${pr.state}`}>
+                <a className="agent-pr-main" href={pr.url} target="_blank" rel="noreferrer" title={`${pr.title}${pr.branch ? ` · ${pr.branch}` : ""}`}>
+                  <Icon className="agent-pr-icon" aria-label={t(pr.state === "merged" ? "Merged" : pr.state === "closed" ? "Closed" : pr.state === "draft" ? "Draft" : "Open")} />
+                  <span className="agent-pr-text">
+                    <span className="agent-pr-title">{pr.title}</span>
+                    <span className="agent-pr-meta">{pr.repo} #{pr.number}{pr.additions + pr.deletions > 0 && <> <span className="agent-change-added">+{pr.additions.toLocaleString()}</span> <span className="agent-change-removed">−{pr.deletions.toLocaleString()}</span></>}</span>
+                  </span>
+                  {ci && <span className={`agent-pr-ci${tone}`} title={t("CI: {passed} of {total} checks passed", { passed: ci.passed, total: ci.total })}><span className="agent-pr-ci-dot" aria-hidden="true" />{ci.passed}/{ci.total}</span>}
+                </a>
+                <button type="button" className="icon-button agent-pr-more" aria-label={t("More for {title}", { title: pr.title })} aria-haspopup="menu" onClick={(event) => setPrMenu({ anchor: event.currentTarget, url: pr.url, title: pr.title })}><Ellipsis aria-hidden="true" /></button>
+              </li>;
+            })}
+          </ul>}
+          {prMenu && <RowMenu anchor={prMenu.anchor} title={prMenu.title} onClose={() => setPrMenu(null)} items={[
+            { id: "open", label: t("Open on GitHub"), icon: ExternalLink, run: () => { window.open(prMenu.url, "_blank", "noopener"); } },
+            { id: "copy", label: t("Copy link"), icon: Link, run: () => { void copyText(prMenu.url); } },
+          ]} />}
           {changes.error ? <p className="agent-panel-note">{diffErrorMessage(t, changes.error)}</p>
             : changes.loading && !changes.listing ? <p className="agent-panel-note" role="status">{t("Loading…")}</p>
             : !changes.listing ? <p className="agent-panel-note">{t("Changes unavailable")}</p>
-            : changes.listing.files.length === 0 ? <p className="agent-panel-note">{t("No changes")}</p>
+            : changes.listing.files.length === 0 ? prs.length > 0 ? null : <p className="agent-panel-note">{t("No changes")}</p>
             : <button type="button" className="agent-panel-action agent-change-summary" onClick={() => onBrowseFiles("changes")}>
               <FileDiff aria-hidden="true" />
               {(() => {

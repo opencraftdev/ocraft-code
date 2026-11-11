@@ -27,7 +27,6 @@ export const SIDEBAR_JA: Record<string, string> = {
   "Reorder workspace {name}": "ワークスペース {name} を並べ替え",
   "Drag to reorder · Alt+↑/↓": "ドラッグで並べ替え · Alt+↑/↓",
   "Resize sidebar": "サイドバーの幅を変更",
-  "More for {title}": "{title} のその他",
   "Rename workspace": "ワークスペース名を変更",
   "Close workspace": "ワークスペースを閉じる",
   "New worktree": "新しいワークツリー",

@@ -28,6 +28,7 @@ export function useMachineApi() {
     fetchPaneOmoActivity: (pane: string, signal?: AbortSignal) => api.fetchPaneOmoActivity(pane, id, signal),
     fetchPaneBackgroundAgent: (pane: string, agent: string) => api.fetchPaneBackgroundAgent(pane, agent, id),
     fetchPanePlan: (pane: string, signal?: AbortSignal) => api.fetchPanePlan(pane, id, signal),
+    fetchPanePrs: (pane: string, signal?: AbortSignal) => api.fetchPanePrs(pane, id, signal),
     fetchPaneDagr: (pane: string, signal?: AbortSignal) => api.fetchPaneDagr(pane, id, signal),
     closePane: (pane: string) => api.closePane(pane, id),
     focusPane: (pane: string) => api.focusPane(pane, id),

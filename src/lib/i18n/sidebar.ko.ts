@@ -27,7 +27,6 @@ export const SIDEBAR_KO: Record<string, string> = {
   "Reorder workspace {name}": "워크스페이스 {name} 순서 바꾸기",
   "Drag to reorder · Alt+↑/↓": "끌어서 순서 바꾸기 · Alt+↑/↓",
   "Resize sidebar": "사이드바 너비 조절",
-  "More for {title}": "{title} 더보기",
   "Rename workspace": "워크스페이스 이름 바꾸기",
   "Close workspace": "워크스페이스 닫기",
   "New worktree": "새 워크트리",

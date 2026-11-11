@@ -312,7 +312,6 @@ export const SETTINGS_KO: Record<string, string> = {
   "Whether the server has a token configured. Its value is never shown.": "서버에 토큰이 설정되어\u00a0있는지입니다. 토큰 값은 표시하지\u00a0않습니다.",
   "Pairing gate": "페어링 게이트",
   "Not yet closed": "아직 닫히지 않음",
-  "Closed": "닫힘",
   "Unavailable": "확인 불가",
   "No device has been paired yet, so no pairing code is asked for.": "아직 페어링한 기기가 없어 페어링 코드를 묻지\u00a0않습니다.",
   "A new browser needs a pairing code or the token.": "새 브라우저는 페어링 코드나 토큰이 필요합니다.",

@@ -913,6 +913,16 @@ export async function fetchPaneBackgroundAgent(paneId: string, agentId: string, 
   return await getJson<PaneBackgroundAgentDetail>(machinePath(machineId, `pane/background-agent?${query.toString()}`));
 }
 
+/** GET /api/pane/prs: the session's pull requests (server/pane-prs.ts); none from a PC whose bridge predates it. */
+export async function fetchPanePrs(paneId: string, machineId = "local", signal?: AbortSignal): Promise<import("../../shared/protocol.ts").PanePullRequest[]> {
+  try {
+    return (await getJson<import("../../shared/protocol.ts").PanePullRequests>(machinePath(machineId, `pane/prs?pane_id=${encodeURIComponent(paneId)}`), signal ? { signal } : undefined)).prs ?? [];
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return [];
+    throw error;
+  }
+}
+
 /** GET /api/pane/plan: the plan the pane's Claude Code or Codex session keeps, and that PC's clock. */
 export async function fetchPanePlan(paneId: string, machineId = "local", signal?: AbortSignal): Promise<{ steps: PlanStep[] | null; serverTime: string | null }> {
   const answer = await getJson<Partial<PanePlan>>(machinePath(machineId, `pane/plan?pane_id=${encodeURIComponent(paneId)}`), signal ? { signal } : undefined);
