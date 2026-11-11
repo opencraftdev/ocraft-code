@@ -5,11 +5,13 @@
  * adds a health watcher for each and the settings herdr does not hold. Projects are folders the
  * user registers in the UI. Both live in stateDir/assistant/, written atomically at 0600.
  * The watcher only reads: a fix runs only on the user's click, never --takeover, never herdr focus.
+ * Tasks (phase 4) are server/assistant-tasks.ts; the watcher checks their panes too.
  */
 import { join } from "node:path";
 import { ASSISTANT_AGENTS, type AddProjectRequest, type AssistantAgent, type AssistantMachine, type AssistantProblem, type AssistantProject, type AssistantState, type MachineHealth, type MergeMode, type ProjectRefusal } from "../shared/assistant.ts";
 import type { Machine, MachineEvent } from "../shared/machines.ts";
 import type { AssistantSessions } from "./assistant-sessions.ts";
+import { AssistantTasks, type TaskBridge } from "./assistant-tasks.ts";
 import { isJsonObject, jsonResponse, setRequestRoute } from "./http.ts";
 import { shellQuote } from "./machine-security.ts";
 import { MachineActionRequired } from "./machines.ts";
@@ -70,7 +72,7 @@ export function readHealth(output: string, gh: boolean, now: number): MachineHea
   if (!found.has("herdr")) problems.push("herdr_stopped");
   if (agents.length === 0) problems.push("no_agent");
   if (gh && !found.has("gh")) problems.push("gh_signed_out");
-  // phase 4 adds: every running task's pane is still there, with a Restart agent fix
+  // the task panes are checked beside this, against Remote PCs' snapshot (AssistantTasks.checkPanes)
   return { checked_at: now, problems, agents };
 }
 
@@ -122,7 +124,7 @@ const validProject = (item: unknown): item is AssistantProject => isJsonObject(i
 const validMaxRunning = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 20;
 
 /** A JSON document of stateDir/assistant/: absent is empty, not JSON is set aside (as herdr-profile-state.json is), another shape stops the start. */
-function readDocument<T>(path: string, valid: (value: unknown) => value is T, empty: T): T {
+export function readDocument<T>(path: string, valid: (value: unknown) => value is T, empty: T): T {
   const read = readStateDocument(path);
   if (read.kind === "missing") return empty;
   if (read.kind === "malformed") {
@@ -149,8 +151,9 @@ export class Assistant {
   private now: () => number;
 
   readonly sessions: AssistantSessions | null;
+  readonly tasks: AssistantTasks;
 
-  constructor(stateDir: string, private machines: AssistantMachines, private run: RunScript, options: { intervalMs?: number; timer?: Timer; now?: () => number; sessions?: AssistantSessions } = {}) {
+  constructor(stateDir: string, private machines: AssistantMachines, private run: RunScript, options: { intervalMs?: number; timer?: Timer; now?: () => number; sessions?: AssistantSessions; bridge?: TaskBridge } = {}) {
     this.sessions = options.sessions ?? null;
     this.intervalMs = options.intervalMs ?? HEALTH_INTERVAL_MS;
     this.timer = options.timer ?? defaultTimer;
@@ -161,7 +164,16 @@ export class Assistant {
     this.projects = readDocument(this.projectsPath, (value): value is AssistantProject[] => Array.isArray(value) && value.every(validProject), []);
     this.settings = readDocument(this.settingsPath, (value): value is MachineSettings => isJsonObject(value)
       && Object.values(value).every((entry) => isJsonObject(entry) && validMaxRunning(entry.maxRunning)), {});
-    this.unsubscribe = machines.subscribe((event) => { if (event.type === "machines") this.sync(); });
+    this.tasks = new AssistantTasks(join(directory, "tasks.json"), {
+      project: (id) => this.projects.find((project) => project.id === id),
+      machine: (id) => this.watchable().find((machine) => machine.id === id),
+      bridge: options.bridge ?? (() => Promise.reject(new AssistantError("machine_offline", "This server reaches no machines", 503))),
+      now: this.now,
+    });
+    this.unsubscribe = machines.subscribe((event) => {
+      if (event.type === "machines") this.sync();
+      if (event.type === "machine-message") this.tasks.heard(event.machine_id, event.message);
+    });
   }
 
   /** herdr's saved machines, the only ones the Assistant runs tasks on */
@@ -178,7 +190,7 @@ export class Assistant {
       health: this.watched.get(machine.id)?.health ?? null,
       maxRunning: this.settings[machine.id]?.maxRunning ?? DEFAULT_MAX_RUNNING,
     }));
-    return { machines, projects: [...this.projects], sessions: this.sessions?.list() ?? [] };
+    return { machines, projects: [...this.projects], sessions: this.sessions?.list() ?? [], tasks: this.tasks.list() };
   }
 
   /**
@@ -212,6 +224,7 @@ export class Assistant {
       const health = await this.inspect(machine);
       if (this.stopped || this.watched.get(id) !== watch) return;
       watch.health = health;
+      this.tasks.checkPanes(this.watchable().find((candidate) => candidate.id === id) ?? machine, this.intervalMs);
       watch.failures = health.problems.includes("unreachable") ? watch.failures + 1 : 0;
       watch.cancel = this.timer(() => void this.check(id), nextCheckDelay(this.intervalMs, watch.failures));
     })().finally(() => { watch.busy = undefined; });
@@ -317,10 +330,11 @@ export async function handleAssistantRequest(request: Request, pathname: string,
   const [collection, id, action] = parts;
   const route = parts.length === 0 ? "" : collection === "projects" && parts.length <= 2 ? (id ? "/projects/:id" : "/projects")
     : collection === "machines" && id && (parts.length === 2 || (parts.length === 3 && action === "fix")) ? (action ? "/machines/:id/fix" : "/machines/:id")
-    : collection === "sessions" && parts.length <= 2 ? (id ? "/sessions/:name" : "/sessions") : null;
+    : collection === "sessions" && parts.length <= 2 ? (id ? "/sessions/:name" : "/sessions")
+    : collection === "tasks" && id && parts.length === 3 && action === "restart" ? "/tasks/:id/restart" : null;
   if (route === null) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
   setRequestRoute(`/api/assistant${route}`);
-  const allowed: Record<string, string[]> = { "": ["GET"], "/projects": ["POST"], "/projects/:id": ["PATCH", "DELETE"], "/machines/:id": ["PATCH"], "/machines/:id/fix": ["POST"], "/sessions": ["POST"], "/sessions/:name": ["GET"] };
+  const allowed: Record<string, string[]> = { "": ["GET"], "/projects": ["POST"], "/projects/:id": ["PATCH", "DELETE"], "/machines/:id": ["PATCH"], "/machines/:id/fix": ["POST"], "/sessions": ["POST"], "/sessions/:name": ["GET"], "/tasks/:id/restart": ["POST"] };
   if (!allowed[route]!.includes(request.method)) return jsonResponse({ error: { code: "method_not_allowed", message: `use ${allowed[route]!.join(" or ")}` } }, 405, { allow: allowed[route]!.join(", ") });
   if (request.method !== "GET" && !request.headers.get("origin")) return jsonResponse({ error: { code: "browser_only", message: "Use Assistant controls from this app" } }, 403);
   const body = request.method === "GET" || request.method === "DELETE" ? null : await request.json().catch(() => null);
@@ -338,6 +352,8 @@ export async function handleAssistantRequest(request: Request, pathname: string,
       // New session: only on the user's click, in this app
       case "POST /sessions": await sessions().start(); return jsonResponse(assistant.state(), 201);
       case "GET /sessions/:name": return jsonResponse(sessions().transcript(id!));
+      // Restart agent: only on the user's click, in this app (decision 16); ovis-task has no such route
+      case "POST /tasks/:id/restart": await assistant.tasks.restart(id!); return jsonResponse(assistant.state());
       default: await assistant.fix(id!, body); return jsonResponse(assistant.state());
     }
   } catch (error) {

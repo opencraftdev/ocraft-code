@@ -93,7 +93,11 @@ describe("ovis-task routes", () => {
       expect(await (await task("projects")).json()).toEqual([{ id: "repo", path: project, mergeMode: "local", defaultAgent: "claude", machine: "Test PC" }]);
       expect(await (await task("list")).json()).toEqual([]);
       expect((await task("projects", { id: "x", path: "/" })).status).toBe(405);
-      expect((await task("create", {})).status).toBe(404);
+      expect(await code(await task("create", {}))).toEqual({ status: 404, code: "unknown_project" });
+      expect(await code(await task("create", { project: "repo", title: "Fix it", brief: "" }))).toEqual({ status: 400, code: "invalid_brief" });
+      expect(await code(await task("list?status=nope"))).toEqual({ status: 400, code: "invalid_status" });
+      // the Assistant never approves: only the user does, in the app
+      expect(await code(await task("approve", { id: "1" }))).toEqual({ status: 403, code: "ui_only" });
     } finally { close(); }
   });
 
@@ -191,7 +195,8 @@ describe("ovis-task's command line and git checks", () => {
     expect(cliRequest(["grep", "repo", "TODO", "src"])).toEqual({ path: "grep", body: { project: "repo", pattern: "TODO", path: "src" } });
     expect(cliRequest(["git", "repo", "log", "-5"])).toEqual({ path: "git", body: { project: "repo", command: "log", args: ["-5"] } });
     expect("usage" in cliRequest(["read", "repo"])).toBe(true);
-    expect("usage" in cliRequest(["approve", "1"])).toBe(true);
+    expect("refused" in cliRequest(["approve", "1"])).toBe(true);
+    expect("usage" in cliRequest(["merge", "1"])).toBe(true);
   });
 
   it("lets ordinary options through", () => {

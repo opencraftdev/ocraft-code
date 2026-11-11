@@ -7,7 +7,8 @@
  *
  * Every read runs on the project's machine. The script resolves the project folder and the path
  * there (`cd -P`, `realpath`, so `..` and symlinks are followed) and refuses anything outside the
- * folder before it reads. Nothing here writes, and no route adds a project.
+ * folder before it reads. No read writes, and no route adds a project. All writes are tasks
+ * (create, answer, cancel; server/assistant-tasks.ts), and no route approves one: that is the user's.
  */
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
@@ -137,7 +138,7 @@ export function readOutput(printed: string): { output: string; truncated: boolea
   return output.length > OUTPUT_CAP ? { output: output.slice(0, OUTPUT_CAP), truncated: true } : { output, truncated: false };
 }
 
-const ROUTES: Record<string, "GET" | "POST"> = { projects: "GET", list: "GET", read: "POST", grep: "POST", git: "POST" };
+const ROUTES: Record<string, "GET" | "POST"> = { projects: "GET", list: "GET", read: "POST", grep: "POST", git: "POST", create: "POST", show: "POST", answer: "POST", cancel: "POST" };
 
 /**
  * /api/ovis-task/*. `local`: the request came from this VM's loopback and through no proxy, which
@@ -150,6 +151,8 @@ export async function handleOvisTaskRequest(request: Request, pathname: string, 
   if (!assistant || token === null) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
   if (!local) return jsonResponse({ error: { code: "loopback_only", message: "ovis-task runs on the Assistant VM itself" } }, 403);
   if (!isAuthenticated(request, token) || !request.headers.get("authorization")) return jsonResponse({ error: { code: "unauthorized", message: "ovis-task token required" } }, 401);
+  // the Assistant never merges on its own (plan, ovis-task CLI): only the user approves, in the app
+  if (name === "approve") return jsonResponse({ error: { code: "ui_only", message: "Only the user approves a task, in the app" } }, 403);
   if (!method) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
   if (request.method !== method) return jsonResponse({ error: { code: "method_not_allowed", message: `use ${method}` } }, 405, { allow: method });
   try {
@@ -157,9 +160,13 @@ export async function handleOvisTaskRequest(request: Request, pathname: string, 
       const { projects, machines } = assistant.state();
       return jsonResponse(projects.map(({ id, path, mergeMode, defaultAgent, machine }) => ({ id, path, mergeMode, defaultAgent, machine: machines.find((item) => item.id === machine)?.name ?? machine })));
     }
-    // tasks come in phase 4; an empty list keeps the instructions' first step working
-    if (name === "list") return jsonResponse([]);
+    if (name === "list") return jsonResponse(assistant.tasks.list(new URL(request.url).searchParams.get("status") ?? undefined));
     const body = await request.json().catch(() => null);
+    if (name === "create") return jsonResponse(await assistant.tasks.create(body), 201);
+    const id = isJsonObject(body) ? body.id : undefined;
+    if (name === "show") return jsonResponse(await assistant.tasks.show(id));
+    if (name === "answer") return jsonResponse(await assistant.tasks.answer(id, isJsonObject(body) ? body.choice : undefined));
+    if (name === "cancel") return jsonResponse(await assistant.tasks.cancel(id));
     if (!isJsonObject(body) || typeof body.project !== "string") throw refuse("unknown_project", 404);
     let script: (root: string) => string;
     if (name === "read") {
