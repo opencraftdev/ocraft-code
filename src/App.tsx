@@ -595,8 +595,17 @@ export function App() {
   }
   if (locked) return <AccessGate reason={lockReason} initialCode={pairCode} onUnlocked={unlock} />;
 
-  const pinnedAgentPanel = chatShown && filePanelAvailable && Boolean(selectedPane?.agent);
-  const agentPanelShown = pinnedAgentPanel || (agentPanelOpen && !(filesOpen && filePanelAvailable) && !(viewing !== null && fileDocked) && webPage === null);
+  // the right side holds one surface at a time, as Claude's does: the Terminal panel, Files or Changes
+  // (or a file, a page) take the place of the Environment panel, which comes back when they close
+  const rightTaken = terminalOpen() || (filesOpen && filePanelAvailable) || (viewing !== null && fileDocked) || webPage !== null;
+  // Changes and Files open on the right in place of the Terminal panel, and close on a second press
+  const toggleRightFiles = (tab: "browse" | "changes"): void => {
+    if (filesOpen && filesTab === tab) { setFilesOpen(false); return; }
+    if (terminalOpen()) void toggleTerminal();
+    showWorkspaceFiles(tab);
+  };
+  const pinnedAgentPanel = chatShown && filePanelAvailable && Boolean(selectedPane?.agent) && !rightTaken;
+  const agentPanelShown = pinnedAgentPanel || (agentPanelOpen && !rightTaken);
   const filesBrowser = filesOpen && selectedPane && <FilesDialog key={`files:${selectedMachineId}:${filesTab}`} initialTab={filesTab} docked
     panelStart={filePanelAvailable ? <FilePanelResizer width={filePanelWidth} onResize={setFilePanelWidth} /> : undefined}
     start={selectedPane.foreground_cwd ?? selectedPane.cwd ?? ""} paneId={selectedPane.pane_id}
@@ -677,7 +686,13 @@ export function App() {
               <List aria-hidden="true" />
             </button>
             {/* in chat from 769px, the terminal is a panel beside the chat (the tab's shell pane); elsewhere the lens */}
-            <button type="button" aria-label={t("Terminal")} aria-pressed={chatShown && wideScreen && terminalAttach ? terminalOpen() : view === "terminal"} onClick={() => { setDrawerOpen(false); if (chatShown && wideScreen && terminalAttach) void toggleTerminal(); else setView("terminal"); }} title={terminalAttach ? t("Live terminal (⌘⇧J)") : t("Live terminal: coming to Windows PCs once herdr can attach there")}>
+            <button type="button" aria-label={t("Terminal")} aria-pressed={chatShown && wideScreen && terminalAttach ? terminalOpen() : view === "terminal"} onClick={() => {
+              setDrawerOpen(false);
+              if (!(chatShown && wideScreen && terminalAttach)) { setView("terminal"); return; }
+              // the Terminal panel takes the right side: Files, Changes or a file there close
+              if (!terminalOpen()) { setFilesOpen(false); setWebPage(null); if (viewing !== null && fileDocked) closeFile(); }
+              void toggleTerminal();
+            }} title={terminalAttach ? t("Live terminal (⌘⇧J)") : t("Live terminal: coming to Windows PCs once herdr can attach there")}>
               <SquareTerminal aria-hidden="true" />
               {!terminalAttach && <span className="pill pill-soon">{t("soon")}</span>}
             </button>
@@ -686,10 +701,10 @@ export function App() {
         {selectedPane && wideScreen && (
           <>
             {/* opens Files, it is no third lens: set apart from the switch by a hairline */}
-            <button type="button" className="icon-button header-files-button" aria-label={t("Review changes")} title={t("Review changes")} onClick={() => showWorkspaceFiles("changes")}>
+            <button type="button" className="icon-button header-files-button" aria-label={t("Review changes")} title={t("Review changes")} aria-pressed={filesOpen && filesTab === "changes"} onClick={() => toggleRightFiles("changes")}>
               <FileDiff />
             </button>
-            <button type="button" className="icon-button header-files-button" aria-label={t("Browse files")} title={t("Browse files")} onClick={() => showWorkspaceFiles()}>
+            <button type="button" className="icon-button header-files-button" aria-label={t("Browse files")} title={t("Browse files")} aria-pressed={filesOpen && filesTab === "browse"} onClick={() => toggleRightFiles("browse")}>
               <FolderOpen />
             </button>
           </>
