@@ -3037,3 +3037,57 @@ button, a, [role="button"] {
   }
   .pane-column > .update-notice.is-line > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
+
+/* ── Claude desktop look: sidebar ─────────────────────────────────────────────────────────────
+   New and Search on top, then each PC as a quiet group caption over plain session titles. Marks,
+   folders and second lines are dropped; the row menu and the status dot stay. */
+.sidebar-nav { display: flex; flex-direction: column; gap: var(--hairline); padding: var(--space-2) var(--space-2) var(--space-1); }
+.sidebar-nav-item,
+.sidebar-shell .sidebar-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--control-h);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: start;
+}
+.sidebar-nav-item { cursor: pointer; }
+.sidebar-nav-item:hover { background: var(--bg-hover); }
+.sidebar-nav-item svg,
+.sidebar-shell .sidebar-filter-label svg { flex: none; width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); color: var(--text-dim); }
+.sidebar-shell .sidebar-filter { margin: 0 var(--space-2) var(--space-2); }
+.sidebar-shell .sidebar-filter-label { position: static; display: inline-flex; width: auto; inset: auto; }
+.sidebar-shell .sidebar-filter:focus-within { background: var(--bg-hover); }
+.sidebar-shell .sidebar-filter-input { border: 0; background: transparent; box-shadow: none; padding-inline: 0; font-size: var(--fs-sm); }
+.sidebar-shell .sidebar-filter-input::placeholder { color: var(--text); }
+
+.sidebar-shell .machine-header .machine-title { color: var(--text-dim); font-size: var(--fs-xs); font-weight: var(--fw-regular); }
+.sidebar-shell .machine-header .machine-kind { display: none; }
+.sidebar-shell .machine-header .machine-title .sidebar-mark { order: 2; }
+.sidebar-shell .machine-header .machine-title .sidebar-mark svg { width: var(--fs-sm); height: var(--fs-sm); }
+
+.sidebar-shell .workspace-header > .sidebar-mark,
+.sidebar-shell .workspace-select > .sidebar-mark,
+.sidebar-shell .workspace-copy > .workspace-place { display: none; }
+.sidebar-shell .workspace-header { min-height: var(--control-h); border-radius: var(--radius-md); }
+.sidebar-shell .workspace-header,
+.sidebar-shell .workspace-select,
+.sidebar-shell .workspace-group { height: auto; min-height: var(--control-h); }
+.sidebar-shell .workspace-select { padding-left: var(--space-2); }
+.sidebar-shell .workspace-header:hover { background: var(--bg-hover); }
+.sidebar-shell .workspace-name { font-weight: var(--fw-regular); color: var(--text); }
+.sidebar-shell .workspace.is-selected > .workspace-header { background: var(--bg-hover); }
+.sidebar-shell .workspace.is-selected .workspace-name { color: var(--text-strong); }
+
+.sidebar-shell .sidebar-pinned { padding: 0; border: 0; border-radius: 0; }
+.sidebar-shell .sidebar-pinned-label { justify-content: flex-start; margin: 0; padding: var(--space-2) var(--space-2) var(--space-1); text-transform: none; letter-spacing: 0; font-weight: var(--fw-regular); font-size: var(--fs-xs); }
+.sidebar-shell .sidebar-pinned-label > span { padding-inline: 0; background: transparent; }
+
+/* the session list is the sidebar: the cross-PC agent roster repeats it */
+.sidebar-shell .agents-sidebar { display: none; }

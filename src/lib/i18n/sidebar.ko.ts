@@ -52,4 +52,7 @@ export const SIDEBAR_KO: Record<string, string> = {
   "Collapse": "접기",
   "Expand": "펼치기",
   "Shell": "셸",
+  "New": "새로 만들기",
+  "Search": "검색",
+  "Sidebar": "사이드바",
 };

@@ -52,4 +52,7 @@ export const SIDEBAR_ZH: Record<string, string> = {
   "Collapse": "折叠",
   "Expand": "展开",
   "Shell": "Shell",
+  "New": "新建",
+  "Search": "搜索",
+  "Sidebar": "侧边栏",
 };

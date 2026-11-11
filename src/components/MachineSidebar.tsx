@@ -172,9 +172,14 @@ export function MachineSidebar(props: Props) {
   // Settings → Remote PCs. The filter above the lists is a row of the same grid, one field and its clear, never
   // taller than a row.
   return <SidebarActivityProvider value={activity}><SidebarFilterProvider value={filterView}><div ref={shell} className="sidebar-shell" onBlur={onSidebarBlur}>
+    {/* the top of a Claude-desktop sidebar: start an agent on the selected PC, or search */}
+    <nav className="sidebar-nav" aria-label={t("Sidebar")}>
+      <button type="button" className="sidebar-nav-item" onClick={() => props.onNew(props.selectedMachineId)}><Plus aria-hidden="true" /><span>{t("New")}</span></button>
+      {!filterShown && <button type="button" className="sidebar-nav-item" onClick={() => { focusFilter.current = true; setFilterAsked(true); }}><Search aria-hidden="true" /><span>{t("Search")}</span></button>}
+    </nav>
     {filterShown && <div className="sidebar-filter" role="search" aria-label={t("Filter workspaces and agents")}>
       <label className="sidebar-filter-label" htmlFor={filterId}><Search aria-hidden="true" /><span className="visually-hidden">{t("Filter")}</span></label>
-      <input ref={filterInput} id={filterId} className="input sidebar-filter-input" type="search" value={query} aria-label={t("Filter workspaces and agents")} placeholder={t("Workspaces and agents")} list={suggestionsId} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="search" onChange={(event) => setQuery(event.target.value)} onKeyDown={onFilterKeyDown} />
+      <input ref={filterInput} id={filterId} className="input sidebar-filter-input" type="search" value={query} aria-label={t("Filter workspaces and agents")} placeholder={t("Search")} list={suggestionsId} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="search" onChange={(event) => setQuery(event.target.value)} onKeyDown={onFilterKeyDown} />
       <datalist id={suggestionsId}>{suggestions.map((label) => <option key={label} value={label} />)}</datalist>
       {query !== "" ? <button type="button" className="sidebar-filter-clear" aria-label={t("Clear filter")} title={t("Clear filter")} onClick={clearFilter}><X aria-hidden="true" /></button>
         : closable && <button type="button" className="sidebar-filter-clear" aria-label={t("Close filter")} title={t("Close filter")} onClick={closeFilter}><X aria-hidden="true" /></button>}
