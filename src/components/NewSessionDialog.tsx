@@ -33,6 +33,8 @@ export interface NewTabTarget {
 
 export interface NewSessionDialogProps {
   open: boolean;
+  /** opened by Cmd+D: the page takes the right half of the chat area, beside the session it was asked from */
+  beside?: boolean;
   machineName?: string;
   defaultCwd: string | null;
   /** set, the dialog makes a tab in that workspace instead of a workspace */
@@ -81,7 +83,7 @@ export function insertToken(text: string, at: number, token: string): { text: st
 
 const NEW_SESSION_AGENTS = ["claude", "codex"];
 
-export function NewSessionDialog({ open, defaultCwd, tab = null, onClose, onCreated, machineName, prefill = null, onDraft, worktrees = [] }: NewSessionDialogProps) {
+export function NewSessionDialog({ open, beside = false, defaultCwd, tab = null, onClose, onCreated, machineName, prefill = null, onDraft, worktrees = [] }: NewSessionDialogProps) {
   const t = useT();
   const { settings } = useSettings();
   const machineId = useMachineId();
@@ -104,6 +106,21 @@ export function NewSessionDialog({ open, defaultCwd, tab = null, onClose, onCrea
   const [browsing, setBrowsing] = useState(false);
   /** the folder chip panel: the path field, Browse and the recent folders */
   const [folderOpen, setFolderOpen] = useState(false);
+  // beside (Cmd+D): the chat it was asked from narrows to the left half (styles.css, body.is-new-beside)
+  // and the page takes the right one, measured once the chat has narrowed
+  const [besideFrame, setBesideFrame] = useState<{ left: number; top: number; right: number; bottom: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!open || !beside) { setBesideFrame(null); return; }
+    document.body.classList.add("is-new-beside");
+    const place = (): void => {
+      const area = document.querySelector(".pane-split")?.getBoundingClientRect();
+      if (!area) return;
+      setBesideFrame({ left: area.right, top: area.top, right: Math.max(0, window.innerWidth - area.right - area.width), bottom: window.innerHeight - area.bottom });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => { window.removeEventListener("resize", place); document.body.classList.remove("is-new-beside"); };
+  }, [open, beside]);
   const [recentFolders, setRecentFolders] = useState(() => recentDirectories.read(machineId));
   // folders kept before worktrees and temporary folders were left out are left out here too
   const shownFolders = recentFolders.filter((path) => !passingFolder(path, worktrees)).slice(0, RECENT_FOLDERS_SHOWN);
@@ -278,8 +295,9 @@ export function NewSessionDialog({ open, defaultCwd, tab = null, onClose, onCrea
   const folderName = tab ? (tab.cwd ? directoryBasename(tab.cwd) : tab.workspaceLabel) : cwd.trim() ? directoryBasename(cwd) : t("Choose folder");
   const submit = (): void => { if (!pending && fault === null) void startWorkspace(cwd); };
   const startWord = t(pending ? "Starting…" : createdPaneId !== null ? "Open" : "Start");
+  const besideStyle = besideFrame ?? undefined;
   return (
-    <div className="new-session-page-scrim" onMouseDown={closeFromScrim}>
+    <div className={`new-session-page-scrim${besideStyle ? " is-beside" : ""}`} style={besideStyle} onMouseDown={closeFromScrim}>
       <form ref={surface} className="new-session-page" role="dialog" aria-modal="true" aria-labelledby="new-session-title" tabIndex={-1} onSubmit={(event) => { event.preventDefault(); submit(); }}>
         <header className="new-session-page-head">
           <h2 className="new-session-page-title" id="new-session-title">{tab ? `${t("New tab")} · ${tab.workspaceLabel}` : `${t("New workspace")} · ${machineName ?? machineId}`}</h2>

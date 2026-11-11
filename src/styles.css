@@ -3024,7 +3024,7 @@ button, a, [role="button"] {
   .app-header .header-files-button,
   .app-header .header-meta > .icon-button,
   .app-header .header-more-button { color: var(--text-dim); }
-  .pane-split:not(.is-split) .tab-strip:not(:has(.is-editing)) { display: none; }
+  .pane-split .tab-strip:not(:has(.is-editing)) { display: none; }
   /* an update is a quiet pill over the pane's top right corner, not a band across it */
   .pane-column { position: relative; }
   .pane-column > .update-notice.is-line {
@@ -3307,3 +3307,32 @@ button, a, [role="button"] {
   opacity: 0.6;
 }
 .workspace-session-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Claude desktop look: side-by-side chats have no bar over each half ──────────────────────────
+   A split half is its chat alone; its close (and the lens switch) float at its top right on hover,
+   and Cmd+D closes the other half too. */
+@media (min-width: 769px) {
+  .pane-split.is-split .pane-slot { position: relative; }
+  .pane-split.is-split .tab-strip-row,
+  .pane-split.is-split .pane-slot-bar { position: absolute; top: var(--space-2); right: var(--space-2); z-index: 6; min-height: 0; padding: 0; border: 0; background: transparent; }
+  .pane-split.is-split .pane-slot-title,
+  .pane-split.is-split .pane-slot-machine { display: none; }
+  .pane-split.is-split .tab-strip-end,
+  .pane-split.is-split .pane-slot-bar > :not(.pane-slot-title) { opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+  .pane-split.is-split .pane-slot:hover .tab-strip-end,
+  .pane-split.is-split .pane-slot:hover .pane-slot-bar > *,
+  .pane-split.is-split .tab-strip-end:focus-within { opacity: 1; }
+  .pane-split.is-split .tab-strip-end { display: flex; gap: var(--space-1); padding: 2px; border-radius: 8px; background: var(--bg-elevated); }
+  .pane-split.is-split .pane-slot + .pane-slot { border-left: var(--hairline) solid var(--border); }
+  .pane-split.is-split .pane-slot.is-active { box-shadow: none; }
+}
+.new-session-page-scrim.is-beside { border-left: var(--hairline) solid var(--border); }
+@media (min-width: 769px) {
+  /* Cmd+D's New page takes the right half: the chat it came from keeps the left one */
+  body.is-new-beside .pane-split { width: 50%; max-width: 50%; align-self: flex-start; }
+}
+.new-session-page-scrim.is-beside .new-session-page-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.new-session-page-bar { flex-wrap: wrap; row-gap: var(--space-1); }
+.new-session-page-right { flex-wrap: wrap; justify-content: flex-end; }
+.new-session-page-scrim.is-beside .new-session-page-model { width: 6.5rem; }
+.new-session-page-chip { max-width: 14rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

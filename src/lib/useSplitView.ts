@@ -94,9 +94,11 @@ export function useSplitState() {
   return { split, setSplit, soloSlot, endSplit, splitRef, splitShownRef, lastKeyAtRef, paneDragging, setPaneDragging, dropAt, dropAtRef, showDropTarget, clearDropPreview, paneAreaRef, tabDrag, draggedPaneRef, markSwap };
 }
 
-export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, selectedPane, selectedMachineId, splitShownRef, health, machineRosterLoaded, endSplit, otherRecheck, otherRosterTick, setSplit, soloSlot, setConnected, setConnectedBefore, setSelectedMachineId, setSelectedPaneId, setAutoSelected, setOutputStopped, splitRef, selectPane, paneAreaRef, dropAtRef, clearDropPreview, tabDrag, showDropTarget, setPaneDragging, movingPanes, draggedPaneRef, markSwap, swapPanes, pickView }: {
+export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, selectedPane, selectedMachineId, splitShownRef, health, machineRosterLoaded, endSplit, otherRecheck, otherRosterTick, setSplit, soloSlot, setConnected, setConnectedBefore, setSelectedMachineId, setSelectedPaneId, setAutoSelected, setOutputStopped, splitRef, selectPane, paneAreaRef, dropAtRef, clearDropPreview, tabDrag, showDropTarget, setPaneDragging, movingPanes, draggedPaneRef, markSwap, swapPanes, pickView, openNewBeside }: {
   /** shows a pane in a lens (usePaneLens): Cmd+D puts both halves in chat */
   pickView?: (machineId: string, paneId: string, view: "chat" | "terminal") => void;
+  /** opens the New page for Cmd+D; the session it starts is docked by `startedBeside` */
+  openNewBeside?: () => void;
   machines: Machine[];
   split: SplitState | null;
   wideScreen: boolean;
@@ -221,22 +223,15 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
     const result = dockPane(splitOn ? split : null, { machineId: selectedMachineId, paneId: selectedPaneId }, dragged, side, soloSlot);
     if (result) applySplit(result.split, result.select);
   };
-  // Cmd+D (Ctrl+D elsewhere) puts the session seen before this one beside it, and again closes the
-  // other half: two chats side by side, as a drag into the right half does
-  const previous = useRef<SplitTarget | null>(null);
-  const showing = useRef<SplitTarget | null>(null);
-  useEffect(() => {
-    const now = selectedPaneId === null ? null : { machineId: selectedMachineId, paneId: selectedPaneId };
-    if (showing.current && now && !sameTarget(showing.current, now)) previous.current = showing.current;
-    showing.current = now;
-  }, [selectedMachineId, selectedPaneId]);
+  // Cmd+D (Ctrl+D elsewhere) opens a new session beside this one, as Claude's side-by-side chat does:
+  // the New page takes the right half, and the session it starts docks there; again, it closes the other half
+  const beside = useRef(false);
   const toggleSideBySide = useRef<() => void>(() => undefined);
   toggleSideBySide.current = () => {
     if (splitOn) { closeSlot(otherSlot(split.active)); return; }
-    const beside = previous.current, here = showing.current;
-    if (!beside) return;
-    for (const target of [beside, here]) if (target) pickView?.(target.machineId, target.paneId, "chat");
-    dockSide(beside, "right");
+    if (!wideScreen || selectedPaneId === null) return;
+    beside.current = true;
+    openNewBeside?.();
   };
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -342,5 +337,17 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
       window.removeEventListener("keydown", cancel);
     };
   }, [splitDragOn, clearDropPreview, showDropTarget]);
-  return { otherMachine, otherPane, splitOn, sameTabs, otherWorkspace, otherHerdr, otherAttach, activateSlot, closeSlot, selectInSlot, dockSide, splitDragOn, paneDragOver, paneDragLeave, paneDrop };
+  /** Whether the New page is open for Cmd+D (it draws over the right half). */
+  const besideAsked = (): boolean => beside.current;
+  /** A session the New page started: beside this one, in chat, when Cmd+D asked for it. True when docked. */
+  const startedBeside = (machineId: string, paneId: string): boolean => {
+    if (!beside.current) return false;
+    beside.current = false;
+    pickView?.(machineId, paneId, "chat");
+    if (selectedPaneId !== null) pickView?.(selectedMachineId, selectedPaneId, "chat");
+    dockSide({ machineId, paneId }, "right");
+    return true;
+  };
+  const dropBeside = (): void => { beside.current = false; };
+  return { besideAsked, startedBeside, dropBeside, otherMachine, otherPane, splitOn, sameTabs, otherWorkspace, otherHerdr, otherAttach, activateSlot, closeSlot, selectInSlot, dockSide, splitDragOn, paneDragOver, paneDragLeave, paneDrop };
 }
