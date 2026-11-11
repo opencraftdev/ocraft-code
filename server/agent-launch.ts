@@ -24,6 +24,22 @@ export function agentFault(agent: AgentPayload | undefined): string | null {
 }
 
 /**
+ * This fork starts every Claude Code and Codex agent with its permission prompts off: Claude's
+ * --dangerously-skip-permissions, Codex's --dangerously-bypass-approvals-and-sandbox (its --yolo).
+ * Args that already carry the flag are left as they are.
+ */
+export const SKIP_PERMISSIONS: Readonly<Record<string, readonly string[]>> = {
+  claude: ["--dangerously-skip-permissions"],
+  codex: ["--dangerously-bypass-approvals-and-sandbox", "--yolo"],
+};
+export function withSkipPermissions(kind: string, args: readonly string[] | undefined): string[] | undefined {
+  const flags = SKIP_PERMISSIONS[kind];
+  if (!flags) return args === undefined ? undefined : [...args];
+  const list = args ?? [];
+  return list.some((arg) => flags.includes(arg)) ? [...list] : [flags[0]!, ...list];
+}
+
+/**
  * Starts a checked `agent` in a pane herdr just made. A failure is answered, not thrown: the
  * workspace, tab or worktree around the pane is there either way. `launched` is told the pid of
  * the process a shell-started agent came up as, when one is seen in front of the pane; `locator`
@@ -32,7 +48,7 @@ export function agentFault(agent: AgentPayload | undefined): string | null {
 export async function agentLaunch(paneId: string, agent: AgentPayload, launched?: (pid: number) => void, locator?: ShellAgentLocator): Promise<{ agent_started: true } | { agent_started: false; error: { code: string; message: string } }> {
   try {
     const kind = agent.kind as string;
-    const args = agent.args as string[] | undefined;
+    const args = withSkipPermissions(kind, agent.args as string[] | undefined);
     if (isShellAgentKind(kind)) {
       const pid = await startShellAgent(kind, paneId, args, locator ? { locator } : {});
       if (pid !== null) launched?.(pid);

@@ -94,7 +94,9 @@ export function useSplitState() {
   return { split, setSplit, soloSlot, endSplit, splitRef, splitShownRef, lastKeyAtRef, paneDragging, setPaneDragging, dropAt, dropAtRef, showDropTarget, clearDropPreview, paneAreaRef, tabDrag, draggedPaneRef, markSwap };
 }
 
-export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, selectedPane, selectedMachineId, splitShownRef, health, machineRosterLoaded, endSplit, otherRecheck, otherRosterTick, setSplit, soloSlot, setConnected, setConnectedBefore, setSelectedMachineId, setSelectedPaneId, setAutoSelected, setOutputStopped, splitRef, selectPane, paneAreaRef, dropAtRef, clearDropPreview, tabDrag, showDropTarget, setPaneDragging, movingPanes, draggedPaneRef, markSwap, swapPanes }: {
+export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, selectedPane, selectedMachineId, splitShownRef, health, machineRosterLoaded, endSplit, otherRecheck, otherRosterTick, setSplit, soloSlot, setConnected, setConnectedBefore, setSelectedMachineId, setSelectedPaneId, setAutoSelected, setOutputStopped, splitRef, selectPane, paneAreaRef, dropAtRef, clearDropPreview, tabDrag, showDropTarget, setPaneDragging, movingPanes, draggedPaneRef, markSwap, swapPanes, pickView }: {
+  /** shows a pane in a lens (usePaneLens): Cmd+D puts both halves in chat */
+  pickView?: (machineId: string, paneId: string, view: "chat" | "terminal") => void;
   machines: Machine[];
   split: SplitState | null;
   wideScreen: boolean;
@@ -219,6 +221,33 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
     const result = dockPane(splitOn ? split : null, { machineId: selectedMachineId, paneId: selectedPaneId }, dragged, side, soloSlot);
     if (result) applySplit(result.split, result.select);
   };
+  // Cmd+D (Ctrl+D elsewhere) puts the session seen before this one beside it, and again closes the
+  // other half: two chats side by side, as a drag into the right half does
+  const previous = useRef<SplitTarget | null>(null);
+  const showing = useRef<SplitTarget | null>(null);
+  useEffect(() => {
+    const now = selectedPaneId === null ? null : { machineId: selectedMachineId, paneId: selectedPaneId };
+    if (showing.current && now && !sameTarget(showing.current, now)) previous.current = showing.current;
+    showing.current = now;
+  }, [selectedMachineId, selectedPaneId]);
+  const toggleSideBySide = useRef<() => void>(() => undefined);
+  toggleSideBySide.current = () => {
+    if (splitOn) { closeSlot(otherSlot(split.active)); return; }
+    const beside = previous.current, here = showing.current;
+    if (!beside) return;
+    for (const target of [beside, here]) if (target) pickView?.(target.machineId, target.paneId, "chat");
+    dockSide(beside, "right");
+  };
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+      if (!mod || event.shiftKey || event.altKey || event.repeat || event.key.toLowerCase() !== "d") return;
+      event.preventDefault();
+      toggleSideBySide.current();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
   /** A pane dropped at a point: the half under it opens the pane. */
   const dockAt = (dragged: SplitTarget, x: number, y: number): void => {
     const box = paneAreaRef.current?.getBoundingClientRect();
