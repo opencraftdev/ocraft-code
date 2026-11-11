@@ -168,6 +168,8 @@ export type { DevicePairedEvent, Machine, MachineEvent, MachineRoster, PaneTarge
  *         missing_workspace_id / invalid_agent / invalid_pane_id / pane_not_in_workspace, 404
  *         workspace_not_found, 409 no_folder. Claude with `pane_id`: the store of that pane's Claude,
  *         each row's resume carrying its `source`; 409 claude_store_unknown when it cannot be told)
+ *  POST   /api/pane/conversation/fork ConversationForkRequest -> ConversationForkResponse
+ *         (new Claude/Codex session through a signed message boundary, in a new tab)
  *  POST   /api/sessions/resume  SessionResumeRequest -> SessionResumeResponse (a listed Claude
  *         session started in the store it was listed from, or the workspace's pane that already
  *         shows it on that store. 403 read_only; 400 invalid_agent / invalid_session_id /
@@ -411,8 +413,14 @@ export interface DevicesRevokedAll {
 
 export type { PushDeliveryFailure, PushKey, PushPayload, PushSubscriptionStatus } from "./push.ts";
 
+/** Create a separate native conversation through the message authenticated by fork_ref. */
+export interface ConversationForkRequest { pane_id: string; fork_ref: string; request_id: string }
+export interface ConversationForkResponse { workspace_id: string; pane_id: string; session_id: string; agent_started: true }
+
 /** One turn of a structured agent conversation (the chat lens source). */
 export interface ConversationTurn {
+  /** Server-authenticated native history boundary for creating a separate conversation. */
+  fork_ref?: string;
   role: "user" | "assistant";
   ts: string | null;
   /** Last recorded assistant activity, never the next user's timestamp. */

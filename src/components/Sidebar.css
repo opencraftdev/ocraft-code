@@ -20,6 +20,19 @@
   padding: 0 var(--side-gutter);
 }
 
+/* Workspaces and Agents share one scroll, with search and Settings outside it. */
+.sidebar-navigation-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: var(--space-3);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
 /* a section head (Agents): quiet words, never a rule */
 .sidebar-section-label {
   display: flex;

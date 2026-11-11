@@ -237,7 +237,7 @@
   height: var(--control-h);
   padding: 0 var(--space-3);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-hover) 45%, transparent);
+  background: transparent;
   overflow: hidden;
 }
 
@@ -527,6 +527,10 @@
     font-size: calc(var(--fs-chat) * var(--chat-scale, 1));
     line-height: var(--lh-code);
   }
+
+  /* T3's spacious drafting surface, with the toolbar on its own baseline. */
+  .composer-text { min-height: calc(2lh + var(--space-5)); }
+  .terminal-stack:has(> .prompt-dock:not(:empty)) .composer-text { min-height: calc(1lh + var(--space-5)); }
 }
 
 .composer-text::-webkit-scrollbar,
@@ -596,7 +600,7 @@
   height: var(--space-8);
   padding: 0;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--primary-text);
 }
@@ -630,7 +634,8 @@
 }
 
 .composer-send {
-  --composer-action-fill: var(--primary);
+  --composer-action-fill: var(--composer-send-bg);
+  color: var(--composer-send-ink);
 }
 
 /* the one round button: Stop is Send's circle in the text colour, in the same place at the same
@@ -674,7 +679,7 @@
 
 @media (hover: hover) {
   .composer-send:hover:not(:disabled) {
-    --composer-action-fill: var(--primary-hover);
+    --composer-action-fill: color-mix(in srgb, var(--composer-send-bg) 88%, var(--text-strong));
   }
 
   .composer-stop:hover:not(:disabled) {

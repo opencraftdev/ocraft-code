@@ -7,17 +7,20 @@ import { useFileViewer } from "./useFileViewer.ts";
 import { useRepoDiffViewer } from "./useRepoDiffViewer.ts";
 import { panelUrl, wantsPanel } from "./webPanel.ts";
 import type { Settings } from "./settings.ts";
+import type { AgentPanelView } from "./useAgentPanel.ts";
 
 export interface FilePanelsParams {
   settings: Settings;
   filePanelAvailable: boolean;
   selectedPaneId: string | null;
   selectedMachineId: string;
+  agentPanel?: { setView: (view: AgentPanelView) => void; setOpen: (open: boolean) => void };
 }
 
-export function useFilePanels({ settings, filePanelAvailable, selectedPaneId, selectedMachineId }: FilePanelsParams) {
+export function useFilePanels({ settings, filePanelAvailable, selectedPaneId, selectedMachineId, agentPanel }: FilePanelsParams) {
   // the Files dialog, and the file open in the viewer (a path as the chat or the dialog gave it)
   const [filesOpen, setFilesOpen] = useState(false);
+  const [filesTab, setFilesTab] = useState<"browse" | "changes">("browse");
   const { viewing, openFile, closeFile, setPresentation, releaseFile } = useFileViewer();
   // a repository diff from the Files dialog's Changes tab, an entry of its own like a file
   const { viewing: diffViewing, openDiff, closeDiff, releaseDiff } = useRepoDiffViewer();
@@ -28,6 +31,15 @@ export function useFilePanels({ settings, filePanelAvailable, selectedPaneId, se
   }, [viewing, fileDocked]);
   // a page this PC serves, beside the pane in the file panel's place: a file docked there replaces it
   const [webPage, setWebPage] = useState<string | null>(null);
+  const setAgentOpen = agentPanel?.setOpen, setAgentView = agentPanel?.setView;
+  const showWorkspaceFiles = useCallback((tab: "browse" | "changes" = "browse") => {
+    setAgentOpen?.(false); setFilesTab(tab); setFilesOpen(true);
+  }, [setAgentOpen]);
+  const openAgentView = useCallback((view: AgentPanelView) => {
+    setFilesOpen(false); setAgentView?.(view); setAgentOpen?.(true);
+  }, [setAgentOpen, setAgentView]);
+  const closeAgentView = useCallback(() => setAgentOpen?.(false), [setAgentOpen]);
+  useEffect(() => { if ((viewing && fileDocked) || webPage !== null) setAgentOpen?.(false); }, [viewing, fileDocked, webPage, setAgentOpen]);
   useEffect(() => {
     if (viewing !== null && fileDocked) setWebPage(null);
   }, [viewing, fileDocked]);
@@ -75,5 +87,5 @@ export function useFilePanels({ settings, filePanelAvailable, selectedPaneId, se
     if (filePanelAvailable && openPresentation(path, settings.fileOpen) === "panel") setFilesOpen(false);
     openFile({ path, paneId: selectedPaneId, machineId: selectedMachineId });
   }, [openFile, selectedPaneId, selectedMachineId, filePanelAvailable, settings.fileOpen]);
-  return { filesOpen, setFilesOpen, viewing, openFile, closeFile, setPresentation, releaseFile, diffViewing, openDiff, closeDiff, releaseDiff, presentation, fileDocked, webPage, setWebPage, openWebPage, collapsing, presentFile, reportFileKind, toggleFilePresentation, viewFile };
+  return { filesOpen, setFilesOpen, filesTab, setFilesTab, showWorkspaceFiles, openAgentView, closeAgentView, viewing, openFile, closeFile, setPresentation, releaseFile, diffViewing, openDiff, closeDiff, releaseDiff, presentation, fileDocked, webPage, setWebPage, openWebPage, collapsing, presentFile, reportFileKind, toggleFilePresentation, viewFile };
 }

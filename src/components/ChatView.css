@@ -94,7 +94,7 @@
 }
 
 /* Comfortable measure for prose, even when a user chooses a wider lane for code or diffs. */
-.chat-turn-agent > .markdown {
+.chat-turn-agent > .markdown > :is(p, ul, ol, blockquote) {
   max-width: 75ch;
 }
 
@@ -1980,3 +1980,11 @@ ol.markdown-list {
 .chat-abandoned { margin: var(--space-2) 0; }
 .chat-abandoned > summary { font-style: italic; }
 .chat-abandoned-note { margin: var(--space-2) 0 0; color: var(--text-dim); }
+
+.chat-fork-control { position: relative; display: inline-flex; align-items: center; flex: none; }
+.chat-fork:disabled { opacity: 0.4; cursor: default; }
+.chat-fork[aria-busy="true"] { opacity: 0.65; }
+.chat-fork-error { position: absolute; right: 0; bottom: calc(100% + var(--space-2)); z-index: var(--z-popover); width: min(260px, 65vw); padding: var(--space-3); border: var(--hairline) solid var(--surface-edge); border-radius: var(--radius-md); background: var(--composer-surface-bg); color: var(--text); box-shadow: var(--shadow-pop); font-size: var(--fs-xs); line-height: var(--lh-base); text-align: left; white-space: normal; }
+.chat-fork-spinner { animation: chat-fork-spin 1s steps(12, end) infinite; }
+@keyframes chat-fork-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .chat-fork-spinner { animation: none; } }

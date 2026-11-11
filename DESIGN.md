@@ -3368,9 +3368,9 @@ Other palettes resolve these roles from their own colors. Terminal colors keep t
 
 | Token | Base value | Purpose |
 |-------|------------|---------|
-| `--chat-canvas` | `var(--bg)` | Conversation background; Codex dark #111214, light #fcfcfd |
-| `--sidebar-surface` | `var(--bg-panel)` | Navigation surface; Codex dark #191a1d, light #f4f4f6 |
-| `--composer-surface-bg` | `var(--bg-elevated)` | Solid input card; Codex dark #202125, light #fefefe |
+| `--chat-canvas` | `var(--bg)` | Conversation background; Codex dark #0c0d0e, light #fcfcfd |
+| `--sidebar-surface` | `var(--bg-panel)` | Navigation surface; Codex dark #111214, light #f4f4f6 |
+| `--composer-surface-bg` | `var(--bg-elevated)` | Solid input card; Codex dark #121315, light #fefefe |
 | `--surface-edge` | `color-mix(in srgb, var(--border) 70%, transparent)` | Quiet workspace separators |
 
 - The desktop sidebar starts with the Ovis identity between its collapse and palette controls.
@@ -3383,10 +3383,244 @@ Other palettes resolve these roles from their own colors. Terminal colors keep t
 - Code blocks keep their language/copy header visible above the code on desktop and touch.
 - The composer keeps attachment/actions, then model/context information, then Send/Stop in a
   single row when space permits. Its existing measured narrow layout handles overflow and IME.
-  Send/Stop share a rounded square target. The solid surface avoids a blur on scrolling content.
+  Send uses a circular target; Stop retains its rounded square target. The solid surface avoids
+  a blur on scrolling content.
 - Desktop send-key hints follow `enterSends`; phone, touch, short-window, and open-approval
   layouts omit the hint so reference text and instructions keep their space. The folder
   and branch strip retains its existing behavior and shared column geometry.
 - Draft ownership, approvals, terminal input, streaming follow, selection, virtualization, and
   reduced-motion behavior continue through the existing components. No additional animation
   runs for each arriving message, and no new network or rendering dependency is introduced.
+
+
+## Local T3-style agent panel and workflow graph
+
+This local iteration follows the user's T3 Code screenshots and the local T3 Code
+`ThreadDetailsPanel.tsx` / `ThreadRelationshipsControl.tsx` organization: an open conversation,
+a spacious desktop composer with a quiet model toolbar, and a rounded workspace card on the
+right. The graph follows the recorded-work semantics in
+[herdr-dagr's contract](https://github.com/aemrebarut/herdr-dagr/blob/main/CONTRACT.md).
+No T3 Code or dagr implementation code or artwork is copied.
+
+| Token | Base value | Purpose |
+|-------|------------|---------|
+| `--agent-panel-w` | `312px` | Right-side workspace and agent panel |
+| `--composer-send-bg` | `var(--primary)` | Send fill; blue in Codex dark/light |
+| `--composer-send-ink` | `var(--primary-text)` | Send icon; near-white in Codex dark/light |
+
+- Desktop chat pins the panel from 980px. Its header button focuses the card. On narrower
+  screens the optional panel floats over the page, closes with its Close button, Escape while focused inside,
+  or phone Back, and returns focus to the toggle. Opening it never focuses herdr's terminal.
+- Agents and Graph are keyboard-operable tabs. Workspace controls reuse Browse files and the
+  New tab with an agent dialog. No account, permission, or editor controls are fabricated.
+- Agents lists the current workspace's agent panes and the actual session's background children.
+  Existing Claude subagent details open inline, on request, with their dispatch prompt and
+  bounded recent activity. Recorded attempts in a workflow file are not relabeled as live agents.
+- Graph shows native child relationships and the plan's explicit `blocked_by` dependencies.
+  Codex children use structured spawn/wait receipts; absent status remains unknown. Within an
+  unchanged conversation history, earlier observed children survive later transcript pages.
+  The pane/session/machine key clears old selection and data when their owner changes, while
+  an ordinary completed turn preserves the panel's selection.
+- On Graph, `.dagr/run.json`, then `run.json`, is read relative to the selected pane through
+  the existing authenticated file API. An unrelated run.json is ignored. No new server route,
+  file write, installation, action execution, or scheduling mechanism is introduced.
+- Dagr v1–v3 task dependencies, fan-in gates, attempts, retry causes, outcome evidence, and
+  declared future branches are projected into the graph. Planned paths are dashed and say
+  If passed / If failed; they are not shown as executed work. Project scopes, the event journal,
+  and arbitrary producer action payloads are not interpreted by this view.
+- Reads are limited to 4 MiB, 4096 graph items/edges, and 240 visible nodes. Additional nodes are
+  reported. Invalid/cyclic dependencies retain the last valid graph with a visible refresh
+  notice. Watchers request no workflow files; Browse files is disabled and New agent is hidden.
+- Polls run sequentially while the visible panel is mounted, refresh after pushed background
+  counts change, and pause with the page. File/plan/task reads abort on pane changes or a
+  deadline. Late results cannot replace another pane's data. There is no per-frame graph loop;
+  SVG connectors and actual focusable buttons render the graph without a new dependency.
+- Desktop drafting has a two-line minimum with model metadata on its own baseline. Touch
+  and approval layouts retain their smaller input floor so conversation/approval content fits.
+- This iteration remains local. It does not publish, update a PR, or merge changes.
+
+### Files beside the conversation
+
+Following T3 Code's `FileBrowserPanel.tsx` and existing file surface, desktop Browse files
+uses the resizable right-hand column from 980px. In desktop chat it shares that column below
+the pinned agent card, without a scrim or a focus trap over the conversation. Selecting a file opens the existing
+read-only file viewer in that column. Its folder button returns to browsing; closing Browse
+restores the previous file when one is open. The file viewer retains its source/preview,
+copy, download, popup, and history behavior. Changes keeps the existing comparison workflow.
+
+The focused file browser owns Escape; Escape in the chat leaves the column open. Settings,
+the palette, and a diff above it keep their own keyboard behavior. The browser follows the
+selected pane and resets on a machine switch. Narrow screens retain the full-width sheet
+and system Back support. The public demo now lists small fictional source fixtures and
+previews their content in memory; it never reads files from the user's computer.
+
+### Original workspace sidebar with chat styling
+
+At the user's request, Chat and Terminal use Ovis's original left sidebar: the computer/workspace
+tree, pinned workspaces, separate Agents roster, existing filter controls, footer, and original
+default width. Saved resize and workspace preferences continue to apply. The experimental
+conversation-first list, project picker, and Local/Remote grouping are removed. The original
+sidebar source is restored without changing its agent selection, pins, or remote behavior.
+
+Desktop chat keeps its quieter project/conversation breadcrumb and compact tab row. The composer
+retains its two-line drafting floor and grows or scrolls for longer drafts.
+
+### Pinned workspace and agent card
+
+The user's T3-style workspace/lineage screenshot is the reference for a card that always stays
+at the right of desktop chat. From 980px, the workspace card is present without an opening
+action and has no dismiss control. Its header button focuses it; Escape leaves it in place.
+Conversation and workspace changes update the card's owner as before. Agents/Graph tabs and
+recorded subagent activity remain available.
+
+Files, file previews, and web previews open in the shared details position to the right of
+the summary rail. The floating summary cards keep their own width and stay visible on wide
+screens. The file resizer adjusts the separate drawer, within the room available beside chat.
+Below 980px, the optional summary panel retains Close, Escape, and Back.
+
+### Reference-style environment rail
+
+The user's supplied Environment sidebar screenshot guides the right rail's visual structure:
+separate outlined sections, a restrained corner radius, aligned icon/text rows, inline chevrons,
+and space between sections. Environment shows the actual computer, workspace and working
+folder, branch, and Browse files action. Agents keeps the existing session/subagent list and
+an Agents launcher, with New agent in its heading. Changes and Background tasks are separate
+summary sections. Agent rows open their detailed flow; there is no top-level Graph shortcut.
+Files and previews use the shared drawer to the right of the summary rail.
+
+This is a presentation change, with no new agent engine, connector, environment-saving or
+remote-control behavior. The reference's controls are represented only where Ovis already has
+an action or real data. Existing themes, density, keyboard tabs, permissions, phone dismissal,
+and the permanent desktop rail remain in effect. No reference source code is copied.
+
+
+The conversation and right rail share the same painted chat canvas on their common parent.
+The rail and its wrapper are transparent; this avoids a full-height column revealing a different
+app background. Individual sections float with a translucent theme surface, a subtle shadow,
+and air on every side. Unselected graph nodes remain transparent. Borders, hover, focus and
+selected states identify interactive content. The narrow floating panel uses the app's base
+surface so overlaid conversation text does not show through its controls.
+
+
+### One sidebar scroll
+
+The original workspace tree and Agents roster now share one scrolling navigation area, following
+T3 Code's continuous sidebar navigation. Each section keeps its original rows and collapse controls,
+without separate height caps, inner scrollbars or cut-off fades. The optional search field and the
+Settings footer stay outside this scroll area. Keyboard focus can reveal every row through the same
+container, and the phone drawer uses this layout too. The scrollbar is thin and follows theme tokens.
+
+
+### Agent details drawer and reported context
+
+The user's expanded Background tasks reference guides the drawer: compact summary cards remain
+beside the conversation, while selecting an agent opens a detailed flow from the right. The view has
+its own title, refresh and close controls, a Back action for agent details, and one content scroll.
+At 1360px and above it docks beyond the summary rail using `--agent-drawer-w` (400px); below that,
+it overlays from the right without squeezing the chat. File and activity views share this position.
+Escape and Close return focus to the launcher; phone Back returns to the summary. Entrance uses
+an ease-out horizontal transform and opacity, and reduced motion removes it. Pane/session changes
+close the old drawer so its details cannot be mistaken for the next session.
+
+Context is a compact summary card with a used percentage and progress track when the agent has
+reported both used tokens and a positive context window. Expanding it shows the token counts.
+If the window is unknown it shows used tokens without a percentage; if usage is absent it says
+Not reported. No model capacity or token count is guessed. Values come from the same conversation
+metadata the composer receives, through a bounded, in-memory store keyed by computer, pane,
+terminal, agent session and server epoch. This adds no transcript polling and persists no usage
+to browser storage. Changed metadata updates the rail; another pane/session cannot inherit its
+predecessor's values. The record is described as last reported, including while offline.
+
+
+### Separate changes, background jobs, and agents
+
+The user's Changes / Background tasks screenshot guides the separate cards in the summary rail.
+Changes reads the existing working-tree diff list on entry, a completed turn, and Refresh. It shows
+real filenames and a known count (or a lower bound for a truncated listing), with Review changes
+opening the existing comparison UI. It does not invent a pull request or issue number.
+
+Agents includes the selected agent and structured spawned-agent records. Background tasks uses
+non-agent background job records. A foreground plan appears in neither list; the same subagent
+is not duplicated as a job. Finished items remain in their owning section. Counts and tool/token
+metrics come from the recorded activity. An unsupported or empty source says no tasks were reported,
+without claiming that a process has no work. No stop control is drawn without a stop API.
+
+The Agents overview has no graph. Selecting an agent opens Agent details and only then reads its
+optional dagr run and renders the graph. Back returns to the agent list. Background job details
+show the recorded status and available metrics without opening a graph. The drawer's owner is
+scoped to PC, pane, terminal, agent session, and epoch; switching owners closes the old view.
+
+Files, Changes, file previews, and web previews use the same right-hand drawer position, rather
+than appearing below the cards. There is one visible details drawer at a time. File navigation,
+comparison scopes, diff and preview history, keyboard close behavior, and phone Back remain active.
+The Files/Changes view reads each tab only after it has been visited. On wide screens the drawer
+sits beside the summary; on narrower screens it overlays from the right. Existing drafts survive
+switching among these views. The original left sidebar still uses one continuous scroll.
+
+### Expandable background jobs and context categories
+
+The user's Claude Code screenshots guide this iteration. Running and Finished groups contain
+individual expandable job cards in the right drawer. A job selected from the summary opens its own
+card, with its actual elapsed time, status, recorded shell command and reported output. Commands
+and results are paired only by native background-task receipts in the chat's existing transcript
+read; prose is not interpreted as a task. Missing details remain explicit. This read-only view adds
+no stop or delete action. Workflow runs show their actual stages, completion counts and errors.
+The drawer has one scroll container; commands and outputs wrap within their cards. On large screens
+the job drawer grows to at most 560px; phone Back, Escape, focus return and reduced motion still apply.
+
+Context starts expanded and follows the screenshot's token ratio, horizontal usage bar and aligned
+category/token/percentage rows. A native /context category table is used only when its reported
+totals reconcile with the current conversation metadata, and expires after the next assistant
+request. The UI never infers messages, system tools, skills, system prompts, memory or compaction
+reserves from a total. When only aggregate usage is reported, it shows used context and remaining
+capacity; an unknown window has no percentage or capacity bar. Counts retain one decimal at compact
+scales. Reported task facts live in a bounded, session-scoped memory cache and add no network polling.
+
+### Compact agents and conversation details
+
+The user's latest Claude Code agent-detail screenshot supersedes the graph-first selection flow.
+Agents now follows the Background tasks summary: active spawned agents and one finished/list row,
+without repeating the parent conversation, its model or a new-agent action. The drawer has Running
+and Finished groups instead of separate session, subagent and previous-agent sections.
+
+Selecting either a running or a finished agent opens a reading view named after that agent. It shows
+a compact dispatch prompt with Show more, the reported model and status, narration in order, and
+consecutive recorded tool calls folded into small batches. Usage metrics remain optional details.
+The existing bounded, session-checked subagent API reads both running and completed Claude agents;
+running activity refreshes while visible, and a completed agent is read on entry or Refresh. Requests
+stop when the drawer closes or the agent/session changes; data from a changed session is cleared.
+Other sources show their recorded dispatch/result where available, with explicit missing states.
+
+The graph is a separate, explicit header action. Opening agents, choosing an agent, or reading its
+work neither renders a graph nor reads dagr files. Back restores the agent list, its expansion,
+scroll position and keyboard focus. The prompt and tool text wrap within the drawer's single scroll
+container, with the existing theme, desktop docking and phone overlay behavior.
+
+### Fork from a chat message
+
+Following T3 Code's message actions, Claude and Codex text turns offer a small fork icon beside
+Copy. A click creates a separate persisted session through that message, starts its CLI in a new tab
+of the same workspace and opens that tab once its native session is verified. It keeps the source
+conversation and draft. A pending response waits until it can provide a complete boundary. The
+busy indicator and disabled actions prevent double-clicks; stale-history and copy failures remain
+next to the action. Touch targets, keyboard focus, theme tokens and reduced motion stay consistent.
+
+The native parsers keep internal message boundaries through snapshots and paging. Only the HTTP
+response attaches a signed fork reference, bound to pane and history. Requests carry that reference
+and an idempotency UUID; they cannot supply paths, arbitrary CLI arguments or a replacement prompt.
+The bridge verifies history before and after copying, preserves the source CLI profile, and checks
+that the new CLI reports the intended session before navigating. A failed launch closes its new tab.
+A response arriving after navigation or a history switch cannot redirect the replacement view.
+
+Claude uses the Agent SDK's file-only forkSession with upToMessageId, in a worker scoped to the
+source CLAUDE_CONFIG_DIR and project key. Codex uses thread/start and thread/inject_items for a
+boundary inside a turn: the context comes from native response items across the source's inherited
+rollout segments, stopping at the signed record. Reported compaction replacement history, model,
+provider and instructions are retained; rendered chat text is never replayed as a fabricated prompt.
+No model turn is started while copying. CLI session creation and subsequent resume use the user's
+normal authorization settings. The copied context is bounded at 128 MiB; unknown compaction formats
+and incomplete tool-call pairs are refused rather than assigned an inaccurate boundary.
+
+References: [Claude session management](https://platform.claude.com/cookbook/claude-agent-sdk-05-building-a-session-browser)
+and [Codex app-server protocol](https://learn.chatgpt.com/docs/app-server). These APIs support the
+Ovis implementation; no external application source was copied.

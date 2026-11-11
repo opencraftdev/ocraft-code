@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useReducer, useRef, useState, type MutableRefObject } from "react";
 import { afterRead, greetingMemory, rememberGreeting, type ChatRead } from "./greeting.ts";
 import { paneStorageId } from "../../shared/machines.ts";
-import type { AgentStatus, ConversationMetadata, InteractivePrompt } from "../../shared/protocol.ts";
+import type { AgentStatus, ConversationMetadata, ConversationResponse, InteractivePrompt } from "../../shared/protocol.ts";
 import type { TypedAnswer } from "./promptAnswer.ts";
 import type { HerdrSocket } from "./ws.ts";
 import type { StillOpen } from "./paneTerminalShared.ts";
+import { backgroundTaskReceipts } from "./backgroundTaskReceipts.ts";
+import { conversationContexts } from "./conversationContext.ts";
 
 export interface ChatCallbacksDeps {
+  contextKey?: string | null;
+  contextPane?: string | null;
   activeRef: MutableRefObject<boolean>;
   agentStatus: AgentStatus | undefined;
   chatHistoryRef: MutableRefObject<{ pane: string; history: string | undefined } | null>;
@@ -22,7 +26,7 @@ export interface ChatCallbacksDeps {
 }
 
 export function useChatCallbacks(deps: ChatCallbacksDeps) {
-  const { activeRef, agentStatus, chatHistoryRef, chatViewRef, findOpenRef, machineId, pendingOpenRef, setStillOpen, socketRef, stackRef, stillOpenRef, undecidedOpenRef } = deps;
+  const { contextKey, contextPane, activeRef, agentStatus, chatHistoryRef, chatViewRef, findOpenRef, machineId, pendingOpenRef, setStillOpen, socketRef, stackRef, stillOpenRef, undecidedOpenRef } = deps;
   // an older bridge pushes no transcript changes: the chat reads at the former 2s cadence
   const [conversationPushes, setConversationPushes] = useState(false);
   const onConversationWatch = useCallback((pane: string, enabled: boolean) => {
@@ -106,13 +110,17 @@ export function useChatCallbacks(deps: ChatCallbacksDeps) {
   useEffect(() => {
     if (agentStatus === "working") setPendingAnswer(null);
   }, [agentStatus]);
-  const onChatMetadata = useCallback((pane: string, value: ConversationMetadata | null) => {
+  const onChatMetadata = useCallback((pane: string, value: ConversationMetadata | null, conversation?: Pick<ConversationResponse, "turns" | "history_id">) => {
+    if (contextKey && pane === contextPane) {
+      conversationContexts.publish(contextKey, value, conversation?.turns);
+      if (conversation) backgroundTaskReceipts.publish(contextKey, conversation);
+    }
     // the same settings keep the same object: every conversation read would otherwise re-render the composer
     setChatMetadata((previous) => previous?.pane === pane && previous.value?.model === value?.model
       && previous.value?.reasoning_effort === value?.reasoning_effort
       && previous.value?.context?.used === value?.context?.used
       && previous.value?.context?.window === value?.context?.window ? previous : { pane, value });
-  }, []);
+  }, [contextKey, contextPane]);
 
   return { conversationPushes, setConversationPushes, onConversationWatch, chatOutputRef, onTerminalOutput, chatSent, setChatSent, chatMetadata, redrawGreeting, onChatRead, greetingRoom, setGreetingRoom, greetingRef, chatPrompt, promptRefresh, setPromptRefresh, chatSuggestion, chatRestored, pendingAnswer, setPendingAnswer, promptDock, setPromptDock, onPromptAnswered, clearPendingAnswer, onChatPrompt, onChatMetadata, onChatSuggestion, onChatRestored };
 }

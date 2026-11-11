@@ -16,7 +16,7 @@ const fail = (code: string, message: string, status: number) => jsonResponse({ e
  * A PC route whose answer can take longer than the proxy's usual 75 s: a worktree's creation waits on
  * git and then an agent's start, and a resume on the agent's start and then the check of its store.
  */
-export const slowMachinePath = (path: string): boolean => path === "worktree/create" || path === "sessions/resume";
+export const slowMachinePath = (path: string): boolean => path === "worktree/create" || path === "sessions/resume" || path === "pane/conversation/fork";
 
 /**
  * A path no route is spelled as: an empty segment (`//`, or a trailing `/`) or an encoded separator.

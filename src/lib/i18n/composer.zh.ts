@@ -7,6 +7,7 @@
  * Register and fixed terms follow ../i18n.zh.ts; a key another feature also uses goes there.
  */
 export const COMPOSER_ZH: Record<string, string> = {
+  "New tab with an agent…": "带代理的新标签页…",
   "Edit queued message": "编辑排队消息",
   "Sent to Pi · waiting for transcript": "已发送到 Pi · 正在等待写入对话记录",
   "Sent to Pi · transcript confirmation unavailable": "已发送到 Pi · 无法确认对话记录",
@@ -20,7 +21,6 @@ export const COMPOSER_ZH: Record<string, string> = {
   "Not sent: the page that started this agent left before it was ready. Send it now or discard it.": "未发送：启动此代理的页面在其就绪前已离开。请立即发送或丢弃。",
   "Not sent: the agent started for this message has ended. Review the message before sending it.": "未发送：为这条消息启动的代理已结束。发送前请先检查消息。",
   "Not sent: the pane's terminal or agent session changed. Review the message before sending it again.": "未发送：窗格的终端或代理会话已更改。再次发送前请先检查消息。",
-  "New tab with an agent…": "带代理的新标签页…",
   "Skip question": "跳过问题",
   "Submit ({n})": "提交 ({n})",
   "Or type your own answer": "或输入你自己的回答",

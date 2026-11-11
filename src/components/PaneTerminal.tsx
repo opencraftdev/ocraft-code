@@ -71,6 +71,7 @@ import { useTypedKeys } from "../lib/useTypedKeys.ts";
 const PASTE_GUIDANCE_MS = 6000;
 
 export interface PaneTerminalProps {
+  contextKey?: string | null;
   /** App's content lifetime, including the current finish identity. */
   presentationKey?: string;
   finishEpoch?: string;
@@ -119,6 +120,7 @@ export interface PaneTerminalProps {
   onOpenHistory?: () => void;
   /** opens the New tab dialog on the pane's workspace (App's NewSessionDialog): the composer's new-agent button */
   onOpenNewSession?: () => void;
+  onForked?: (result: import("../../shared/protocol.ts").ConversationForkResponse) => void;
   findRequest?: number;
   controls?: { current: PaneControls | null };
   /** Only the selected tile may take keyboard focus after async work or a lens change. */
@@ -153,6 +155,7 @@ export interface PaneTerminalProps {
 const heldRowNotes = new Map<string, { owner: string; id: string; text: string }>();
 
 export function PaneTerminal({
+  contextKey,
   presentationKey,
   finishEpoch,
   finishId,
@@ -188,6 +191,7 @@ export function PaneTerminal({
   onEndPeek,
   onOpenHistory,
   onOpenNewSession,
+  onForked,
   onRoleAck,
   onConnectionChange,
   onServerMessage,
@@ -541,7 +545,7 @@ export function PaneTerminal({
   const [chatRefresh, setChatRefresh] = useState(0);
   const [chatInvalidation, setChatInvalidation] = useState(0);
   const { autoPeek, onCommandScreenClosed, stillOpen, stillOpenRef, setStillOpen, pendingOpenRef, undecidedOpenRef, chatHistoryRef, stillOpenNotedRef, onInputRowFrameRef, stillOpenNote, showStillOpen } = usePeekReturn({ activeRef, agent, agentRef, agentStatus, chatMounted, coarseRef, compositionCommitPendingRef, composingRef, draftHeldForRef, ended, findOpenRef, frameGateRef, inputRowNow, lineComposingRef, onEndPeekRef, onOpenTerminal, onPeekRef, paneId, paneRef, peek, peekRef, presented, receiptRowRef, stackRef, termRef, terminalId, t, heldRef, unsupportedRef });
-  const { conversationPushes, setConversationPushes, onConversationWatch, chatOutputRef, onTerminalOutput, chatSent, setChatSent, chatMetadata, redrawGreeting, onChatRead, greetingRoom, setGreetingRoom, greetingRef, chatPrompt, promptRefresh, setPromptRefresh, chatSuggestion, chatRestored, pendingAnswer, setPendingAnswer, promptDock, setPromptDock, onPromptAnswered, clearPendingAnswer, onChatPrompt, onChatMetadata, onChatSuggestion, onChatRestored } = useChatCallbacks({ activeRef, agentStatus, chatHistoryRef, chatViewRef, findOpenRef, machineId, pendingOpenRef, setStillOpen, socketRef, stackRef, stillOpenRef, undecidedOpenRef });
+  const { conversationPushes, setConversationPushes, onConversationWatch, chatOutputRef, onTerminalOutput, chatSent, setChatSent, chatMetadata, redrawGreeting, onChatRead, greetingRoom, setGreetingRoom, greetingRef, chatPrompt, promptRefresh, setPromptRefresh, chatSuggestion, chatRestored, pendingAnswer, setPendingAnswer, promptDock, setPromptDock, onPromptAnswered, clearPendingAnswer, onChatPrompt, onChatMetadata, onChatSuggestion, onChatRestored } = useChatCallbacks({ contextKey, contextPane: paneId, activeRef, agentStatus, chatHistoryRef, chatViewRef, findOpenRef, machineId, pendingOpenRef, setStillOpen, socketRef, stackRef, stillOpenRef, undecidedOpenRef });
   // This browser's own message from the box that the bridge took at once (ok, nothing pending), with
   // the chat's navigation generation from when it went out: the chat follows it to the end unless
   // the reader scrolled, paged or jumped since (ChatView `localSend`). A refusal, an uncertain or
@@ -1117,6 +1121,7 @@ export function PaneTerminal({
               The session herdr reports is left out of the key: it can change while the
               conversation stays (a shared Codex daemon), and the chat follows history_id itself */}
           <ChatView
+            onForked={onForked}
             presentationKey={presentationKey}
             finishEpoch={finishEpoch}
             finishId={finishId}

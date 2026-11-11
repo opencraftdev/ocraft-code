@@ -37,6 +37,8 @@
   --chat-canvas: var(--bg);
   --sidebar-surface: var(--bg-panel);
   --composer-surface-bg: var(--bg-elevated);
+  --composer-send-bg: var(--primary);
+  --composer-send-ink: var(--primary-text);
   --surface-edge: color-mix(in srgb, var(--border) 70%, transparent);
 
   /* text */
@@ -161,6 +163,8 @@
   /* the header from 769px, in either density: one line beside the sidebar's own top row */
   --header-h-wide: 46px;
   --sidebar-w: 280px;
+  --agent-panel-w: 312px;
+  --agent-drawer-w: 400px;
   --control-h: 34px;
   /* what the segmented track takes from --control-h above and below an option: its padding and
      hairline, both sides. An option is --control-h less this, and its touch expander grows from that */
@@ -407,6 +411,8 @@
    and skill colors (diffAdded, diffRemoved, skill), each kept in hue and moved in lightness
    only as far as AA needs on a hovered row. */
 [data-theme="light"][data-palette="codex"] {
+  --composer-send-bg: #245dcc;
+  --composer-send-ink: #f9fafc;
   --chat-canvas: #fcfcfd;
   --sidebar-surface: #f4f4f6;
   --composer-surface-bg: #fefefe;
@@ -472,9 +478,11 @@
 }
 
 [data-theme="dark"][data-palette="codex"] {
-  --chat-canvas: #111214;
-  --sidebar-surface: #191a1d;
-  --composer-surface-bg: #202125;
+  --composer-send-bg: #315fc6;
+  --composer-send-ink: #f9fafc;
+  --chat-canvas: #0c0d0e;
+  --sidebar-surface: #111214;
+  --composer-surface-bg: #121315;
   --bg: #181818;
   --bg-panel: #1f1f1f;
   --bg-elevated: #262626;
@@ -1604,6 +1612,19 @@ button {
   height: 100%;
   height: var(--app-height, 100dvh);
 }
+
+/* One canvas under the conversation and floating details; no filled rail behind the cards. */
+.app.is-chat > .app-body { background: var(--chat-canvas); }
+@media (min-width: 769px) {
+  .app.is-chat .context { column-gap: var(--space-2); }
+  .app.is-chat .context-sub { order: -1; }
+  .app.is-chat .context-sub::after { content: "/"; margin-left: var(--space-1); color: var(--text-dim); }
+  .app.is-chat .context-title { font-size: var(--fs-sm); font-weight: var(--fw-medium); }
+  .app.is-chat .context-title > .agent-mark { display: none; }
+  .app.is-chat .tab-strip { min-height: calc(var(--control-h) - var(--space-1)); border-color: transparent; }
+  .app.is-chat .tab-strip-tab { font-size: var(--fs-xs); padding-inline: var(--space-2); }
+}
+.app.is-chat .chat-view { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 
 .app-header {
   display: flex;

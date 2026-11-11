@@ -684,6 +684,45 @@ export function fileUrl(path: string, paneId: string | null, machineId = "local"
   return machinePath(machineId, `fs/file?${fileQuery(path, paneId)}${download ? "&download=1" : ""}`);
 }
 
+/** Optional dagr state, through the existing authenticated file route. Never execute producer actions. */
+export async function fetchPaneDagr(paneId: string, machineId = "local", signal?: AbortSignal): Promise<unknown | null> {
+  const limit = 4 * 1024 * 1024;
+  for (const path of [".dagr/run.json", "run.json"]) {
+    const response = await fetch(fileUrl(path, paneId, machineId), { cache: "no-store", ...(signal ? { signal } : {}) });
+    if (response.status === 404) { await response.body?.cancel(); continue; }
+    // Observers cannot read files. The graph can still show the session facts they may read.
+    if (response.status === 403) { await response.body?.cancel(); return null; }
+    if (!response.ok) { await response.body?.cancel(); throw new Error("dagr_read_failed"); }
+    if (Number(response.headers.get("content-length")) > limit) { await response.body?.cancel(); throw new Error("dagr_too_large"); }
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("dagr_read_failed");
+    const chunks: Uint8Array[] = [];
+    let length = 0;
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        length += value.byteLength;
+        if (length > limit) throw new Error("dagr_too_large");
+        chunks.push(value);
+      }
+    } finally { await reader.cancel().catch(() => undefined); reader.releaseLock(); }
+    const bytes = new Uint8Array(length);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    let parsed: unknown;
+    try { parsed = JSON.parse(new TextDecoder().decode(bytes)); }
+    catch (error) { if (path === "run.json") return null; throw error; }
+    // A project's unrelated run.json is not a dagr run.
+    if (parsed === null || typeof parsed !== "object" || !("dagr" in parsed)) {
+      if (path === "run.json") return null;
+      throw new Error("invalid_dagr");
+    }
+    return parsed;
+  }
+  return null;
+}
+
 /**
  * Which repository and which two of its states: the pane's folder (or `directory`, read when the
  * pane is gone), and the working tree against the index, the index against HEAD, two commits, or
@@ -857,8 +896,8 @@ export async function fetchAgentCommands(agent: string, cwd: string | null, mach
 }
 
 /** GET /api/pane/omo-tasks: the background tasks and workflows the pane's OmO session started, and that PC's clock. */
-export async function fetchPaneOmoActivity(paneId: string, machineId = "local"): Promise<{ tasks: OmoActivity["tasks"]; runs: OmoActivity["runs"]; serverTime: string | null; moreRunning: number }> {
-  const activity = await getJson<Partial<OmoActivity>>(machinePath(machineId, `pane/omo-tasks?pane_id=${encodeURIComponent(paneId)}`));
+export async function fetchPaneOmoActivity(paneId: string, machineId = "local", signal?: AbortSignal): Promise<{ tasks: OmoActivity["tasks"]; runs: OmoActivity["runs"]; serverTime: string | null; moreRunning: number }> {
+  const activity = await getJson<Partial<OmoActivity>>(machinePath(machineId, `pane/omo-tasks?pane_id=${encodeURIComponent(paneId)}`), signal ? { signal } : undefined);
   // a bridge from before workflows answers tasks only; one from before the running list was cut, every running one
   return { tasks: activity.tasks ?? [], runs: activity.runs ?? [], serverTime: activity.server_time ?? null, moreRunning: typeof activity.more_running === "number" && activity.more_running > 0 ? activity.more_running : 0 };
 }
@@ -875,8 +914,8 @@ export async function fetchPaneBackgroundAgent(paneId: string, agentId: string, 
 }
 
 /** GET /api/pane/plan: the plan the pane's Claude Code or Codex session keeps, and that PC's clock. */
-export async function fetchPanePlan(paneId: string, machineId = "local"): Promise<{ steps: PlanStep[] | null; serverTime: string | null }> {
-  const answer = await getJson<Partial<PanePlan>>(machinePath(machineId, `pane/plan?pane_id=${encodeURIComponent(paneId)}`));
+export async function fetchPanePlan(paneId: string, machineId = "local", signal?: AbortSignal): Promise<{ steps: PlanStep[] | null; serverTime: string | null }> {
+  const answer = await getJson<Partial<PanePlan>>(machinePath(machineId, `pane/plan?pane_id=${encodeURIComponent(paneId)}`), signal ? { signal } : undefined);
   return { steps: answer.plan?.steps ?? null, serverTime: answer.server_time ?? null };
 }
 
@@ -993,4 +1032,11 @@ export async function saveVoiceConfig(update: VoiceConfigUpdate): Promise<VoiceS
   const response = await fetch("/api/voice/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(update) });
   if (!response.ok) throw await errorFrom("/api/voice/config", response);
   return (await response.json()) as VoiceStatus;
+}
+
+/** A message-bound fork, created once per request_id on the selected computer. */
+export async function forkConversation(request: import("../../shared/protocol.ts").ConversationForkRequest, machineId = "local"): Promise<import("../../shared/protocol.ts").ConversationForkResponse> {
+  const response = await sendJson(machinePath(machineId, "pane/conversation/fork"), "POST", request);
+  if (!response.ok) throw await errorFrom("pane/conversation/fork", response);
+  return response.json();
 }

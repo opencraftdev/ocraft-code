@@ -1,3 +1,4 @@
+import { CONVERSATION_FORK_PATH, handleConversationFork } from "./conversation-fork.ts";
 import "./adopt-legacy-env.ts";
 import { handleWorkspaceRequest } from "./workspace-routes.ts";
 import { connectionData, createCore, type SocketData } from "./core/index.ts";
@@ -579,6 +580,8 @@ export function createServer(
 
       const pluginResponse = await handlePluginRequest(request, url, pathname, options);
       if (pluginResponse) return pluginResponse;
+
+      if (pathname === CONVERSATION_FORK_PATH) return handleConversationFork(request, { readOnly, codexHome: options.codexHome, holdOpen: seconds => bunServer.timeout(request, seconds) });
 
       const paneResponse = await handlePaneRequest(request, url, pathname, options);
       if (paneResponse) return paneResponse;

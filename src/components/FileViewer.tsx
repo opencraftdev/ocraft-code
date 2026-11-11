@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
-import { Braces, Check, Code, Copy, Download, Ellipsis, ExternalLink, Link2, Maximize2, PanelRight, TriangleAlert, X } from "lucide-react";
+import { Braces, Check, Code, Copy, Download, Ellipsis, ExternalLink, FolderOpen, Link2, Maximize2, PanelRight, TriangleAlert, X } from "lucide-react";
 
 import "./FileViewer.css";
 import { DirectoryBrowser } from "./DirectoryBrowser.tsx";
@@ -80,6 +80,7 @@ export interface FileViewerProps {
   panelStart?: ReactNode;
   onKind?: (presentation: FilePresentation) => void;
   onTogglePresentation?: () => void;
+  onBrowseFiles?: () => void;
 }
 
 /**
@@ -144,7 +145,7 @@ function selectSource(element: HTMLElement): void {
  * A file an agent wrote, opened in the browser: images, video and audio (streamed, so they
  * play and seek at once), PDFs, HTML pages, and the start of a text file (markdown drawn, its images read through the file endpoint). Anything can be downloaded.
  */
-export function FileViewer({ path: asked, paneId, onClose, onOpen, keyboardActive = true, page = false, docked = false, panelStart, onKind, onTogglePresentation }: FileViewerProps) {
+export function FileViewer({ path: asked, paneId, onClose, onOpen, keyboardActive = true, page = false, docked = false, panelStart, onKind, onTogglePresentation, onBrowseFiles }: FileViewerProps) {
   const t = useT();
   const locale = useLocale();
   const { fetchFileInfo, fileUrl, fetchDirectories } = useMachineApi();
@@ -485,6 +486,7 @@ export function FileViewer({ path: asked, paneId, onClose, onOpen, keyboardActiv
   // do; it never stacks, since the panel is never as narrow as a phone.
   const header = docked
     ? <header className="file-viewer-header file-viewer-header-docked">
+      {onBrowseFiles && <button type="button" className="icon-button file-viewer-action" aria-label={t("Browse files")} title={t("Browse files")} onClick={onBrowseFiles}><FolderOpen aria-hidden="true" /></button>}
       <FileGlyph name={info?.name ?? shownPath} className="file-viewer-glyph" />
       {/* a long name is cut inside its stem, so its type stays in view */}
       <h2 className="file-viewer-name"><span className="file-viewer-stem">{stem}</span>{extension}</h2>

@@ -1,45 +1,16 @@
-/* Conversations follow projects without a dead band. Both lists can scroll independently. */
+/* Agents follow projects in the sidebar's shared scrolling list. */
 .agents-sidebar {
   display: flex;
-  flex: 0 1 auto;
   flex-direction: column;
   min-height: 0;
-  max-height: 50%;
   padding: var(--space-4) var(--side-gutter) var(--space-2);
-}
-
-.agents-sidebar.is-collapsed,
-.agents-sidebar.is-empty { flex: 0 0 auto; }
-
-/* A visible Agents list fills the space released by folded PC groups, up to its existing cap. */
-.sidebar-shell:not(:has(.machine-list .machine-workspaces)):has(.agents-sidebar:not(.is-collapsed):not(.is-empty)) .agents-sidebar {
-  flex: 1 1 auto;
 }
 
 /* positioned: a row's visually hidden label is absolute, and must not size the page instead */
 .agent-list-contents {
   position: relative;
-  flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scroll-padding-bottom: var(--space-4);
 }
-
-.agents-sidebar.is-empty .agent-list-contents { flex: 0 0 auto; }
-
-/* a list that is cut fades out; at the end of its scroll the fade lies over its own spare space */
-.agent-list-contents::after {
-  content: "";
-  position: sticky;
-  bottom: 0;
-  display: block;
-  height: var(--space-4);
-  background: linear-gradient(transparent, var(--sidebar-surface));
-  pointer-events: none;
-}
-
-.agents-sidebar.is-empty .agent-list-contents::after { display: none; }
 
 .agent-section-toggle {
   flex: 0 0 auto;

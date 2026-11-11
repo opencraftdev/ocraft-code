@@ -1,3 +1,4 @@
+import { markForkPoint, copyForkPoints } from "./conversation-fork-points.ts";
 import type { ConversationPart, ConversationTurn } from "../shared/protocol.ts";
 import { invokedSkill } from "./skill-activity.ts";
 import { claudeCommandEcho } from "./skill-invocations/claude.ts";
@@ -314,6 +315,7 @@ function claudeTranscriptParser(options: ClaudeTranscriptOptions, state: ClaudeP
       if (index !== -1) turns.splice(index, 1);
     }
     turns.push(turn);
+    markForkPoint(turn, "claude", entry, entry.uuid);
     state.lastPrompt = { turn, parent: entry.parentUuid, answered: false };
   };
   const markPromptAnswered = (): void => {
@@ -449,6 +451,7 @@ function claudeTranscriptParser(options: ClaudeTranscriptOptions, state: ClaudeP
     if (entry.type === "assistant" && Array.isArray(content)) {
       markPromptAnswered();
       const turn = assistantTurn(entry.timestamp);
+      markForkPoint(turn, "claude", entry, entry.uuid);
       // an entry that names no stop reason is still at work when it calls a tool
       const stop = entry.message?.stop_reason;
       state.completed = stop === "end_turn";
@@ -496,7 +499,11 @@ function claudeTranscriptParser(options: ClaudeTranscriptOptions, state: ClaudeP
       } catch {
         continue; // a torn tail line while Claude is mid-append
       }
-      if (entry !== null && typeof entry === "object") fold(entry);
+      if (entry !== null && typeof entry === "object") {
+        fold(entry);
+        const last = turns.at(-1);
+        if (entry.type === "user" && last?.role === "assistant" && last.end_ts === entry.timestamp) markForkPoint(last, "claude", entry, entry.uuid);
+      }
     }
   };
   return {
@@ -506,10 +513,12 @@ function claudeTranscriptParser(options: ClaudeTranscriptOptions, state: ClaudeP
       // Clone the whole graph so pending tools and lastPrompt still refer to the cloned turns.
       if (tail.trim()) {
         const preview = structuredClone(state);
+        copyForkPoints(state.turns, preview.turns);
         claudeTranscriptParser(options, preview).write(tail);
         return preview.turns.filter((turn) => turn.parts.length > 0);
       }
-      return structuredClone(turns.filter((turn) => turn.parts.length > 0));
+      const visible = turns.filter(turn => turn.parts.length > 0);
+      const detached = structuredClone(visible); copyForkPoints(visible, detached); return detached;
     },
   };
 }

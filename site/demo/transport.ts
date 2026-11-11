@@ -12,7 +12,7 @@
  * one notice instead of a TUI, and Claude Code's and omp's draw their empty input row under it (and
  * the screen a few terminal commands open over it, site/demo/agentScreens.ts). A message sent from
  * a chat gets a demo answer.
- * What does not: files, images, push and remote PCs, which need a real machine.
+ * Files are small fictional source fixtures. Images, push and remote PCs need a real machine.
  */
 import type { AgentIntegration, AgentStatus, CommandForm, CommandOutcome, ConversationTurn, DevicePairedEvent, DevicesRevokedAll, HealthAuth, IntegrationsResponse, Machine, MachineEvent, OmoActivity, OmoTask, PairedDevice, PairingCode, PaneBackgroundAgentDetail, PaneDirection, PaneFindMatch, PaneFindRequest, PanePlan, PaneResized, PaneSplit, PaneSwapped, PaneZoomed, PendingMessage, PlanStep, PluginActionResult, PluginActions, PluginActionsResponse, PortalStatus, SecuritySummary, ServerMessage, SessionSnapshot, SlashCommand, TabMoved, TabMovedToWorkspace, UsageReport, WorkspaceCreated, WorkspaceInfo, WorktreeEntry, WorktreeListing, WorktreeOpened, WorktreeRemoved } from "../../shared/protocol.ts";
 import type { PushSubscriptionStatus, RepoBranchComparison, RepoDiffFile, RepoDiffFileList, RepoDiffFilePatch, RepoDiffRefs, RepoDiffRepository, RepoDiffScope, SessionHistoryAgent, SessionHistoryResponse, SessionResumeResponse } from "../../shared/protocol.ts";
@@ -28,12 +28,14 @@ import { rollupStatus } from "../../src/lib/status.ts";
 import { movedTabOrder } from "../../src/lib/tabOrder.ts";
 import { agentSkillRows, CHATS, DEMO_PUSH, PROMPT, SESSION_HISTORY_AGENTS, sessionHistoryRows, SPECS, type DemoSpec } from "./fixtures.ts";
 import { DemoHistory } from "./history.ts";
+import { demoDirectory, demoFilePath, demoSourceFile } from "./files.ts";
 import { screenAgent, screenCommand, screenFrame } from "./agentScreens.ts";
 import machinesFixture from "./fixtures/machines.json";
 import agentsFixture from "./fixtures/agents.json";
 import commandsFixture from "./fixtures/commands.json";
 import panesFixture from "./fixtures/panes.json";
 import terminalFixture from "./fixtures/terminal.json";
+import agentRunFixture from "./fixtures/agent-run.json";
 
 /**
  * The fictional access facts the Phone & devices page shows, picked by `?demo_security=` when the
@@ -94,6 +96,7 @@ for (const machine of machines) if (machine.snapshot) {
 }
 /** pane id -> fixture key ("api", "web", …) */
 const keyOfPane = new Map<string, string>(Object.entries(panesFixture as Record<string, string>).map(([key, paneId]) => [paneId, key]));
+const demoForks = new Map<string, { point: string; result: { workspace_id: string; pane_id: string; session_id: string; agent_started: true } }>();
 const chats = new Map<string, { turns: ConversationTurn[]; metadata: { model: string; reasoning_effort: string } }>(
   Object.entries(CHATS).map(([key, chat]) => [key, structuredClone(chat)]),
 );
@@ -1327,6 +1330,25 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
     return json({ workspace_id: made.workspace_id, pane_id: made.pane_id, already_open: false, path: checkout.path, branch: checkout.branch, ...(agent ? { agent_started: made.agent_started } : {}) } satisfies WorktreeOpened);
   }
 
+  if (path === "/api/pane/conversation/fork") {
+    if (method !== "POST") return error("method_not_allowed", "use POST", 400);
+    const body = await bodyOf(init, input) as { pane_id: string; fork_ref: string; request_id: string };
+    const source = paneOf(body.pane_id), chat = chats.get(keyOfPane.get(body.pane_id) ?? "");
+    const prefix = `demo-fork:${body.pane_id}:`;
+    const point = typeof body.fork_ref === "string" && body.fork_ref.startsWith(prefix) ? Number(body.fork_ref.slice(prefix.length)) : NaN;
+    if (!source || !chat || !["claude", "codex"].includes(agentOf(body.pane_id)) || !Number.isInteger(point) || point < 0 || point >= chat.turns.length) return error("fork_stale", "Refresh the conversation before forking", 409);
+    const previous = demoForks.get(body.request_id);
+    if (previous) return previous.point === body.fork_ref ? json(previous.result) : error("invalid_fork", "request ID already used", 400);
+    const response = await route(new URL("/api/tab/create", url), "POST", { method: "POST", body: JSON.stringify({ workspace_id: source.workspace_id, label: "Fork", agent: { kind: agentOf(body.pane_id) } }) }, input);
+    if (!response.ok) return response;
+    const created = await response.json() as { pane_id: string; workspace_id: string };
+    chats.set(created.pane_id, { turns: structuredClone(chat.turns.slice(0, point + 1)), metadata: structuredClone(chat.metadata) });
+    const result = { ...created, session_id: crypto.randomUUID(), agent_started: true as const };
+    demoForks.set(body.request_id, { point: body.fork_ref, result });
+    while (demoForks.size > 32) demoForks.delete(demoForks.keys().next().value!);
+    return json(result);
+  }
+
   if (path === "/api/pane/conversation") {
     const key = keyOfPane.get(paneId);
     const chat = key ? chats.get(key) : undefined;
@@ -1334,7 +1356,7 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
     if (!chat) return json({ source: "scrollback", turns: [] });
     const source = agent === "claude" ? "claude-transcript" : agent === "codex" ? "codex-transcript" : agent === "gjc" ? "gjc-transcript" : agent === "omo" ? "omo-transcript" : agent === "pi" ? "pi-transcript" : agent === "cmd" ? "cmd-transcript" : agent === "devin" ? "devin-transcript" : agent === "hermes" ? "hermes-transcript" : "omp-transcript";
     // These demo fixtures have no native Grok/Agy lifecycle: omit optional activity.
-    return json({ source, turns: chat.turns, metadata: chat.metadata, cursor: null });
+    return json({ source, turns: chat.turns.map((turn, index) => ["claude", "codex"].includes(agent ?? "") && turn.parts.some(part => part.kind === "text") ? { ...turn, fork_ref: `demo-fork:${paneId}:${index}` } : turn), metadata: chat.metadata, cursor: null });
   }
   if (path === "/api/pane/plan") {
     if (method !== "GET") return error("method_not_allowed", "use GET", 400);
@@ -1774,8 +1796,10 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
     return json({ path: `${parent.replace(/\/$/, "")}/${name}` }, 201);
   }
   if (path === "/api/workspace/directories") {
-    const dir = query.get("path") || "/home/demo";
-    return json({ path: dir, parent: dir === "/" ? null : dir.replace(/\/[^/]*$/, "") || "/", home: "/home/demo", directories: dir === "/home/demo" ? ["checkout-api", "cli-tools"] : [], truncated: false, files: [] });
+    const roots = [...new Set(snapshot().panes.flatMap(pane => pane.cwd ? [pane.cwd] : []))];
+    const dir = demoFilePath(query.get("path") || "/home/demo");
+    const listing = demoDirectory(dir, roots, query.get("hidden") === "1", query.get("files") === "1");
+    return listing ? json(listing) : error("invalid_cwd", "this path is a file", 400);
   }
   if (path === "/api/workspace/create") {
     const body = await bodyOf(init, input);
@@ -1873,6 +1897,13 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
     const entry = changed.find((candidate) => candidate.file.path === query.get("path"));
     if (!entry) return error("not_found", "nothing changed at that path in this comparison", 404);
     return json({ ...shared, file: entry.file, patch: entry.patch, unavailable: entry.patch === null ? "binary" : null, truncated: false, limits: { max_patch_bytes: DEMO_DIFF_LIMITS.max_patch_bytes, context_lines: DEMO_DIFF_LIMITS.context_lines } } satisfies RepoDiffFilePatch);
+  }
+  if (method === "GET" && path === "/api/fs/file" && query.get("pane_id") === panesFixture.api && query.get("path") === ".dagr/run.json") return json(agentRunFixture);
+  if (method === "GET" && (path === "/api/fs/stat" || path === "/api/fs/file")) {
+    const panes = snapshot().panes;
+    const cwd = panes.find(pane => pane.pane_id === query.get("pane_id"))?.cwd ?? "/home/demo";
+    const file = demoSourceFile(demoFilePath(query.get("path") ?? "", cwd), [...new Set(panes.flatMap(pane => pane.cwd ? [pane.cwd] : []))]);
+    if (file) return path === "/api/fs/stat" ? json(file.info) : new Response(file.text, { headers: { "content-type": `${file.info.mime}; charset=utf-8`, "content-length": String(file.info.size) } });
   }
   if (path.startsWith("/api/fs/")) return error("not_found", "the demo has no files to open", 404);
   return error("demo", `${method} ${path} is not part of the demo`, 404);

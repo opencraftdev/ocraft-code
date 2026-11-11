@@ -1,3 +1,4 @@
+import { forkableTurns } from "./conversation-fork-points.ts";
 /**
  * The pane routes: what the browser reads from a pane (its screen, scroll, selection, commands,
  * files and native conversation) and what it does to one (type, rename, close, split, zoom, swap,
@@ -265,7 +266,7 @@ export async function handlePaneRequest(request: Request, url: URL, pathname: st
       const etag = `W/"${version}"`;
       const headers = { etag, "cache-control": "no-store" };
       if (request.headers.get("if-none-match")?.replace(/^W\//, "") === etag.slice(2)) return new Response(null, { status: 304, headers });
-      return jsonResponse(conversation, 200, headers);
+      return jsonResponse({ ...conversation, turns: forkableTurns(paneId, conversation.history_id, conversation.turns) }, 200, headers);
     } catch (error) {
       if (error instanceof HistoryChanged || error instanceof DevinHistoryChanged) return jsonResponse({ error: { code: "history_changed", message: error.message } }, 409);
       if (error instanceof ConversationReadPending) return jsonResponse({ error: { code: "conversation_read_pending", message: error.message } }, 503, { "cache-control": "no-store" });

@@ -7,3 +7,29 @@
 .files-dialog .modal-body {
   min-height: calc(var(--control-h) * 8);
 }
+
+/* The desktop Files surface shares the viewer's column, with no scrim over the chat. */
+.files-browser-docked {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+.files-browser-docked .modal-header {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.files-browser-docked .modal-title { flex: 1; font-size: var(--fs-sm); }
+.files-browser-docked .files-dialog-tabs { margin-left: auto; }
+.files-browser-docked .modal-body { display: flex; flex: 1; min-height: 0; padding: 0; }
+.files-browser-docked .modal-body > div:not([hidden]) { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.files-browser-docked .dir-browser { flex: 1; min-height: 0; border: 0; border-radius: 0; background: transparent; }
+.files-browser-docked .dir-browser-list { flex: 1; min-height: 0; max-height: none; }
+.files-browser-docked .dir-browser-bar,
+.files-browser-docked .dir-browser-footer { flex: none; }
+.files-browser-docked .repo-changes { min-height: 0; border: 0; border-radius: 0; background: transparent; }
+.files-browser-docked .repo-changes-list { min-height: 0; max-height: none; }

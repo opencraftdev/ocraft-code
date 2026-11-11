@@ -1,0 +1,18 @@
+{
+  "dagr": 3,
+  "run": { "id": "demo-payment-review", "title": "Payments: build, review, verify" },
+  "tasks": [
+    { "id": "research", "title": "Trace payment retries", "kind": "impl", "owner": "Explorer", "state": "done", "deps": [],
+      "attempts": [{ "id": "research-a1", "n": 1, "actor": "Explorer", "model": "Opus 5.5", "state": "done", "cause": { "type": "initial" }, "outcome": { "result": "done", "evidence": "reported" } }] },
+    { "id": "build", "title": "Implement replay protection", "kind": "impl", "owner": "Builder", "state": "working", "deps": ["research"],
+      "attempts": [
+        { "id": "build-a1", "n": 1, "actor": "Builder · attempt 1", "model": "Opus 5.5", "state": "done", "cause": { "type": "initial" }, "outcome": { "result": "done", "evidence": "reported" } },
+        { "id": "build-a2", "n": 2, "actor": "Builder · attempt 2", "model": "Opus 5.5", "state": "working", "cause": { "type": "sent_back", "ref": "review-a1", "reason": "Handle a reused key with a different request body." }, "progress": { "done": 2, "total": 3 } }
+      ],
+      "policy": { "futures": [{ "on": "pass", "ref": "review" }, { "on": "fail", "node": { "id": "rework", "title": "Rework after review", "actor": "Builder", "attribution": "planned" }, "loop_back": true }] } },
+    { "id": "review", "title": "Review idempotency edge cases", "kind": "review", "owner": "Reviewer", "state": "blocked", "deps": ["build"], "note": "Waiting for the builder's second attempt.",
+      "attempts": [{ "id": "review-a1", "n": 1, "actor": "Reviewer · attempt 1", "model": "GPT-5.5", "state": "failed", "cause": { "type": "initial" }, "outcome": { "result": "failed", "evidence": "verified", "reason": "A changed request body needs a conflict response." } }] },
+    { "id": "tests", "title": "Run replay regression tests", "kind": "test", "owner": "Test runner", "state": "queued", "deps": ["build"], "attempts": [] },
+    { "id": "gate", "title": "Ready for your review", "kind": "gate", "owner": "Main agent", "state": "queued", "deps": ["review", "tests"], "inputs": ["review", "tests"], "attempts": [] }
+  ]
+}

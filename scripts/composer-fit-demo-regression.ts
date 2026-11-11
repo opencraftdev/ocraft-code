@@ -573,8 +573,8 @@ try {
       });
       // Typography is applied by SettingsProvider after the render. At this fixed card width,
       // the larger interface font must step effort out without needing a viewport resize.
-      // 1035px minus the 280px sidebar keeps the same 755px pane this fixture exercises.
-      await withCard(browser, 1035, { agent: "codex", model: LONG_MODEL }, async (page) => {
+      // 1315px minus the 248px chat sidebar and 312px pinned rail keeps this fixture at 755px.
+      await withCard(browser, 1315, { agent: "codex", model: LONG_MODEL }, async (page) => {
         const before = await measure(page);
         assert.equal(before.draw, "full");
         assert.equal(before.model?.clipped, false);
@@ -1082,7 +1082,8 @@ try {
             assert.ok(edited.gap <= 1 && Math.abs(edited.spacing - initial.spacing) <= 1, `${what}: the multiline draft keeps bottom spacing without a delayed repair: ${JSON.stringify(edited)}`);
           };
           const wrapped = "A draft that wraps onto the next line. ".repeat(width === 390 ? 12 : 48);
-          for (const [kind, text] of [["soft-wrapped", wrapped], ["explicit-newline", "First line\nSecond line\nThird line"]] as const) {
+          // Five lines exceed the desktop's two-line minimum as well as the phone's floor.
+          for (const [kind, text] of [["soft-wrapped", wrapped], ["explicit-newline", "First line\nSecond line\nThird line\nFourth line\nFifth line"]] as const) {
             await box.fill(text);
             await page.waitForFunction((height) => document.querySelector(".composer-text")!.clientHeight > height, initial.height);
             await atBottom();

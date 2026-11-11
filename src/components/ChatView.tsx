@@ -1,3 +1,5 @@
+import { ForkConversationButton, type ConversationForkAction } from "./ForkConversationButton.tsx";
+import { useConversationFork } from "../lib/useConversationFork.ts";
 import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -174,7 +176,8 @@ export interface ChatViewProps {
   ended: boolean;
   agent: string | null;
   agentStatus?: AgentStatus;
-  onMetadata?: (paneId: string, metadata: ConversationMetadata | null) => void;
+  onForked?: (result: import("../../shared/protocol.ts").ConversationForkResponse) => void;
+  onMetadata?: (paneId: string, metadata: ConversationMetadata | null, conversation?: Pick<ConversationResponse, "turns" | "history_id">) => void;
   /** what the last read says of the conversation, for the composer's greeting; null while nothing is known (loading, a failed read, the chat gone) */
   onRead?: (paneId: string, read: ChatRead | null) => void;
   /** the composer shows its greeting: the chat's own "nothing yet" line stays out */
@@ -942,6 +945,7 @@ function OutcomeRow({ outcome, actions, skills = null }: { outcome: CommandOutco
 }
 
 interface TurnProps {
+  forkAction?: ConversationForkAction;
   paneId: string;
   turn: ConversationTurn;
   /** the turn's stable row in the timeline (ChatRow.key): what its folded todo runs are named by */
@@ -1031,7 +1035,7 @@ function noticeLabel(t: ReturnType<typeof useT>, notice: Extract<ConversationPar
 }
 
 // a turn that did not change keeps its object across polls: skip re-rendering it
-export const Turn = memo(function Turn({ paneId, turn, rowKey, live, waiting, showThinking, skills = null, userSkills = null, outcome = null, outcomeActions = null, onRewindInTerminal = null }: TurnProps) {
+export const Turn = memo(function Turn({ paneId, turn, rowKey, live, waiting, showThinking, skills = null, userSkills = null, outcome = null, outcomeActions = null, onRewindInTerminal = null, forkAction }: TurnProps) {
   const t = useT();
   const memory = useContext(ChatRowMemoryContext);
   // what the drawn runs were named, by part index; the row's memory takes it once the turn is drawn
@@ -1100,6 +1104,7 @@ export const Turn = memo(function Turn({ paneId, turn, rowKey, live, waiting, sh
       <div className="chat-user-row">
         {text.length > 0 && <UserMessage text={text} skills={userSkills} />}
         <div className="chat-turn-meta">{time}{text.length > 0 && <CopyButton text={text} label={t("Copy message")} onResult={copied} />}
+          {text.length > 0 && forkAction && <ForkConversationButton point={turn.fork_ref} action={forkAction} />}
           {text.length > 0 && onRewindInTerminal !== null && (
             <button type="button" className="icon-button chat-copy chat-rewind" aria-label={t("Rewind in terminal")} title={t("Rewind in terminal")} onClick={onRewindInTerminal}><Undo2 aria-hidden="true" /></button>
           )}
@@ -1147,6 +1152,7 @@ export const Turn = memo(function Turn({ paneId, turn, rowKey, live, waiting, sh
       {/* a mouse reads one copy glyph and the words "Plain text"; touch reads the two formats */}
       <CopyButton className="chat-meta-btn" text={answerText} label={t("Copy as markdown")} onResult={copied}><span className="chat-meta-fmt">MD</span></CopyButton>
       <CopyButton className="chat-meta-btn chat-meta-plain" text={plainText(answerText)} label={t("Copy as plain text")} onResult={copied}><span className="chat-meta-fmt">TXT</span><span className="chat-meta-word">{t("Plain text")}</span></CopyButton>
+      {forkAction && <ForkConversationButton point={turn.fork_ref} action={forkAction} live={live || turn.parts.some(part => part.kind === "tool" && part.state === "pending")} />}
       {time}
     </div>}
     {copyError}
@@ -1213,7 +1219,7 @@ function TerminalFallback({ paneId, visible }: { paneId: string; visible: boolea
 }
 
 // the app re-renders on every pane-status and poll; an unchanged transcript sits those out
-export const ChatView = memo(function ChatView({ paneId, presentationKey, finishEpoch, finishId, active = true, visible: paneVisible = true, pageScroll, refreshKey, invalidationKey = 0, onConversationWatch, conversationPushes = false, onTerminalOutput, sentKey = 0, localSend, navigation, connected, ended, agent, agentStatus, onMetadata, onRead, greeted = false, onPrompt, onSuggestion, onRestored, promptRefreshKey = 0, pendingAnswer = null, onPendingAnswerDone, promptDock = null, onPromptAnswered, title = null, onOpenTerminal, covered = false, peek = null, onCommandScreenClosed, onOutcomes, interactive = false, onRewindInTerminal, cwd = null }: ChatViewProps) {
+export const ChatView = memo(function ChatView({ paneId, presentationKey, finishEpoch, finishId, active = true, visible: paneVisible = true, pageScroll, refreshKey, invalidationKey = 0, onConversationWatch, conversationPushes = false, onTerminalOutput, sentKey = 0, localSend, navigation, connected, ended, agent, agentStatus, onForked, onMetadata, onRead, greeted = false, onPrompt, onSuggestion, onRestored, promptRefreshKey = 0, pendingAnswer = null, onPendingAnswerDone, promptDock = null, onPromptAnswered, title = null, onOpenTerminal, covered = false, peek = null, onCommandScreenClosed, onOutcomes, interactive = false, onRewindInTerminal, cwd = null }: ChatViewProps) {
   const t = useT();
   const { fetchPaneConversation, peekPaneConversation, fetchPanePromptState, fetchPaneTranscript } = useMachineApi();
   const { settings } = useSettings();
@@ -1226,6 +1232,7 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   /** the answer last laid out: an unchanged poll (a 304) hands back this very object */
   const lastAnswer = useRef<ConversationResponse | null>(null);
   const [conversationRefresh] = useState(() => new ConversationRefresh());
+  const forkOffered = interactive && connected && !ended && ["claude", "codex"].includes(agent ?? "") && onForked !== undefined;
   const onMetadataRef = useRef(onMetadata);
   onMetadataRef.current = onMetadata;
   const [state, setState] = useState<ChatState>(EMPTY_STATE);
@@ -1333,6 +1340,7 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   const olderGeneration = useRef(0);
   const history = useRef<string | undefined>(undefined);
   const [historyId, setHistoryId] = useState<string | undefined>(undefined);
+  const forkAction = useConversationFork(paneId, active && paneVisible, onForked, historyId);
   const shownPane = useRef(paneId);
   const prependAnchor = useRef<{ key: string; offset: number } | null>(null);
   /** where the reader left this pane before (lib/chatScrollMemory.ts), until the first answer puts it back */
@@ -1367,7 +1375,7 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   const showAnswerDetails = (conversation: ConversationResponse): void => {
     if (heldFrom.current === null) setOlderCursor(conversation.source === "scrollback" ? undefined : conversation.cursor);
     // a scrollback stand-in carries metadata only as the agent's own status line states it
-    onMetadataRef.current?.(paneId, conversation.metadata ?? null);
+    onMetadataRef.current?.(paneId, conversation.metadata ?? null, conversation);
     setScreenRead(conversation.screen === true);
     setAbandoned(conversation.abandoned ?? null);
   };
@@ -2198,9 +2206,9 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
     const live = isLiveWorkTurn(turn, row.index === shownTurns.length - 1, workStatus, finishedBeforeSend);
     return <RenderBoundary resetKey={turnRevision(turn, true)} fallback={() => <p className="chat-inline-state chat-inline-error" data-pane-content-error>{t("This message can't be shown here. The terminal has it.")}</p>}>
       <Turn paneId={paneId} turn={turn} rowKey={row.key} live={live} waiting={isWaitingWorkTurn(live, agentStatus)} showThinking={settings.showThinking} skills={skillMatcher} userSkills={skillMatcher} outcome={row.outcome} outcomeActions={outcomeActions}
-        onRewindInTerminal={turn.role === "user" ? rewindInTerminal : null} />
+        forkAction={forkOffered ? forkAction : undefined} onRewindInTerminal={turn.role === "user" ? rewindInTerminal : null} />
     </RenderBoundary>;
-  }, [shownTurns.length, workStatus, finishedBeforeSend, t, paneId, agentStatus, settings.showThinking, skillMatcher, outcomeActions, rewindInTerminal]);
+  }, [shownTurns.length, workStatus, finishedBeforeSend, t, paneId, agentStatus, settings.showThinking, skillMatcher, outcomeActions, rewindInTerminal, forkOffered, forkAction]);
   // displayPaneTitle falls back to the pane id for a pane with nothing else to call it
   const shownTitle = title?.trim() ?? "";
   const logLabel = shownTitle !== "" && shownTitle !== paneId ? t("conversation of {pane}", { pane: shownTitle }) : t("Conversation");

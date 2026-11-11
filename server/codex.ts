@@ -1,3 +1,4 @@
+import { markForkPoint, copyForkPoints } from "./conversation-fork-points.ts";
 /** Native Codex rollouts contain both display events and model context. Only
  * conversation records belong in chat; developer prompts and terminal chrome do not. */
 import { Database } from "bun:sqlite";
@@ -235,6 +236,7 @@ export function createCodexTranscriptParser(state: CodexParseState = { turns: []
 
   const write = (text: string): void => {
     for (const entry of entries(text)) {
+      try {
       const payload = record(entry.payload);
       const ts = string(entry.timestamp);
       if (entry.type === "event_msg") {
@@ -336,6 +338,10 @@ export function createCodexTranscriptParser(state: CodexParseState = { turns: []
         const turn = turns.at(-1);
         if (turn?.role === "assistant" && ts) turn.end_ts = ts;
       }
+      } finally {
+        const payload = record(entry.payload), last = turns.at(-1);
+        if (entry.type === "response_item" && last && ((payload.type === "message" && payload.role === last.role) || (last.role === "assistant" && last.end_ts === string(entry.timestamp)))) markForkPoint(last, "codex", entry);
+      }
     }
   };
   return {
@@ -344,11 +350,13 @@ export function createCodexTranscriptParser(state: CodexParseState = { turns: []
       // A valid final line without a newline is visible now, but is not committed:
       // the writer can still extend it before the next poll.
       if (tail.trim()) {
-        const preview = createCodexTranscriptParser(structuredClone(state));
+        const cloned = structuredClone(state); copyForkPoints(state.turns, cloned.turns);
+        const preview = createCodexTranscriptParser(cloned);
         preview.write(tail);
         return preview.snapshot();
       }
-      return structuredClone(turns.filter((turn) => turn.parts.length > 0));
+      const visible = turns.filter(turn => turn.parts.length > 0);
+      const detached = structuredClone(visible); copyForkPoints(visible, detached); return detached;
     },
   };
 }

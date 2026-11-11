@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Ellipsis, FolderOpen, Link, Menu, MessageSquare, PanelLeft, Search, SquareTerminal, X } from "lucide-react";
+import { Bell, Ellipsis, FolderOpen, Link, Menu, MessageSquare, PanelLeft, PanelRight, Search, SquareTerminal, X } from "lucide-react";
 
 import type { HerdrPane } from "../shared/protocol.ts";
 import { authenticate, createTab, moveTabToWorkspace, pairDevice, shareSeen, signOut, splitPane, swapPaneWith, zoomPane } from "./lib/api.ts";
@@ -13,6 +13,10 @@ import { PANE_TABPANEL_ID, paneTabPanelLabel } from "./lib/paneRegion.ts";
 import { worktreeRepoName } from "./lib/composerStrip.ts";
 import { AccessGate } from "./components/AccessGate.tsx";
 import { AgentMark } from "./components/AgentMark.tsx";
+import { AgentPanel } from "./components/AgentPanel.tsx";
+import { WorkspaceFileDrawer } from "./components/WorkspaceFileDrawer.tsx";
+import { useAgentPanel } from "./lib/useAgentPanel.ts";
+import { conversationContextKey } from "./lib/conversationContext.ts";
 import { NewSessionDialog } from "./components/NewSessionDialog.tsx";
 import { SessionHistory } from "./components/SessionHistory.tsx";
 import { UnsentTextDialog } from "./components/UnsentText.tsx";
@@ -199,10 +203,11 @@ export function App() {
   const { renameRequest, requestRename, clearRenameRequest } = useRenameRequest(selectedMachineId, selectedPaneId);
   // the header's More menu: its button
   const [more, setMore] = useState<{ anchor: HTMLElement } | null>(null);
+  const { agentPanelOpen, setAgentPanelOpen, agentPanelTab, setAgentPanelTab, agentDrawerOpen, setAgentDrawerOpen, agentPanelToggle, closeAgentPanel } = useAgentPanel(conversationContextKey(selectedMachineId, snapshot?.panes.find(item => item.pane_id === selectedPaneId) ?? null, snapshot?.finish_epoch));
   const closeMore = useCallback(() => setMore(null), []);
   // the pane canvas's actions, for the phone's tab menu (TabStrip)
   const paneActionsRef = useRef<((target: HerdrPane) => RowMenuItem[]) | null>(null);
-  const { filesOpen, setFilesOpen, viewing, openFile, closeFile, releaseFile, diffViewing, openDiff, closeDiff, releaseDiff, presentation, fileDocked, webPage, setWebPage, openWebPage, reportFileKind, toggleFilePresentation, viewFile } = useFilePanels({ settings, filePanelAvailable, selectedPaneId, selectedMachineId });
+  const { filesOpen, setFilesOpen, filesTab, showWorkspaceFiles, openAgentView, closeAgentView, viewing, openFile, closeFile, releaseFile, diffViewing, openDiff, closeDiff, releaseDiff, presentation, fileDocked, webPage, setWebPage, openWebPage, reportFileKind, toggleFilePresentation, viewFile } = useFilePanels({ settings, filePanelAvailable, selectedPaneId, selectedMachineId, agentPanel: { setView: setAgentPanelTab, setOpen: setAgentDrawerOpen } });
   const { settingsOpen, setSettingsOpen, settingsLinkPage, setSettingsLinkPage, settingsLinkSection, settingsPage, settingsSection, setSettingsSection, closeSettings, onSettingsPage } = useSettingsDialog(initialLink);
   const { newSessionOpen, setNewSessionOpen, newPrefill, setNewPrefill, newFields, setNewFields, pendingCreate, newTab, setNewTab, sessionHistory, setSessionHistory } = useNewSessionState({ initialLink });
   const { connected, setConnected, connectedBefore, setConnectedBefore, paneLost, outputStopped, setOutputStopped } = useConnectionChip();
@@ -322,10 +327,10 @@ export function App() {
   const { dialogCover, contentReady } = usePaneCoverage({ contentKey });
   const paneInFront = useCallback(() => locked === false && linkLanded && pendingFile.current === null && pendingCreate.current === null
     && !drawerOpen && !settingsOpen && !newSessionOpen
-    && !filesOpen && !machineDialog && !paletteOpen && !diffViewing && !(viewing && !fileDocked)
+    && !(filesOpen && !filePanelAvailable) && !machineDialog && !paletteOpen && !diffViewing && !(viewing && !fileDocked)
     && !dialogCover && !paneCovered()
     && contentReady && paneContentPresented(contentKey),
-  [locked, linkLanded, drawerOpen, settingsOpen, newSessionOpen, filesOpen, machineDialog, paletteOpen, diffViewing, viewing, fileDocked, dialogCover, contentReady, contentKey]);
+  [locked, linkLanded, drawerOpen, settingsOpen, newSessionOpen, filesOpen, filePanelAvailable, machineDialog, paletteOpen, diffViewing, viewing, fileDocked, dialogCover, contentReady, contentKey]);
   // one source for the sidebar's two lists: live counters per PC and finishes looked at here
   const activity = useSidebarActivityState(machines, selectedMachineId, presentedPaneId, paneInFront, shareSeen);
 
@@ -483,7 +488,7 @@ export function App() {
       lock: canSignOut ? lock : null,
       enableNotifications: bellVisible && bell.run === enableNotifications ? () => void enableNotifications() : null,
       refresh: () => void load(),
-      openFiles: selectedPaneId !== null ? () => { setDrawerOpen(false); setFilesOpen(true); } : null,
+      openFiles: selectedPaneId !== null ? () => { setDrawerOpen(false); showWorkspaceFiles(); } : null,
       // herdr's layout calls on the selected pane (components/TabStrip.tsx has the same for the
       // tab's own menu): the new layout reaches every client as session-changed, so only a
       // refusal is left to say, and that is logged as other background failures are
@@ -548,7 +553,7 @@ export function App() {
     { id: "palette", label: t("Search panes and actions"), icon: Search, ...(paletteKeys ? { hint: paletteKeys } : {}), run: () => openPalette() },
     ...(selectedPane && !selectedPane.restore_error ? [{ id: "find", label: t("Find in terminal"), icon: Search, run: actions.openFind }] : []),
     // from 769px Files has its own button beside the lens switch; a phone keeps it here
-    ...(selectedPane && !wideScreen ? [{ id: "files", label: t("Browse files"), icon: FolderOpen, run: () => setFilesOpen(true) }] : []),
+    ...(selectedPane && !wideScreen ? [{ id: "files", label: t("Browse files"), icon: FolderOpen, run: () => showWorkspaceFiles() }] : []),
     // the address says where the app is (lib/deepLink.ts); a phone has no address bar to copy it from
     { id: "copy-link", label: t("Copy link"), icon: Link, run: () => void copyText(window.location.href).then((ok) => { if (ok) setHeaderNote("copied"); }) },
     ...(bellVisible ? [{ id: "alerts", label: t("Alerts"), hint: bell.state, checked: bell.on, title: bell.title, icon: Bell, run: () => void bell.run() }] : []),
@@ -584,8 +589,34 @@ export function App() {
   }
   if (locked) return <AccessGate reason={lockReason} initialCode={pairCode} onUnlocked={unlock} />;
 
+  const pinnedAgentPanel = chatShown && filePanelAvailable && Boolean(selectedPane?.agent);
+  const agentPanelShown = pinnedAgentPanel || (agentPanelOpen && !(filesOpen && filePanelAvailable) && !(viewing !== null && fileDocked) && webPage === null);
+  const filesBrowser = filesOpen && selectedPane && <FilesDialog key={`files:${selectedMachineId}:${filesTab}`} initialTab={filesTab} docked
+    panelStart={filePanelAvailable ? <FilePanelResizer width={filePanelWidth} onResize={setFilePanelWidth} /> : undefined}
+    start={selectedPane.foreground_cwd ?? selectedPane.cwd ?? ""} paneId={selectedPane.pane_id}
+    viewing={(viewing !== null && !fileDocked) || diffViewing !== null} keyboardActive={!settingsOpen && !paletteOpen}
+    onOpenFile={filePanelAvailable ? (path) => {
+      setFilesOpen(false);
+      openFile({ path, paneId: selectedPane.pane_id, machineId: selectedMachineId, presentation: "panel" });
+    } : viewFile}
+    onOpenDiff={(comparison, file) => openDiff({ machineId: selectedMachineId, paneId: selectedPane.pane_id, directory: selectedPane.foreground_cwd ?? selectedPane.cwd ?? null, ...comparison, path: file.path, oldPath: file.old_path })}
+    onBrowseFolders={(path) => actions.openPalette(folderQueryFor(path, null))}
+    onClose={() => setFilesOpen(false)} />;
+  const agentDetails = agentPanelShown && selectedPane?.agent && <MachineContext.Provider value={selectedMachineId}>
+    <AgentPanel key={JSON.stringify([selectedMachineId, selectedPane.pane_id, selectedPane.terminal_id, selectedPane.agent_session?.value, selectedMachine?.snapshot?.finish_epoch])} pane={selectedPane} panes={snapshot?.panes ?? []} title={selectedTitle ?? selectedPane.agent} machineName={selectedMachine?.name ?? selectedMachineId} workspaceName={selectedWorkspace?.label ?? selectedPane.workspace_id}
+      online={selectedMachine?.state === "connected"} watching={auth?.role === "watch"} tab={agentPanelTab} drawerOpen={agentDrawerOpen} onOpenView={openAgentView} onCloseView={closeAgentView} onClose={closeAgentPanel} pinned={pinnedAgentPanel}
+      contextKey={conversationContextKey(selectedMachineId, selectedPane, selectedMachine?.snapshot?.finish_epoch)}
+      onSelectPane={id => { closeAgentView(); selectPane(id); }} onBrowseFiles={showWorkspaceFiles} onOpenDiff={(comparison, file) => { showWorkspaceFiles("changes"); openDiff({ machineId: selectedMachineId, paneId: selectedPane.pane_id, directory: selectedPane.foreground_cwd ?? selectedPane.cwd ?? null, ...comparison, path: file.path, oldPath: file.old_path }); }} onNewAgent={() => actions.openNewTab()} />
+  </MachineContext.Provider>;
+  const fileSurface = filesBrowser
+    || (viewing !== null && fileDocked && !filesOpen ? <MachineContext.Provider value={viewing.machineId}>
+      <FileViewer key={viewing.path} docked panelStart={<FilePanelResizer width={filePanelWidth} onResize={setFilePanelWidth} />} path={viewing.path} paneId={viewing.paneId} onClose={closeFile} onOpen={(path) => openFile({ ...viewing, path, presentation })} onKind={reportFileKind} onTogglePresentation={toggleFilePresentation} onBrowseFiles={() => showWorkspaceFiles()} keyboardActive={!settingsOpen} />
+    </MachineContext.Provider> : null)
+    || (webPage !== null && filePanelAvailable && !filesOpen && !(viewing !== null && fileDocked)
+      ? <WebPanel key={webPage} url={webPage} onClose={() => setWebPage(null)} panelStart={<FilePanelResizer width={filePanelWidth} onResize={setFilePanelWidth} />} /> : null);
+
   return (
-    <MachineSessionsProvider machineIds={machines.map((machine) => machine.id)}><MachineContext.Provider value={selectedMachineId}><div className={`app${sidebarCollapsed ? " sidebar-collapsed" : ""}`} style={sidebarWidth === null && filePanelWidth === null ? undefined : {
+    <MachineSessionsProvider machineIds={machines.map((machine) => machine.id)}><MachineContext.Provider value={selectedMachineId}><div className={`app${chatShown ? " is-chat" : ""}${sidebarCollapsed ? " sidebar-collapsed" : ""}`} style={sidebarWidth === null && filePanelWidth === null ? undefined : {
       ...(sidebarWidth === null ? {} : { "--sidebar-user-w": `${sidebarWidth}px` }),
       ...(filePanelWidth === null ? {} : { "--file-panel-user-w": `${filePanelWidth}px` }),
     } as CSSProperties}>
@@ -661,12 +692,22 @@ export function App() {
           <>
             {/* opens Files, it is no third lens: set apart from the switch by a hairline */}
             <span className="header-divider" aria-hidden="true" />
-            <button type="button" className="icon-button header-files-button" aria-label={t("Browse files")} title={t("Browse files")} onClick={() => setFilesOpen(true)}>
+            <button type="button" className="icon-button header-files-button" aria-label={t("Browse files")} title={t("Browse files")} onClick={() => showWorkspaceFiles()}>
               <FolderOpen />
             </button>
           </>
         )}
         <div className="header-meta">
+          {selectedPane?.agent && <button ref={agentPanelToggle} type="button" className="icon-button" aria-label={t(pinnedAgentPanel ? "Workspace and agents" : agentPanelShown ? "Hide agent panel" : "Show agent panel")} title={t("Workspace and agents")} aria-expanded={agentPanelShown} aria-controls="agent-details-panel" onClick={() => {
+            if (pinnedAgentPanel) document.getElementById("agent-details-panel")?.focus({ preventScroll: true });
+            else if (agentPanelShown) { setAgentPanelOpen(false); closeAgentView(); }
+            else {
+              setFilesOpen(false);
+              setWebPage(null);
+              if (viewing !== null && fileDocked) closeFile();
+              setAgentPanelOpen(true);
+            }
+          }}><PanelRight aria-hidden="true" /></button>}
           <ConnectionChip
             connected={connected}
             word={connWord}
@@ -714,7 +755,7 @@ export function App() {
         )}
       </header>
 
-      <div className="app-body">
+      <div className="app-body" id="ovis-workspace">
         <aside id="workspace-drawer" className={`sidebar${drawerOpen ? " is-open" : ""}`}>
           {error && <div className="error-state" role="alert"><p>{error}</p><button className="btn" onClick={() => void load()}>{t("Retry")}</button></div>}
           {/* a sidebar that cannot be drawn leaves the panes working */}
@@ -839,6 +880,8 @@ export function App() {
                     onRecoverUnsent={(target) => openUnsent({ machineId, pane: target })}
                     renderPane={(item, itemActive, herdrSplit) => <OpenFileContext.Provider value={item ? (path) => openFile({ path, paneId: item.pane_id, machineId }) : null}>
                       <PaneTerminal
+                        onForked={created => { actions.agentStarted(machineId, created.pane_id); selectTarget(machineId, created.pane_id); void load(); }}
+                        contextKey={conversationContextKey(machineId, item, machine?.snapshot?.finish_epoch)}
                         presentationKey={paneContentKey(machine, item, item ? lensOf(item) : slotView)}
                         finishEpoch={machine?.snapshot?.finish_epoch}
                         finishId={item?.finish_id}
@@ -898,12 +941,9 @@ export function App() {
         </div>
         </WebPanelContext.Provider>
         </OpenFileContext.Provider>
-        {/* last in the row: the file beside the pane (from 980px), the pane column shrinks and its terminal refits */}
-        {viewing !== null && fileDocked && <MachineContext.Provider value={viewing.machineId}>
-          <FileViewer key={viewing.path} docked panelStart={<FilePanelResizer width={filePanelWidth} onResize={setFilePanelWidth} />} path={viewing.path} paneId={viewing.paneId} onClose={closeFile} onOpen={(path) => openFile({ ...viewing, path, presentation })} onKind={reportFileKind} onTogglePresentation={toggleFilePresentation} keyboardActive={!settingsOpen} />
-        </MachineContext.Provider>}
-        {webPage !== null && filePanelAvailable && !(viewing !== null && fileDocked) &&
-          <WebPanel key={webPage} url={webPage} onClose={() => setWebPage(null)} panelStart={<FilePanelResizer width={filePanelWidth} onResize={setFilePanelWidth} />} />}
+        {pinnedAgentPanel ? <div className="workspace-details-rail">{agentDetails}</div> : agentDetails}
+        {!agentDrawerOpen && fileSurface && <WorkspaceFileDrawer browser={filesOpen} covered={Boolean(diffViewing || (viewing && !fileDocked))}
+          onClose={() => { if (filesOpen) setFilesOpen(false); else if (viewing && fileDocked) closeFile(); else setWebPage(null); }}>{fileSurface}</WorkspaceFileDrawer>}
       </div>
 
       <MachineContext.Provider value={newSessionMachineId}><NewSessionDialog
@@ -954,12 +994,7 @@ export function App() {
         selectTargetRef.current(machineId, paneId);
       }} />
       <SettingsDialog machines={machines} auth={auth} herdrVersion={shownHealth?.herdr?.version ?? null} security={security} open={settingsOpen} section={settingsSection} linkPage={settingsLinkPage} linkSection={settingsLinkSection} onPage={onSettingsPage} onClose={closeSettings} onUsageLogin={(paneId) => { closeSettings(); selectTarget("local", paneId, "terminal"); void load(); }} actions={actions} updates={updates} onEnableNotifications={enableNotifications} saveError={settingsSaveError} savePaused={settingsSavePaused} saveRetrying={settingsSaveRetrying} onRetrySave={retrySettingsSave} overPreview={(viewing !== null && !fileDocked) || diffViewing !== null} />
-      {filesOpen && selectedPane && (
-        <FilesDialog start={selectedPane.foreground_cwd ?? selectedPane.cwd ?? ""} paneId={selectedPane.pane_id} viewing={(viewing !== null && !fileDocked) || diffViewing !== null} onOpenFile={viewFile}
-          onOpenDiff={(comparison, file) => openDiff({ machineId: selectedMachineId, paneId: selectedPane.pane_id, directory: selectedPane.foreground_cwd ?? selectedPane.cwd ?? null, ...comparison, path: file.path, oldPath: file.old_path })}
-          onBrowseFolders={(path) => actions.openPalette(folderQueryFor(path, null))}
-          onClose={() => setFilesOpen(false)} />
-      )}
+
       {diffViewing !== null && <MachineContext.Provider value={diffViewing.machineId}>
         <RepoDiffViewer key={`${diffViewing.scope}:${diffViewing.path}`} target={diffViewing} onClose={closeDiff} onOpenFile={(path) => {
           const docked = filePanelAvailable && openPresentation(path, settings.fileOpen) === "panel";
