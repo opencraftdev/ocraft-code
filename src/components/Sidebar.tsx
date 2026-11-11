@@ -642,7 +642,9 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
     const sessions = workspaceSessions(snapshot?.tabs ?? [], panes, workspace.workspace_id).others;
     const nestedTabs = new Set(sessions.map((session) => session.tab.tab_id));
     const ownPanes = panes.filter((candidate) => !nestedTabs.has(candidate.tab_id));
-    const pane = currentPane(workspace, ownPanes.length > 0 ? ownPanes : panes);
+    // the row opens its session: the agent's pane, never the shell beside it (the chat's Terminal panel)
+    const rowPanes = ownPanes.length > 0 ? ownPanes : panes;
+    const pane = currentPane(workspace, rowPanes.some((candidate) => candidate.agent) ? rowPanes.filter((candidate) => candidate.agent) : rowPanes);
     const selected = (ownPanes.length > 0 ? ownPanes : panes).some((candidate) => candidate.pane_id === selectedPaneId);
     const repoKey = workspace.worktree?.repo_key;
     const linked = workspace.worktree?.is_linked_worktree === true;

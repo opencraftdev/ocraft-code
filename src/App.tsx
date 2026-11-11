@@ -843,9 +843,12 @@ export function App() {
               </button>
             </div> : undefined;
             // a half with no strip to carry its close (its pane gone, or the half crashed) keeps one in a bar of its own
+            // the chat's Terminal panel (a terminal half beside a chat): it takes keys and clicks as itself,
+            // without becoming the selected session; the chat stays the one the sidebar and header name
+            const terminalPanel = splitOn && !active && pane !== null && pane !== undefined && !showsChat(pane, slotView);
             const slotBar = splitOn ? <div className="pane-slot-bar"><span className="pane-slot-title">{pane ? displayPaneTitle(pane) : t("Pane closed")}</span>{slotEnd}</div> : null;
             return (
-              <MachineContext.Provider key={slot} value={machineId}><SlotSessions slot={slot} machineIds={machines.map((item) => item.id)}><PaneFollowContext.Provider value={sameTabs && !active}>
+              <MachineContext.Provider key={slot} value={machineId}><SlotSessions slot={slot} machineIds={machines.map((item) => item.id)}><PaneFollowContext.Provider value={sameTabs && !active && !terminalPanel}>
               <div
                 className={`pane-slot${showsChat(pane, slotView) ? " is-chat" : ""}${splitOn ? active ? " is-active" : " is-inactive" : ""}`}
                 data-slot={slot}
@@ -855,14 +858,14 @@ export function App() {
                 // its own bar's buttons (its lens, its close) act on it as it is. A menu the half opened
                 // is portaled out of it: a press or a focus there reaches these handlers through React but
                 // is not in the half, and activating would close the menu before its item's click lands
-                onPointerDownCapture={active ? undefined : (event) => {
+                onPointerDownCapture={active || terminalPanel ? undefined : (event) => {
                   if (!event.currentTarget.contains(event.target as Node)) return;
                   if (event.button === 0 && !paneContextPress(event, apple) && !(event.target as Element).closest(".pane-slot-action")) activateSlot(slot);
                 }}
-                onFocusCapture={active ? undefined : (event) => { if (event.currentTarget.contains(event.target as Node) && Date.now() - lastKeyAtRef.current < KEY_FOCUS_MS && !(event.target as Element).closest(".pane-slot-action")) activateSlot(slot, true); }}
+                onFocusCapture={active || terminalPanel ? undefined : (event) => { if (event.currentTarget.contains(event.target as Node) && Date.now() - lastKeyAtRef.current < KEY_FOCUS_MS && !(event.target as Element).closest(".pane-slot-action")) activateSlot(slot, true); }}
                 // a file or text dropped into the other half is for its pane: an upload's paths and the pasted
                 // text reach only the active half's terminal, so the drop makes the half active first
-                onDropCapture={active ? undefined : (event) => { if (!event.dataTransfer.types.includes(PANE_DRAG_TYPE)) activateSlot(slot); }}
+                onDropCapture={active || terminalPanel ? undefined : (event) => { if (!event.dataTransfer.types.includes(PANE_DRAG_TYPE)) activateSlot(slot); }}
               >
                 {/* a pane this half cannot draw leaves the sidebar and the other half working; picking
                     another pane tries again */}
