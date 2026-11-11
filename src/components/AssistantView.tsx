@@ -2,10 +2,11 @@ import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from
 
 import type { AssistantAgent, AssistantMachine, AssistantProblem, AssistantProject, AssistantSession, AssistantState, AssistantTask, AssistantTranscript, MergeMode, ProjectChange, TaskStatus } from "../../shared/assistant.ts";
 import type { InteractivePrompt } from "../../shared/protocol.ts";
-import { addAssistantProject, ApiError, cancelAssistantTask, changeAssistantProject, fetchAssistant, fetchAssistantTranscript, fetchPanePrompt, fixAssistantMachine, removeAssistantProject, restartAssistantTask, setAssistantMaxRunning, startAssistantSession } from "../lib/api.ts";
+import { addAssistantProject, ApiError, approveAssistantTask, cancelAssistantTask, changeAssistantProject, fetchAssistant, fetchAssistantTranscript, fetchPanePrompt, fixAssistantMachine, dismissAssistantTask, removeAssistantProject, restartAssistantTask, setAssistantMaxRunning, startAssistantSession } from "../lib/api.ts";
 import { ASSISTANT_INSTALL_COMMAND, assistantLink, storeAssistantAddress, storedAssistantAddress } from "../lib/assistantMode.ts";
 import { useLocale, useT, type Translate } from "../lib/i18n.ts";
 import { MachineContext } from "../lib/machineContext.tsx";
+import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { Command } from "./PhonePanel.tsx";
 import { PromptCard } from "./PromptCard.tsx";
 
@@ -205,7 +206,11 @@ function TaskCard({ task, project, waiting, onChange, onOpenTask }: { task: Assi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const paneId = task.paneId;
-  // only on these clicks: nothing restarts or cancels a task by itself
+  // Approve asks once, on every device (a phone's stray tap included): a merge is not undone
+  const [confirming, setConfirming] = useState(false);
+  const mergeable = task.status === "ready" || (task.status === "needs_you" && task.reason !== undefined);
+  const dismissable = task.status === "cancelled" || task.status === "failed" || (task.status === "done" && task.worktree !== null);
+  // only on these clicks: nothing restarts, cancels, merges or dismisses a task by itself
   const act = (action: (id: string) => Promise<AssistantState>) => {
     setBusy(true); setError(null);
     action(task.id).then(onChange, (failure: unknown) => setError(failure instanceof ApiError ? failure.detail : String(failure))).finally(() => setBusy(false));
@@ -223,13 +228,38 @@ function TaskCard({ task, project, waiting, onChange, onOpenTask }: { task: Assi
           {task.worktree !== null && <button type="button" className="btn" disabled={busy} onClick={() => act(restartAssistantTask)}>{t("Restart agent")}</button>}
         </div>
       )}
+      {task.status === "reviewing" && <p className="assistant-dim">{t("Review round {n}", { n: task.reviewRounds ?? 1 })}</p>}
+      {task.reviewed && task.status !== "done" && <p className="assistant-dim">{t("Review passed")}</p>}
+      {task.status === "needs_you" && task.reason !== undefined && <p className="assistant-problem">{task.reason}</p>}
+      {task.findings !== undefined && task.status !== "done" && <pre className="assistant-findings">{task.findings}</pre>}
+      {mergeable && (
+        <p className="assistant-dim">
+          {task.nothingToMerge ? t("Nothing to merge")
+            : task.prUrl !== undefined ? <a href={task.prUrl} target="_blank" rel="noreferrer">{t("Pull request")}</a>
+            : project?.mergeMode === "local" && task.base !== undefined ? t("Ready to merge into {base}", { base: task.base }) : null}
+        </p>
+      )}
+      {task.note !== undefined && <p className="assistant-dim">{task.note}</p>}
+      {(mergeable || dismissable) && (
+        <div className="assistant-inline">
+          {mergeable && <button type="button" className="btn btn-primary" disabled={busy} onClick={() => setConfirming(true)}>{t("Approve")}</button>}
+          {dismissable && <button type="button" className="btn" disabled={busy} onClick={() => act(dismissAssistantTask)}>{t("Dismiss")}</button>}
+        </div>
+      )}
+      {confirming && (
+        <ConfirmDialog title={t("Merge {title}?", { title: task.title })}
+          body={task.prUrl !== undefined ? t("This merges its pull request.") : task.base !== undefined ? t("This merges its branch into {base}.", { base: task.base }) : t("This merges its branch.")}
+          confirmLabel={t("Approve")}
+          onConfirm={async () => { onChange(await approveAssistantTask(task.id)); setConfirming(false); }}
+          onClose={() => setConfirming(false)} />
+      )}
       {waiting !== null && (
         <div className="assistant-problem">
           <span className="assistant-dim">{waiting}</span>
           <button type="button" className="btn" disabled={busy} onClick={() => act(cancelAssistantTask)}>{t("Cancel")}</button>
         </div>
       )}
-      {task.status === "needs_you" && paneId !== null && <TaskQuestion machineId={task.machine} paneId={paneId} />}
+      {task.status === "needs_you" && task.reason === undefined && paneId !== null && <TaskQuestion machineId={task.machine} paneId={paneId} />}
       {error !== null && <p className="assistant-error" role="alert">{error}</p>}
     </div>
   );

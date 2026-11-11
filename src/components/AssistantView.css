@@ -95,6 +95,7 @@
 .assistant-turn { margin-bottom: var(--space-3); }
 .assistant-turn p { margin: var(--space-1) 0 0; color: var(--text); font-size: var(--fs-chat); white-space: pre-wrap; overflow-wrap: anywhere; }
 .assistant-screen { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
+.assistant-findings { margin: 0; max-height: 12em; overflow: auto; font-family: var(--font-mono); font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-dim); }
 
 .assistant-section { margin-bottom: var(--space-3); }
 

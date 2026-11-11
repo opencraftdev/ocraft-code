@@ -282,7 +282,7 @@ export function createServer(
     OVIS_BUN: process.execPath,
     PATH: `${OVIS_TASK_BIN}${delimiter}${process.env["PATH"] ?? ""}`,
   }), options.assistantPanes);
-  const assistantService = assistant && machines ? new Assistant(stateDir, machines, options.assistantRun ?? ((machine, script) => machines.runScript(machine.id, script)), { sessions: assistantSessions, bridge: options.assistantBridge ?? machineBridge(machines) }) : null;
+  const assistantService = assistant && machines ? new Assistant(stateDir, machines, options.assistantRun ?? ((machine, script, timeoutMs) => machines.runScript(machine.id, script, timeoutMs)), { sessions: assistantSessions, bridge: options.assistantBridge ?? machineBridge(machines) }) : null;
   // read finishes are kept for the herdr run each PC told this server it is in
   const seen = new SeenStore(stateDir, () => machines?.finishEpochs() ?? new Map());
   // started after createCore's Node probe (server/pty/sidecar.ts), which can hold the thread up to 3 s: that wait

@@ -559,6 +559,16 @@ export async function cancelAssistantTask(taskId: string): Promise<AssistantStat
   return (await sendJson(`/api/assistant/tasks/${encodeURIComponent(taskId)}/cancel`, "POST", {})).json() as Promise<AssistantState>;
 }
 
+/** Approve: a Ready task merges (its PR, or into the checkout's branch). Only the user, here; the Assistant has no such route. */
+export async function approveAssistantTask(taskId: string): Promise<AssistantState> {
+  return (await sendJson(`/api/assistant/tasks/${encodeURIComponent(taskId)}/approve`, "POST", {})).json() as Promise<AssistantState>;
+}
+
+/** Dismiss: an ended task leaves the board, its worktree and branch removed. */
+export async function dismissAssistantTask(taskId: string): Promise<AssistantState> {
+  return (await sendJson(`/api/assistant/tasks/${encodeURIComponent(taskId)}/dismiss`, "POST", {})).json() as Promise<AssistantState>;
+}
+
 /** An archived Assistant session's saved conversation. */
 export function fetchAssistantTranscript(name: string): Promise<AssistantTranscript> {
   return getJson<AssistantTranscript>(`/api/assistant/sessions/${encodeURIComponent(name)}`);
