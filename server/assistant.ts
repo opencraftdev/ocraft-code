@@ -1,0 +1,324 @@
+/**
+ * The Assistant VM's machines and projects (docs/plan/20261111-2112-assistant.md, phase 2).
+ *
+ * Machines are the herdr saved machines Remote PCs already discovers (MachineManager); this module
+ * adds a health watcher for each and the settings herdr does not hold. Projects are folders the
+ * user registers in the UI. Both live in stateDir/assistant/, written atomically at 0600.
+ * The watcher only reads: a fix runs only on the user's click, never --takeover, never herdr focus.
+ */
+import { join } from "node:path";
+import { ASSISTANT_AGENTS, type AddProjectRequest, type AssistantAgent, type AssistantMachine, type AssistantProblem, type AssistantProject, type AssistantState, type MachineHealth, type MergeMode, type ProjectRefusal } from "../shared/assistant.ts";
+import type { Machine, MachineEvent } from "../shared/machines.ts";
+import { isJsonObject, jsonResponse, setRequestRoute } from "./http.ts";
+import { shellQuote } from "./machine-security.ts";
+import { MachineActionRequired } from "./machines.ts";
+import { writePrivateState } from "./private-state.ts";
+import { BUNDLE_DIR } from "./remote-host.ts";
+import { readStateDocument, setAsideDamaged } from "./state-document.ts";
+
+/** Runs a POSIX script on a machine and returns its output (MachineManager.runScript; tests run it locally). */
+export type RunScript = (machine: Machine, script: string) => Promise<string>;
+/** Calls `run` after `ms`; returns what cancels it. Tests pass their own clock. */
+export type Timer = (run: () => void, ms: number) => () => void;
+export interface AssistantMachines {
+  list(): Machine[];
+  subscribe(listener: (event: MachineEvent) => void): () => void;
+  retryNow(id: string): void;
+}
+
+export const HEALTH_INTERVAL_MS = 30_000;
+export const DEFAULT_MAX_RUNNING = 3;
+/** The delay before a machine's next check: its interval, or after failed ones a longer one, as herdr discovery backs off (MachineManager.watchHerdrProfiles). */
+export const nextCheckDelay = (intervalMs: number, failures: number): number =>
+  failures === 0 ? intervalMs : Math.min(300_000, intervalMs * 2 ** Math.min(failures, 10));
+
+const defaultTimer: Timer = (run, ms) => { const timer = setTimeout(run, ms); timer.unref(); return () => clearTimeout(timer); };
+
+export class AssistantError extends Error {
+  constructor(readonly code: string, message: string, readonly status = 400) { super(message); }
+}
+
+/** herdr on the machine: the one on PATH, else the bundled one the bridge installs. */
+const HERDR = `h=$(command -v herdr || printf '%s' "$HOME/${BUNDLE_DIR}/bin/herdr")`;
+const sessionArgs = (session: string | undefined) => session ? `--session ${shellQuote(session)} ` : "";
+const herdrRunning = (session: string | undefined) => `"$h" ${sessionArgs(session)}status server --json 2>/dev/null | grep -Eq '"running": ?true'`;
+
+export function healthScript(session: string | undefined, gh: boolean): string {
+  return [
+    HERDR,
+    `if ${herdrRunning(session)}; then echo herdr; fi`,
+    ...ASSISTANT_AGENTS.map((agent) => `if command -v ${agent} >/dev/null 2>&1; then echo ${agent}; fi`),
+    ...(gh ? ["if gh auth status >/dev/null 2>&1; then echo gh; fi"] : []),
+    "true",
+  ].join("; ");
+}
+
+/** Starts herdr's server when none runs; a running one is never stopped or replaced. */
+export function startHerdrScript(session: string | undefined): string {
+  return [
+    HERDR,
+    `if ! ${herdrRunning(session)}; then log="$HOME/.config/herdr-web-ui/bridges"; mkdir -p "$log"; nohup "$h" ${sessionArgs(session)}server </dev/null >>"$log/herdr.log" 2>&1 & fi`,
+    "true",
+  ].join("; ");
+}
+
+export function readHealth(output: string, gh: boolean, now: number): MachineHealth {
+  const found = new Set(output.split("\n").map((line) => line.trim()));
+  const agents = ASSISTANT_AGENTS.filter((agent) => found.has(agent));
+  const problems: AssistantProblem[] = [];
+  if (!found.has("herdr")) problems.push("herdr_stopped");
+  if (agents.length === 0) problems.push("no_agent");
+  if (gh && !found.has("gh")) problems.push("gh_signed_out");
+  // phase 4 adds: every running task's pane is still there, with a Restart agent fix
+  return { checked_at: now, problems, agents };
+}
+
+/** Resolves a folder on the machine (`~` is its home) and says what it is, one `key=value` per line. */
+export function projectScript(path: string): string {
+  return [
+    `p=${shellQuote(path)}`,
+    `case "$p" in "~") p="$HOME";; "~/"*) p="$HOME/\${p#??}";; esac`,
+    `home=$(cd -P "$HOME" 2>/dev/null && pwd -P)`,
+    `if ! real=$(cd -P -- "$p" 2>/dev/null && pwd -P); then echo missing; exit 0; fi`,
+    `printf 'home=%s\\nreal=%s\\n' "$home" "$real"`,
+    `if top=$(git -C "$real" rev-parse --show-toplevel 2>/dev/null); then printf 'top=%s\\n' "$top"; fi`,
+    `git -C "$real" remote -v 2>/dev/null | sed 's/^/remote=/'`,
+    "true",
+  ].join("; ");
+}
+
+export function judgeProject(output: string): { path: string; mergeMode: MergeMode } | { refusal: ProjectRefusal } {
+  const lines = output.split("\n");
+  if (lines[0]?.trim() === "missing") return { refusal: "missing" };
+  const value = (key: string) => lines.find((line) => line.startsWith(key + "="))?.slice(key.length + 1);
+  const real = value("real");
+  const home = value("home");
+  if (!real || !home) return { refusal: "missing" };
+  if (real === "/") return { refusal: "root" };
+  if (real === home) return { refusal: "home" };
+  if (home.startsWith(real + "/")) return { refusal: "home_parent" };
+  if (value("top") !== real) return { refusal: "not_git" };
+  const github = lines.some((line) => line.startsWith("remote=") && /github\.com[:/]/i.test(line));
+  return { path: real, mergeMode: github ? "pr" : "local" };
+}
+
+const REFUSALS: Record<ProjectRefusal, string> = {
+  invalid_path: "Enter an absolute folder path, or one that starts with ~/",
+  missing: "That folder does not exist on the machine",
+  not_git: "That folder is not the top folder of a git repository",
+  root: "The root folder cannot be a project",
+  home: "The home folder cannot be a project",
+  home_parent: "A folder that holds the home folder cannot be a project",
+  duplicate: "That folder is already a project",
+  unknown_machine: "That machine is not one of herdr's saved machines",
+};
+const refuse = (refusal: ProjectRefusal, status = 400) => new AssistantError(refusal, REFUSALS[refusal], status);
+
+const validAgent = (value: unknown): value is AssistantAgent => (ASSISTANT_AGENTS as readonly unknown[]).includes(value);
+const validProject = (item: unknown): item is AssistantProject => isJsonObject(item) && typeof item.id === "string" && item.id !== ""
+  && typeof item.machine === "string" && typeof item.path === "string" && item.path.startsWith("/")
+  && (item.mergeMode === "pr" || item.mergeMode === "local") && validAgent(item.defaultAgent);
+const validMaxRunning = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 20;
+
+/** A JSON document of stateDir/assistant/: absent is empty, not JSON is set aside (as herdr-profile-state.json is), another shape stops the start. */
+function readDocument<T>(path: string, valid: (value: unknown) => value is T, empty: T): T {
+  const read = readStateDocument(path);
+  if (read.kind === "missing") return empty;
+  if (read.kind === "malformed") {
+    console.error(`${path} is not JSON; it was set aside as ${setAsideDamaged(path)}`);
+    return empty;
+  }
+  if (!valid(read.value)) throw new Error(`Invalid ${path}; it was left as it is`);
+  return read.value;
+}
+
+type MachineSettings = Record<string, { maxRunning: number }>;
+interface Watch { failures: number; health: MachineHealth | null; cancel?: () => void; busy?: Promise<void> }
+
+export class Assistant {
+  private projects: AssistantProject[];
+  private settings: MachineSettings;
+  private projectsPath: string;
+  private settingsPath: string;
+  private watched = new Map<string, Watch>();
+  private stopped = false;
+  private unsubscribe: () => void;
+  private intervalMs: number;
+  private timer: Timer;
+  private now: () => number;
+
+  constructor(stateDir: string, private machines: AssistantMachines, private run: RunScript, options: { intervalMs?: number; timer?: Timer; now?: () => number } = {}) {
+    this.intervalMs = options.intervalMs ?? HEALTH_INTERVAL_MS;
+    this.timer = options.timer ?? defaultTimer;
+    this.now = options.now ?? Date.now;
+    const directory = join(stateDir, "assistant");
+    this.projectsPath = join(directory, "projects.json");
+    this.settingsPath = join(directory, "machines.json");
+    this.projects = readDocument(this.projectsPath, (value): value is AssistantProject[] => Array.isArray(value) && value.every(validProject), []);
+    this.settings = readDocument(this.settingsPath, (value): value is MachineSettings => isJsonObject(value)
+      && Object.values(value).every((entry) => isJsonObject(entry) && validMaxRunning(entry.maxRunning)), {});
+    this.unsubscribe = machines.subscribe((event) => { if (event.type === "machines") this.sync(); });
+  }
+
+  /** herdr's saved machines, the only ones the Assistant runs tasks on */
+  private watchable(): Machine[] { return this.machines.list().filter((machine) => machine.herdr_profile_id && machine.enabled); }
+  private machine(id: string): Machine {
+    const machine = this.watchable().find((candidate) => candidate.id === id);
+    if (!machine) throw refuse("unknown_machine", 404);
+    return machine;
+  }
+
+  state(): AssistantState {
+    const machines: AssistantMachine[] = this.watchable().map((machine) => ({
+      id: machine.id, name: machine.name, state: machine.state,
+      health: this.watched.get(machine.id)?.health ?? null,
+      maxRunning: this.settings[machine.id]?.maxRunning ?? DEFAULT_MAX_RUNNING,
+    }));
+    return { machines, projects: [...this.projects] };
+  }
+
+  private sync(): void {
+    if (this.stopped) return;
+    const ids = new Set(this.watchable().map((machine) => machine.id));
+    for (const id of ids) if (!this.watched.has(id)) { this.watched.set(id, { failures: 0, health: null }); void this.check(id); }
+    for (const [id, watch] of this.watched) if (!ids.has(id)) { watch.cancel?.(); this.watched.delete(id); }
+  }
+
+  /** One check of a machine now, then the next one scheduled; a check already running is the one asked for. */
+  check(id: string): Promise<void> {
+    const watch = this.watched.get(id);
+    if (!watch || this.stopped) return Promise.resolve();
+    if (watch.busy) return watch.busy;
+    watch.cancel?.(); watch.cancel = undefined;
+    watch.busy = (async () => {
+      const machine = this.watchable().find((candidate) => candidate.id === id);
+      if (!machine) return;
+      const health = await this.inspect(machine);
+      if (this.stopped || this.watched.get(id) !== watch) return;
+      watch.health = health;
+      watch.failures = health.problems.includes("unreachable") ? watch.failures + 1 : 0;
+      watch.cancel = this.timer(() => void this.check(id), nextCheckDelay(this.intervalMs, watch.failures));
+    })().finally(() => { watch.busy = undefined; });
+    return watch.busy;
+  }
+
+  private async inspect(machine: Machine): Promise<MachineHealth> {
+    const gh = this.projects.some((project) => project.machine === machine.id && project.mergeMode === "pr");
+    try {
+      return readHealth(await this.run(machine, healthScript(machine.target?.session, gh)), gh, this.now());
+    } catch (error) {
+      if (error instanceof MachineActionRequired && error.action === "connect") return { checked_at: this.now(), problems: ["not_connected"], agents: [] };
+      return { checked_at: this.now(), problems: ["unreachable"], agents: [], error: (error instanceof Error ? error.message : String(error)).slice(0, 500) };
+    }
+  }
+
+  async addProject(body: unknown): Promise<AssistantProject> {
+    if (!isJsonObject(body) || typeof body.machine !== "string") throw refuse("unknown_machine", 404);
+    const request = body as Partial<AddProjectRequest>;
+    const path = typeof request.path === "string" ? request.path.trim() : "";
+    if (!path || path.length > 4096 || /[\0\r\n]/.test(path) || !(path.startsWith("/") || path === "~" || path.startsWith("~/"))) throw refuse("invalid_path");
+    if (request.defaultAgent !== undefined && !validAgent(request.defaultAgent)) throw new AssistantError("invalid_agent", "Choose Claude Code or Codex");
+    const machine = this.machine(body.machine);
+    const judged = judgeProject(await this.run(machine, projectScript(path)));
+    if ("refusal" in judged) throw refuse(judged.refusal);
+    if (this.projects.some((project) => project.machine === machine.id && project.path === judged.path)) throw refuse("duplicate", 409);
+    const project: AssistantProject = { id: this.newId(judged.path), machine: machine.id, path: judged.path, mergeMode: judged.mergeMode, defaultAgent: request.defaultAgent ?? "claude" };
+    this.saveProjects([...this.projects, project]);
+    if (project.mergeMode === "pr") void this.check(machine.id);
+    return project;
+  }
+
+  /** the folder's name, made unique: what the Assistant will call the project (ovis-task <project>) */
+  private newId(path: string): string {
+    const base = (path.split("/").pop() ?? "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-.]+|-+$/g, "") || "project";
+    let id = base;
+    for (let n = 2; this.projects.some((project) => project.id === id); n += 1) id = `${base}-${n}`;
+    return id;
+  }
+
+  updateProject(id: string, body: unknown): AssistantProject {
+    const index = this.projects.findIndex((project) => project.id === id);
+    if (index < 0) throw new AssistantError("not_found", "That project is gone", 404);
+    if (!isJsonObject(body)) throw new AssistantError("invalid_body", "Expected a project change");
+    const next = { ...this.projects[index]! };
+    if (body.mergeMode !== undefined) {
+      if (body.mergeMode !== "pr" && body.mergeMode !== "local") throw new AssistantError("invalid_merge_mode", "Choose pull request or local merge");
+      next.mergeMode = body.mergeMode;
+    }
+    if (body.defaultAgent !== undefined) {
+      if (!validAgent(body.defaultAgent)) throw new AssistantError("invalid_agent", "Choose Claude Code or Codex");
+      next.defaultAgent = body.defaultAgent;
+    }
+    this.saveProjects(this.projects.map((project, at) => at === index ? next : project));
+    return next;
+  }
+
+  removeProject(id: string): void {
+    if (!this.projects.some((project) => project.id === id)) throw new AssistantError("not_found", "That project is gone", 404);
+    this.saveProjects(this.projects.filter((project) => project.id !== id));
+  }
+
+  setMachine(id: string, body: unknown): void {
+    this.machine(id);
+    if (!isJsonObject(body) || !validMaxRunning(body.maxRunning)) throw new AssistantError("invalid_max_running", "Max running tasks is a whole number from 1 to 20");
+    const settings = { ...this.settings, [id]: { maxRunning: body.maxRunning } };
+    writePrivateState(this.settingsPath, settings);
+    this.settings = settings;
+  }
+
+  /** Only on the user's click: starts herdr there when it is not running, then checks again. */
+  async fix(id: string, body: unknown): Promise<void> {
+    const machine = this.machine(id);
+    if (!isJsonObject(body) || body.fix !== "start_herdr") throw new AssistantError("invalid_fix", "Unknown fix");
+    await this.run(machine, startHerdrScript(machine.target?.session));
+    // Remote PCs reconnects at once instead of after its back-off
+    this.machines.retryNow(id);
+    await this.check(id);
+  }
+
+  private saveProjects(projects: AssistantProject[]): void {
+    writePrivateState(this.projectsPath, projects);
+    this.projects = projects;
+  }
+
+  stop(): void {
+    this.stopped = true;
+    this.unsubscribe();
+    for (const watch of this.watched.values()) watch.cancel?.();
+    this.watched.clear();
+  }
+}
+
+/**
+ * The Assistant-mode routes (/api/assistant/...), for this app's own pages only. Projects are added,
+ * changed and removed only here, by the user (plan decision 14), and fixes run only on a click
+ * (decision 16). The ovis-task CLI (phase 3) must never get a route that adds a project: it lists
+ * projects through read-only routes of its own. A write here must carry a browser page's Origin
+ * (index.ts already refused one that is not this app's), so a client that sends none is refused.
+ */
+export async function handleAssistantRequest(request: Request, pathname: string, assistant: Assistant): Promise<Response> {
+  const parts = pathname.slice("/api/assistant".length).split("/").filter(Boolean);
+  const [collection, id, action] = parts;
+  const route = parts.length === 0 ? "" : collection === "projects" && parts.length <= 2 ? (id ? "/projects/:id" : "/projects")
+    : collection === "machines" && id && (parts.length === 2 || (parts.length === 3 && action === "fix")) ? (action ? "/machines/:id/fix" : "/machines/:id") : null;
+  if (route === null) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
+  setRequestRoute(`/api/assistant${route}`);
+  const allowed: Record<string, string[]> = { "": ["GET"], "/projects": ["POST"], "/projects/:id": ["PATCH", "DELETE"], "/machines/:id": ["PATCH"], "/machines/:id/fix": ["POST"] };
+  if (!allowed[route]!.includes(request.method)) return jsonResponse({ error: { code: "method_not_allowed", message: `use ${allowed[route]!.join(" or ")}` } }, 405, { allow: allowed[route]!.join(", ") });
+  if (request.method !== "GET" && !request.headers.get("origin")) return jsonResponse({ error: { code: "browser_only", message: "Use Assistant controls from this app" } }, 403);
+  const body = request.method === "GET" || request.method === "DELETE" ? null : await request.json().catch(() => null);
+  try {
+    switch (`${request.method} ${route}`) {
+      case "GET ": return jsonResponse(assistant.state());
+      case "POST /projects": return jsonResponse(await assistant.addProject(body), 201);
+      case "PATCH /projects/:id": return jsonResponse(assistant.updateProject(id!, body));
+      case "DELETE /projects/:id": assistant.removeProject(id!); return jsonResponse({ ok: true });
+      case "PATCH /machines/:id": assistant.setMachine(id!, body); return jsonResponse({ ok: true });
+      default: await assistant.fix(id!, body); return jsonResponse(assistant.state());
+    }
+  } catch (error) {
+    if (error instanceof AssistantError) return jsonResponse({ error: { code: error.code, message: error.message } }, error.status);
+    // what SSH said on the machine: a fix or a folder check that could not run there
+    return jsonResponse({ error: { code: "machine_unavailable", message: error instanceof Error ? error.message.slice(0, 500) : String(error) } }, 502);
+  }
+}
