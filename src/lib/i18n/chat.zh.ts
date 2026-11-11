@@ -189,4 +189,5 @@ export const CHAT_ZH: Record<string, string> = {
   "Show full message": "显示完整消息",
   "Open link": "打开链接",
   "Share link": "分享链接",
+  "terminal ended": "终端已结束",
 };

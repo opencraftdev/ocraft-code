@@ -68,11 +68,19 @@ export async function requestNotificationPermission(): Promise<NotificationState
  * `new Notification()`, and the worker's notificationclick (public/sw.js) selects the
  * pane. The constructor is the fallback for a page without a worker.
  */
-async function show(paneId: string, title: string, body: string, onClick?: () => void, machineId = "local", workspaceId?: string): Promise<void> {
+async function show(paneId: string, title: string, body: string, onClick?: () => void, machineId = "local", workspaceId?: string, whileOpen = false): Promise<void> {
+  // a visible tab is told only when asked to (the in-app alert, now a system notification)
+  if (!whileOpen && typeof document !== "undefined" && !document.hidden) return;
+  const tag = paneNotificationTag(paneId, machineId);
+  const mac = macNotify();
+  if (mac) {
+    if (onClick) macClicks = (detail) => { if (detail.pane_id === paneId && (detail.machine_id ?? "local") === machineId) onClick(); };
+    mac.postMessage({ title, body, tag, pane_id: paneId, machine_id: machineId });
+    return;
+  }
   if (typeof globalThis.Notification === "undefined") return;
   if (globalThis.Notification.permission !== "granted") return;
-  if (typeof document !== "undefined" && !document.hidden) return; // visible tab: the UI already shows it
-  const options: NotificationOptions = { body, tag: paneNotificationTag(paneId, machineId), data: { pane_id: paneId, machine_id: machineId, ...(workspaceId ? { workspace_id: workspaceId } : {}) }, icon: "/icons/icon-192.png?v=sheep1" };
+  const options: NotificationOptions = { body, tag, data: { pane_id: paneId, machine_id: machineId, ...(workspaceId ? { workspace_id: workspaceId } : {}) }, icon: "/icons/icon-192.png?v=sheep1" };
   try {
     const registration = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
     if (registration?.active) {
@@ -90,10 +98,16 @@ async function show(paneId: string, title: string, body: string, onClick?: () =>
 }
 
 /** `workspaceId`: the pane's workspace, as the server's push names it (server/push.ts), so a tap after the pane ends opens it. */
-export function showPaneStatusNotification(paneId: string, title: string, status: AgentStatus, onClick?: () => void, machineId = "local", workspaceId?: string): void {
-  void show(paneId, title, statusNotificationBody(status), onClick, machineId, workspaceId);
+export function showPaneStatusNotification(paneId: string, title: string, status: AgentStatus, onClick?: () => void, machineId = "local", workspaceId?: string, whileOpen = false): void {
+  void show(paneId, title, statusNotificationBody(status), onClick, machineId, workspaceId, whileOpen);
 }
 
-export function showPaneEndedNotification(paneId: string, title: string, onClick?: () => void, machineId = "local", workspaceId?: string): void {
-  void show(paneId, title, ENDED_NOTIFICATION_BODY, onClick, machineId, workspaceId);
+export function showPaneEndedNotification(paneId: string, title: string, onClick?: () => void, machineId = "local", workspaceId?: string, whileOpen = false): void {
+  void show(paneId, title, ENDED_NOTIFICATION_BODY, onClick, machineId, workspaceId, whileOpen);
 }
+
+type MacNotify = { postMessage(message: unknown): void };
+/** The Mac app's bridge to macOS notifications (app/mac WebPage.swift `ovisNotify`): WebKit in an app has no web notifications. */
+const macNotify = (): MacNotify | null => (globalThis as { webkit?: { messageHandlers?: { ovisNotify?: MacNotify } } }).webkit?.messageHandlers?.ovisNotify ?? null;
+let macClicks: ((detail: { pane_id?: string; machine_id?: string }) => void) | null = null;
+if (typeof window !== "undefined") window.addEventListener("ovis-notification-click", (event) => macClicks?.((event as CustomEvent).detail ?? {}));

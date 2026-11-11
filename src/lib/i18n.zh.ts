@@ -293,7 +293,6 @@ const BASE: Record<string, string> = {
   "Copied": "已复制",
   "Worked for {duration}": "工作了 {duration}",
   "Copy message": "复制消息",
-  "terminal ended": "终端已结束",
   "{m}m": "{m} 分钟",
   "{h}h {m}m": "{h} 小时 {m} 分",
 
@@ -353,9 +352,7 @@ const BASE: Record<string, string> = {
   "Brave would not make a push subscription. Turn on Use Google services for push messaging in Brave's privacy settings, then try again.": "Brave 未创建推送订阅。请在 Brave 的隐私设置中开启“Use Google services for push messaging”，然后重试。",
   "This device would not make a push subscription. Check that push messaging is allowed in its settings, then try again.": "此设备未能创建推送订阅。请确认其设置中允许推送消息，然后重试。",
   "This device can only watch.": "此设备只能查看。",
-  "Needs input": "需要输入",
   "Finished": "已完成",
-  "Open pane": "打开窗格",
   "Quick replies": "快捷回复",
   "Skills": "Skill",
   "Not sent: send or discard the held input first.": "未发送：请先发送或丢弃保留的输入。",

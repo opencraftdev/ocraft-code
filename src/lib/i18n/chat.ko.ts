@@ -189,4 +189,5 @@ export const CHAT_KO: Record<string, string> = {
   "Show full message": "전체 메시지 보기",
   "Open link": "링크 열기",
   "Share link": "링크 공유",
+  "terminal ended": "터미널 종료됨",
 };

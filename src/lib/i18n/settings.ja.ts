@@ -207,7 +207,7 @@ export const SETTINGS_JA: Record<string, string> = {
   "Long turns": "長いターン",
   "Every turn": "毎ターン",
   "In the app": "アプリ内",
-  "While the app is open, these drop in from the top of the screen at once. Tap one to open its pane.": "アプリを開いている間は、画面の上からすぐに表示されます。タップするとそのペインを開きます。",
+  "While the app is open, these show as system notifications at once. Click one to open its pane.": "アプリを開いている間は、すぐにシステム通知として表示されます。クリックするとそのペインを開きます。",
   "Sound": "サウンド",
   "While a tab of the app is open, it chimes for these alerts, also when a Focus or Do Not Disturb silences notifications.": "アプリのタブを開いている間は、これらの通知ごとに音を鳴らします。集中モードやおやすみモードで通知が消音されていても聞こえます。",
   "One-tap messages above the message box, on this device. Each is sent as if typed: queued while the agent works, an answer when a question is open.": "メッセージ入力欄の上に表示されるワンタップのメッセージで、このデバイスに適用されます。入力したときと同じように送信され、エージェントの作業中はキューに入り、質問が開いているときは回答になります。",
@@ -336,4 +336,5 @@ export const SETTINGS_JA: Record<string, string> = {
   "This request came through Tailscale Funnel, which is open to the public internet.": "このリクエストは公開インターネットに開かれたTailscale Funnelを経由しました。",
   "The server cannot see whether a proxy, tunnel or router makes it reachable from the internet.": "プロキシ、トンネル、ルーターによってインターネットから接続できるかどうかは、サーバーからは分かりません。",
   "Agent default": "エージェントの既定",
+  "Needs input": "入力が必要",
 };

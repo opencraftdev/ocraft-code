@@ -288,7 +288,6 @@ const BASE: Record<string, string> = {
   "Copied": "복사됨",
   "Worked for {duration}": "{duration} 작업",
   "Copy message": "메시지 복사",
-  "terminal ended": "터미널 종료됨",
   "{m}m": "{m}분",
   "{h}h {m}m": "{h}시간 {m}분",
 
@@ -348,9 +347,7 @@ const BASE: Record<string, string> = {
   "Brave would not make a push subscription. Turn on Use Google services for push messaging in Brave's privacy settings, then try again.": "Brave가 푸시 구독을 만들지 않았습니다. Brave 개인정보 설정에서 \"Use Google services for push messaging\"을 켠 뒤 다시 시도하세요.",
   "This device would not make a push subscription. Check that push messaging is allowed in its settings, then try again.": "이 기기에서 푸시 구독을 만들지 못했습니다. 설정에서 푸시 메시지가 허용되어 있는지 확인한 뒤 다시 시도하세요.",
   "This device can only watch.": "이 기기는 보기만 할 수 있습니다.",
-  "Needs input": "입력 필요",
   "Finished": "작업 완료",
-  "Open pane": "패널 열기",
   "Quick replies": "빠른 답장",
   "Skills": "스킬",
   "Not sent: send or discard the held input first.": "보내지 못했습니다: 보관한 입력을 먼저 보내거나 버리세요.",

@@ -290,7 +290,6 @@ const BASE: Record<string, string> = {
   "Copied": "コピーしました",
   "Worked for {duration}": "{duration} 作業しました",
   "Copy message": "メッセージをコピー",
-  "terminal ended": "ターミナルが終了しました",
   "{m}m": "{m}分",
   "{h}h {m}m": "{h}時間 {m}分",
 
@@ -350,9 +349,7 @@ const BASE: Record<string, string> = {
   "Brave would not make a push subscription. Turn on Use Google services for push messaging in Brave's privacy settings, then try again.": "Brave がプッシュ通知の登録を作成しませんでした。Brave のプライバシー設定で「Use Google services for push messaging」をオンにしてから、もう一度お試しください。",
   "This device would not make a push subscription. Check that push messaging is allowed in its settings, then try again.": "このデバイスでプッシュ通知の登録を作成できませんでした。設定でプッシュメッセージが許可されているか確認してから、もう一度お試しください。",
   "This device can only watch.": "この端末は閲覧のみできます。",
-  "Needs input": "入力が必要",
   "Finished": "完了",
-  "Open pane": "ペインを開く",
   "Quick replies": "クイック返信",
   "Skills": "スキル",
   "Not sent: send or discard the held input first.": "未送信: 先に保持した入力を送信するか破棄してください。",

@@ -8,7 +8,7 @@ import type { SelectionMark } from "./selectionMark.ts";
 import { shouldNotifyStatus, alertStatus, alertsAllow, paneAlertsMuted, showPaneEndedNotification, showPaneStatusNotification } from "./notifications.ts";
 import { currentPaneMutes, subscribePaneMutes } from "./paneMutes.ts";
 import type { NotificationTarget } from "./notificationTarget.ts";
-import { dropletAllows, endedTurn, seedStatuses, showDroplet, trackTurn, type DropletKind } from "./droplet.ts";
+import { dropletAllows, endedTurn, seedStatuses, trackTurn, type DropletKind } from "./droplet.ts";
 import { canPlayAlertSound, playAlertSound, recheckAlertSounds, unlockAlertSound, type AlertSoundKind } from "./alertSound.ts";
 import { createAlertTurnPlayer } from "./alertTurns.ts";
 import { sameTarget, type SplitState } from "./split.ts";
@@ -42,22 +42,20 @@ export interface AlertSignalsParams {
 
 /** The in-app alert and the alert sound, and what the event stream does with a status change. */
 export function useAlertSignals({ settings, selectionRef, drawerOpenRef, splitRef, splitShownRef, machinesRef, alertsRef, alertsOnRef, pushOnRef, statusRef, turnStartRef, lastTurnRef, alertInAppRef, alertSoundRef }: AlertSignalsParams) {
-  // In-app alerts (components/Droplet.tsx): only while the app is on screen - a hidden app has
-  // its system notifications - and never for the pane already open in front of the user.
+  // Alerts while the app is open: a system notification (the browser's, or macOS's in the Mac app), never
+  // for the pane already open in front of the user. With web push on, the push already shows one.
   const dropIn = useCallback((machine: Machine, pane: HerdrPane, kind: DropletKind) => {
-    if (!alertsOnRef.current || !alertInAppRef.current || document.visibilityState !== "visible") return;
+    if (!alertsOnRef.current || !alertInAppRef.current || document.visibilityState !== "visible" || pushOnRef.current) return;
     const open = selectionRef.current;
     if (open.machineId === machine.id && open.paneId === pane.pane_id && !drawerOpenRef.current) return;
     if (splitShownRef.current && sameTarget(splitRef.current?.other ?? null, { machineId: machine.id, paneId: pane.pane_id }) && !drawerOpenRef.current) return;
-    showDroplet({
-      machineId: machine.id,
-      paneId: pane.pane_id,
-      agent: pane.agent ?? null,
-      title: alertPaneTitle(pane),
-      machine: machinesRef.current.length > 1 ? machine.name : null,
-      kind,
-    });
+    const title = machinesRef.current.length > 1 ? `${machine.name} · ${alertPaneTitle(pane)}` : alertPaneTitle(pane);
+    const select = () => takeTargetRef.current?.({ machine_id: machine.id, pane_id: pane.pane_id, view: "chat", workspace_id: pane.workspace_id });
+    if (kind === "ended") showPaneEndedNotification(pane.pane_id, title, select, machine.id, pane.workspace_id, true);
+    else showPaneStatusNotification(pane.pane_id, title, kind, select, machine.id, pane.workspace_id, true);
   }, []);
+  /** how a notification's click opens its pane, set by the first status message (App's takeNotificationTarget) */
+  const takeTargetRef = useRef<((target: NotificationTarget) => unknown) | null>(null);
 
   // The alert sound (lib/alertSound.ts): heard also while the tab is hidden and a Focus silences
   // system notifications; never for the pane open in front of the user.
@@ -97,6 +95,7 @@ export function useAlertSignals({ settings, selectionRef, drawerOpenRef, splitRe
     seedStatuses(statusRef.current, alerting(machines), { started: turnStartRef.current, lasted: lastTurnRef.current });
   }, []);
   const onPaneStatus = useCallback((machine: Machine, message: PaneStatusMessage, takeNotificationTargetRef: TakeNotificationTargetRef) => {
+    takeTargetRef.current = (target) => takeNotificationTargetRef.current(target);
     const key = paneStorageId(machine.id, message.pane_id);
     const previous = statusRef.current.get(key);
     const status = alertStatus(message.agent_status, message.background_wait);
@@ -114,6 +113,7 @@ export function useAlertSignals({ settings, selectionRef, drawerOpenRef, splitRe
     if (pane && !muted && shouldNotifyStatus(previous, status) && alertsOnRef.current && !pushOnRef.current && alertsAllow(alertsRef.current, status)) showPaneStatusNotification(message.pane_id, `${machine.name} · ${alertPaneTitle(pane)}`, status, () => takeNotificationTargetRef.current({ machine_id: machine.id, pane_id: message.pane_id, view: "chat", workspace_id: pane.workspace_id }), machine.id, pane.workspace_id);
   }, []);
   const onPaneExited = useCallback((machine: Machine, message: PaneExitedMessage, takeNotificationTargetRef: TakeNotificationTargetRef) => {
+    takeTargetRef.current = (target) => takeNotificationTargetRef.current(target);
     const pane = machine.snapshot?.panes.find((p) => p.pane_id === message.pane_id);
     const worked = endedTurn(turnStartRef.current, lastTurnRef.current, paneStorageId(machine.id, message.pane_id), Date.now());
     if (pane && !paneAlertsMuted(currentPaneMutes(), machine.id, message.pane_id) && dropletAllows(alertsRef.current, "done", worked)) {

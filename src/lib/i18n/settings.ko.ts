@@ -207,7 +207,7 @@ export const SETTINGS_KO: Record<string, string> = {
   "Long turns": "긴 작업",
   "Every turn": "매번",
   "In the app": "앱 안에서",
-  "While the app is open, these drop in from the top of the screen at once. Tap one to open its pane.": "앱을 열어 둔 동안에는 화면 위에서 바로 내려옵니다. 누르면 그 패널을 엽니다.",
+  "While the app is open, these show as system notifications at once. Click one to open its pane.": "앱이 열려 있는 동안 바로 시스템 알림으로 표시됩니다. 클릭하면 해당 패널을 엽니다.",
   "Sound": "소리",
   "While a tab of the app is open, it chimes for these alerts, also when a Focus or Do Not Disturb silences notifications.": "앱 탭을 열어 둔 동안에는 이 알림마다 소리를 냅니다. 집중 모드나 방해 금지 모드로 알림이 꺼져 있어도 들립니다.",
   "One-tap messages above the message box, on this device. Each is sent as if typed: queued while the agent works, an answer when a question is open.": "메시지 입력창 위에 놓이는 한 번 탭 메시지로, 이 기기에 적용됩니다. 직접 입력한 것처럼 보내므로 에이전트가 작업 중이면 대기열에 들어가고, 질문이 열려 있으면 답으로 쓰입니다.",
@@ -336,4 +336,5 @@ export const SETTINGS_KO: Record<string, string> = {
   "This request came through Tailscale Funnel, which is open to the public internet.": "이 요청은 공개 인터넷에 열린 Tailscale Funnel을 거쳐\u00a0왔습니다.",
   "The server cannot see whether a proxy, tunnel or router makes it reachable from the internet.": "프록시, 터널 또는 라우터 때문에 인터넷에서 접속할\u00a0수\u00a0있는지 서버는 알\u00a0수\u00a0없습니다.",
   "Agent default": "에이전트 기본값",
+  "Needs input": "입력 필요",
 };

@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
+import UserNotifications
 import WebKit
 
 /// The Ovis page in the main window, under a cover while it loads or while the server does not answer.
@@ -106,6 +107,9 @@ final class WebPageController: NSObject, ObservableObject {
         // a popup is loaded by WebKit, with the request that opened it
         guard !isPopup else { return }
         model.page = self
+        // the page's alerts as macOS notifications (src/lib/notifications.ts posts to `ovisNotify`)
+        NativeNotify.shared.page = self
+        webView.configuration.userContentController.add(NativeNotify.shared, name: "ovisNotify")
         reloads = model.$reloads.dropFirst().sink { [weak self] _ in self?.reload() }
         // drafts go only to this Mac's own server, as they came only from it
         if Self.isLoopback(origin) {
@@ -519,5 +523,63 @@ private final class CarryBaselines: NSObject, WKScriptMessageHandler {
         guard let body = message.body as? [String: Any], let token = body["token"] as? String,
               let before = body["before"] as? [String: Any] else { return }
         page?.keepBaselines(before, token: token)
+    }
+}
+
+/// The page's alerts as macOS notifications: WebKit inside an app has no web notifications, so the page
+/// posts `{title, body, tag, pane_id, machine_id}` to `ovisNotify` (src/lib/notifications.ts). Shown while
+/// the app is in front too; a click brings the window forward and tells the page which pane to open.
+@MainActor
+final class NativeNotify: NSObject, WKScriptMessageHandler, UNUserNotificationCenterDelegate {
+    static let shared = NativeNotify()
+    weak var page: WebPageController?
+    private var asked = false
+
+    /// a bare executable (`swift run`) has no bundle, and the notification center needs one
+    private var center: UNUserNotificationCenter? {
+        guard Bundle.main.bundleIdentifier != nil else { return nil }
+        let center = UNUserNotificationCenter.current()
+        if center.delegate == nil { center.delegate = self }
+        return center
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let body = message.body as? [String: Any], let title = body["title"] as? String, let center else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body["body"] as? String ?? ""
+        content.sound = .default
+        content.userInfo = ["pane_id": body["pane_id"] as? String ?? "", "machine_id": body["machine_id"] as? String ?? "local"]
+        // one notification per pane: a newer alert of the same pane replaces the older one
+        let request = UNNotificationRequest(identifier: body["tag"] as? String ?? UUID().uuidString, content: content, trigger: nil)
+        let post = { center.add(request) }
+        if asked { post(); return }
+        center.requestAuthorization(options: [.alert, .sound]) { [weak self] granted, _ in
+            Task { @MainActor in
+                self?.asked = true
+                if granted { post() }
+            }
+        }
+    }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        [.banner, .sound, .list]
+    }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        let info = response.notification.request.content.userInfo
+        let pane = info["pane_id"] as? String ?? "", machine = info["machine_id"] as? String ?? "local"
+        await MainActor.run {
+            NSApp.activate(ignoringOtherApps: true)
+            let detail = "{pane_id: \(Self.jsString(pane)), machine_id: \(Self.jsString(machine))}"
+            self.page?.webView.evaluateJavaScript("window.dispatchEvent(new CustomEvent('ovis-notification-click', {detail: \(detail)}))")
+        }
+    }
+
+    /// a JavaScript string literal of `value`, quotes and backslashes escaped
+    nonisolated static func jsString(_ value: String) -> String {
+        let data = (try? JSONSerialization.data(withJSONObject: [value])) ?? Data("[\"\"]".utf8)
+        let array = String(decoding: data, as: UTF8.self)
+        return String(array.dropFirst().dropLast())
     }
 }

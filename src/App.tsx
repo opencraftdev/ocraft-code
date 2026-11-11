@@ -86,7 +86,6 @@ import { useAlertPrefs, useAlertRefs } from "./lib/useAlerts.ts";
 import { useAlertSignals } from "./lib/useAlertSignals.ts";
 import { useNotificationState, useNotificationSwitch } from "./lib/useNotifications.ts";
 import { alertsBell } from "./lib/alertsBell.ts";
-import { Droplet } from "./components/Droplet.tsx";
 import { MarkdownLinkMenu } from "./components/MarkdownLinkMenu.tsx";
 import { paneDragData, PANE_DRAG_TYPE, sameTarget, slotSide, type SplitSlot, type SplitTarget } from "./lib/split.ts";
 import { useLayoutNotice, useLayoutRefused, useMoveRefused } from "./lib/useLayoutNotice.ts";
@@ -1017,13 +1016,6 @@ export function App() {
         }}
       /></MachineContext.Provider>}
       {machineDialog && <MachineDialog updateRemote={updateRemote} machine={machineDialog === "new" ? undefined : machineDialog} onClose={closeMachineDialog} onConnected={(id) => { closeMachineDialog(); selectTarget(id, null); void load(); }} />}
-      <Droplet onOpen={(machineId, paneId) => {
-        // an ended pane's card outlives the pane: the refetch has dropped it, and selecting it attaches nothing
-        if (!machinesRef.current.find((m) => m.id === machineId)?.snapshot?.panes.some((p) => p.pane_id === paneId)) return;
-        // Files lists the pane it was opened on, and would open its paths on the new one
-        setFilesOpen(false);
-        selectTargetRef.current(machineId, paneId);
-      }} />
       <SettingsDialog machines={machines} auth={auth} herdrVersion={shownHealth?.herdr?.version ?? null} security={security} open={settingsOpen} section={settingsSection} linkPage={settingsLinkPage} linkSection={settingsLinkSection} onPage={onSettingsPage} onClose={closeSettings} onUsageLogin={(paneId) => { closeSettings(); selectTarget("local", paneId, "terminal"); void load(); }} actions={actions} updates={updates} onEnableNotifications={enableNotifications} saveError={settingsSaveError} savePaused={settingsSavePaused} saveRetrying={settingsSaveRetrying} onRetrySave={retrySettingsSave} overPreview={(viewing !== null && !fileDocked) || diffViewing !== null} />
 
       {diffViewing !== null && <MachineContext.Provider value={diffViewing.machineId}>

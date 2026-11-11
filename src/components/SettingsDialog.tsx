@@ -546,7 +546,7 @@ function AlertsPage({ onEnableNotifications }: { onEnableNotifications: () => Pr
       <SettingsRow label={t("Finished")} description={t("Long turns: only work that took a minute or more")} wide>
         <Segmented label={t("Finished")} value={settings.alertDone} onChange={(alertDone) => update({ alertDone })} options={[{ value: "off", label: t("Off") }, { value: "long", label: t("Long turns") }, { value: "always", label: t("Every turn") }]} />
       </SettingsRow>
-      <SettingsRow label={t("In the app")} description={t("While the app is open, these drop in from the top of the screen at once. Tap one to open its pane.")}>
+      <SettingsRow label={t("In the app")} description={t("While the app is open, these show as system notifications at once. Click one to open its pane.")}>
         <Toggle label={t("In the app")} checked={settings.alertInApp} onChange={(alertInApp) => update({ alertInApp })} />
       </SettingsRow>
       <SettingsRow label={t("Sound")} description={t("While a tab of the app is open, it chimes for these alerts, also when a Focus or Do Not Disturb silences notifications.")}>

@@ -189,4 +189,5 @@ export const CHAT_JA: Record<string, string> = {
   "Show full message": "メッセージ全体を表示",
   "Open link": "リンクを開く",
   "Share link": "リンクを共有",
+  "terminal ended": "ターミナルが終了しました",
 };
