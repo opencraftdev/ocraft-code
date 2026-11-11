@@ -8,6 +8,7 @@ import { launchedAgents } from "./launched-agents.ts";
 import { isShellAgentKind, startShellAgent, type ShellAgentLocator } from "./shell-agent.ts";
 import { agentStart, HerdrError, sessionSnapshot } from "./herdr/client.ts";
 import { launchArgsFault } from "../shared/launch-rules.ts";
+import { trustNewFolder } from "./trust-new-folder.ts";
 
 export type AgentPayload = { kind?: unknown; name?: unknown; args?: unknown };
 
@@ -81,6 +82,8 @@ export async function agentLaunch(paneId: string, agent: AgentPayload, launched?
       }
     }
     launchedAgents.launched(paneId, kind);
+    // the folder was picked in this app: Claude's trust question for it is answered, not left to stall the session
+    if (kind === "claude") void trustNewFolder(paneId).catch(() => undefined);
     return { agent_started: true };
   } catch (error) {
     return {
