@@ -108,4 +108,6 @@ export const DEVICES_JA: Record<string, string> = {
   "Allow notifications to test alerts on this device.": "このデバイスで通知をテストするには、通知を許可してください。",
   "Could not send the test notification. Try again.": "テスト通知を送信できませんでした。もう一度お試しください。",
   "The last alert did not reach this device; the next one is tried as usual. Send a test to check.": "最後の通知はこのデバイスに届きませんでした。次の通知は通常どおり送られます。テストを送って確認してください。",
+  "Test notification sent. If none shows, allow Ovis in System Settings → Notifications.": "テスト通知を送信しました。表示されない場合は、システム設定 → 通知 で Ovis を許可してください。",
+  "Test notification. Alerts from your agents look like this.": "テスト通知です。エージェントからの通知はこのように表示されます。",
 };

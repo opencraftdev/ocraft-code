@@ -110,4 +110,10 @@ type MacNotify = { postMessage(message: unknown): void };
 /** The Mac app's bridge to macOS notifications (app/mac WebPage.swift `ovisNotify`): WebKit in an app has no web notifications. */
 const macNotify = (): MacNotify | null => (globalThis as { webkit?: { messageHandlers?: { ovisNotify?: MacNotify } } }).webkit?.messageHandlers?.ovisNotify ?? null;
 let macClicks: ((detail: { pane_id?: string; machine_id?: string }) => void) | null = null;
+/** Whether this is the Mac app, which shows alerts as macOS notifications through its own bridge (no web push). */
+export const hasMacNotifications = (): boolean => macNotify() !== null;
+/** A test alert through the Mac app's bridge: macOS asks for permission the first time. */
+export function sendMacTestNotification(title: string, body: string): void {
+  macNotify()?.postMessage({ title, body, tag: "ovis-test", pane_id: "", machine_id: "local" });
+}
 if (typeof window !== "undefined") window.addEventListener("ovis-notification-click", (event) => macClicks?.((event as CustomEvent).detail ?? {}));

@@ -1,8 +1,8 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { ApiError } from "../lib/api.ts";
 import { useT } from "../lib/i18n.ts";
 import { inNativeApp } from "../lib/nativeApp.ts";
-import { notificationState } from "../lib/notifications.ts";
+import { hasMacNotifications, notificationState, sendMacTestNotification } from "../lib/notifications.ts";
 import { pushSupported, testDevicePush } from "../lib/push.ts";
 import { repairFailed, runPushAction, usePushHealth, type PushActionOutcome, type PushActionResult } from "../lib/pushHealth.ts";
 import { repairOutcome } from "../lib/useNotifications.ts";
@@ -16,6 +16,9 @@ export function PushTestControls({ onEnable }: { onEnable: () => Promise<PushAct
   const { health, busy, result } = usePushHealth();
   const wanted = useRef(settings.alertsOn);
   wanted.current = settings.alertsOn;
+  // the Mac app has no web push: its alerts are macOS notifications (lib/notifications.ts), tested directly
+  const mac = hasMacNotifications();
+  const [macSent, setMacSent] = useState(false);
   const supported = pushSupported();
   const denied = notificationState() === "denied";
   const enable = !settings.alertsOn || health.repair || repairFailed(result) || result === "missing" || result === "gone" || result === "permission";
@@ -37,7 +40,8 @@ export function PushTestControls({ onEnable }: { onEnable: () => Promise<PushAct
     }
   }, () => wanted.current);
 
-  const hint = !supported || result === "unsupported" ? t("Push alerts need HTTPS or localhost, and on iPhone the home-screen app.")
+  const hint = mac ? (macSent ? t("Test notification sent. If none shows, allow Ovis in System Settings → Notifications.") : !settings.alertsOn ? t("Alerts off") : null)
+    : !supported || result === "unsupported" ? t("Push alerts need HTTPS or localhost, and on iPhone the home-screen app.")
     : denied ? inNativeApp() ? t("Allow notifications for Ovis in the phone's Settings, then try again.") : t("Allow notifications in your browser settings, then try again.")
     : result === "sent" ? t("Test notification sent. Check this device for the alert.")
     // a repair that failed says why before the fault it did not mend
@@ -60,9 +64,13 @@ export function PushTestControls({ onEnable }: { onEnable: () => Promise<PushAct
           {/* always in the document, empty until there is something to say: a live region */}
           <span className="settings-hint" role="status" data-testid="push-health-hint">{hint}</span>
         </div>
-        <button type="button" className="btn" disabled={busy !== null || !settings.alertsOn || !supported || denied || result === "read-only"} onClick={() => void send(false)}>{busy === "test" ? t("Sending…") : t("Send test")}</button>
+        <button type="button" className="btn" disabled={mac ? !settings.alertsOn : busy !== null || !settings.alertsOn || !supported || denied || result === "read-only"} onClick={() => {
+          if (!mac) { void send(false); return; }
+          sendMacTestNotification("Ovis", t("Test notification. Alerts from your agents look like this."));
+          setMacSent(true);
+        }}>{busy === "test" ? t("Sending…") : t("Send test")}</button>
       </div>
-      {enable && supported && !denied && <div className="settings-actions">
+      {!mac && enable && supported && !denied && <div className="settings-actions">
         <button type="button" className="btn btn-primary" disabled={busy !== null} onClick={() => void send(true)}>{busy === "repair" ? t("Turning alerts on…") : t("Turn alerts on again")}</button>
       </div>}
     </div>

@@ -108,4 +108,6 @@ export const DEVICES_ZH: Record<string, string> = {
   "Allow notifications to test alerts on this device.": "请允许通知，以便在此设备上测试提醒。",
   "Could not send the test notification. Try again.": "无法发送测试通知。请重试。",
   "The last alert did not reach this device; the next one is tried as usual. Send a test to check.": "上一条提醒未能送达此设备；下一条会照常发送。请发送测试以确认。",
+  "Test notification sent. If none shows, allow Ovis in System Settings → Notifications.": "测试通知已发送。如果没有显示，请在 系统设置 → 通知 中允许 Ovis。",
+  "Test notification. Alerts from your agents look like this.": "测试通知。来自智能体的提醒会这样显示。",
 };

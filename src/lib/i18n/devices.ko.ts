@@ -108,4 +108,6 @@ export const DEVICES_KO: Record<string, string> = {
   "Allow notifications to test alerts on this device.": "이 기기에서 알림을 테스트하려면 알림을 허용하세요.",
   "Could not send the test notification. Try again.": "테스트 알림을 보내지 못했습니다. 다시 시도하세요.",
   "The last alert did not reach this device; the next one is tried as usual. Send a test to check.": "마지막 알림이 이 기기에 닿지 않았습니다. 다음 알림은 평소처럼 다시 보냅니다. 테스트를 보내 확인하세요.",
+  "Test notification sent. If none shows, allow Ovis in System Settings → Notifications.": "테스트 알림을 보냈습니다. 표시되지 않으면 시스템 설정 → 알림에서 Ovis를 허용하세요.",
+  "Test notification. Alerts from your agents look like this.": "테스트 알림입니다. 에이전트 알림은 이렇게 표시됩니다.",
 };
