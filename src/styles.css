@@ -3091,3 +3091,48 @@ button, a, [role="button"] {
 
 /* the session list is the sidebar: the cross-PC agent roster repeats it */
 .sidebar-shell .agents-sidebar { display: none; }
+
+/* ── Claude desktop look: chat ────────────────────────────────────────────────────────────────
+   One input line (attach · text · send), the model and its level under it on the right, and no
+   folder strip or key hint: the right panel says where the agent works. */
+@media (min-width: 769px) {
+  .composer .composer-surface {
+    grid-template-areas:
+      "attachments attachments attachments"
+      "left text right";
+    align-items: center;
+    margin-bottom: calc(var(--control-h) + var(--space-1));
+    border-radius: var(--radius-xl);
+    box-shadow: none;
+  }
+  .composer .composer-surface:focus-within { border-color: var(--border-strong, var(--surface-edge)); box-shadow: none; }
+  .composer .composer-text { min-height: 0; padding-block: var(--space-3); }
+  .composer .composer-controls { padding-block: 0; }
+  .composer .composer-status {
+    position: absolute;
+    top: calc(100% + var(--space-1));
+    right: var(--space-2);
+    z-index: 1;
+  }
+  .composer .composer-status .composer-pill { background: transparent; border-color: transparent; color: var(--text); }
+  .composer > .composer-strip,
+  .composer > .composer-keyhint { display: none; }
+}
+
+.chat-turn-user .chat-bubble { border-color: transparent; border-radius: var(--radius-lg); background: var(--bg-hover); }
+
+/* ── Claude desktop look: right panel ─────────────────────────────────────────────────────────
+   One flat column parted from the chat by a hairline: sections are titled groups, not cards. */
+@media (min-width: 769px) {
+  .agent-panel { padding: 0; border-left: var(--hairline) solid var(--border); background: var(--chat-canvas, transparent); }
+  .agent-panel .agent-panel-card { gap: 0; padding: var(--space-3) var(--space-4); }
+  .agent-panel .agent-panel-section {
+    border: 0;
+    border-bottom: var(--hairline) solid var(--border);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    padding-block: var(--space-2);
+  }
+  .agent-panel .agent-panel-section:last-child { border-bottom: 0; }
+}
