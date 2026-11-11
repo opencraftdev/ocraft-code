@@ -81,7 +81,6 @@ export const TERMINAL_JA: Record<string, string> = {
   "Queued message {n}": "キュー内のメッセージ {n}",
   "Not sent. Reconnect and try again.": "送信できませんでした。再接続してもう一度お試しください。",
   "The chat can't be shown. The terminal still works.": "チャットを表示できません。ターミナルは引き続き使えます。",
-  "New tab with agent…": "エージェントで新しいタブ…",
   "New terminal": "新しいターミナル",
   "New terminal failed: {reason}": "新しいターミナルを開けませんでした: {reason}",
   "Tab {n}": "タブ {n}",

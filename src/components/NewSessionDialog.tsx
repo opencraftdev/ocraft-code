@@ -90,6 +90,8 @@ export function insertToken(text: string, at: number, token: string): { text: st
   return { text: `${head}${after}`.slice(0, MAX_COMPOSER_CHARS), caret: Math.min(head.length, MAX_COMPOSER_CHARS) };
 }
 
+const NEW_SESSION_AGENTS = ["claude", "codex"];
+
 export function NewSessionDialog({ open, defaultCwd, tab = null, onClose, onCreated, machineName, prefill = null, onDraft, worktrees = [] }: NewSessionDialogProps) {
   const t = useT();
   const { settings } = useSettings();
@@ -160,11 +162,13 @@ export function NewSessionDialog({ open, defaultCwd, tab = null, onClose, onCrea
     setAgentKind(stored);
     let cancelled = false;
     void fetchAgentKinds()
-      .then((next) => {
+      .then((offered) => {
         if (cancelled) return;
+        // ponytail: a new session is a chat with Claude or Codex alone; terminals still open from the title menu
+        const next = offered.filter((agent) => NEW_SESSION_AGENTS.includes(agent.kind));
         setAgents(next);
-        // a linked agent herdr does not offer gives way to the last one picked, as an unknown remembered one does to a shell
-        if (stored && !next.some((agent) => agent.kind === stored)) setAgentKind(stored !== remembered && next.some((agent) => agent.kind === remembered) ? remembered : "");
+        // an agent not offered here gives way to the last one picked, else to the first offered
+        if (!next.some((agent) => agent.kind === stored)) setAgentKind(next.some((agent) => agent.kind === remembered) ? remembered : next[0]?.kind ?? "");
       })
       .catch((reason: unknown) => {
         if (!cancelled) setError(userErrorMessage(reason));
@@ -332,7 +336,7 @@ export function NewSessionDialog({ open, defaultCwd, tab = null, onClose, onCrea
         <div className="modal-body">
           <div className="field">
             <span className="field-label" id="new-session-agent">{t("Agent")}</span>
-            <AgentPicker ref={firstFieldRef} agents={agents} value={agentKind} disabled={fieldsDisabled} labelledBy="new-session-agent" hints={pickerHints} onChange={pickAgent} />
+            <AgentPicker ref={firstFieldRef} agents={agents} shell={agents.length === 0} value={agentKind} disabled={fieldsDisabled} labelledBy="new-session-agent" hints={pickerHints} onChange={pickAgent} />
           </div>
           {tab ? (
             <div className="field">

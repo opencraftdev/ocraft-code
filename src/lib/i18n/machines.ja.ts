@@ -27,7 +27,6 @@ export const MACHINES_JA: Record<string, string> = {
   "Manage {name}": "{name} を管理",
   "Manage PC": "PC を管理",
   "PC name": "PC 名",
-  "Rename": "名前を変更",
   "Disconnect": "切断",
   "Bridge connection conflict": "ブリッジ接続の競合",
   "Update the apps connected to this PC to the same version, or disconnect the other app, then reconnect here. Sessions keep running.": "この PC に接続するアプリを同じバージョンに更新するか、別のアプリの接続を解除してから、ここで再接続してください。セッションは実行を継続します。",
@@ -96,7 +95,6 @@ export const MACHINES_JA: Record<string, string> = {
   "1 PC hidden on this device": "このデバイスで非表示の PC: 1 台",
   "{n} PCs hidden on this device": "このデバイスで非表示の PC: {n} 台",
   "Filter": "絞り込み",
-  "Workspaces and agents": "ワークスペースとエージェント",
   "Clear filter": "絞り込みを消去",
   "Close filter": "絞り込みを閉じる",
   "No workspaces or agents match": "一致するワークスペースやエージェントはありません",
@@ -119,4 +117,7 @@ export const MACHINES_JA: Record<string, string> = {
   "Update this PC's Ovis and connect": "この PC の Ovis を更新して接続",
   "Updating {name}'s own Ovis": "{name} の Ovis を更新しています",
   "That PC's own updater installs it there. Existing herdr sessions keep running.": "その PC 自身のアップデーターがそこにインストールします。既存の herdr セッションは動き続けます。",
+  "New": "新規",
+  "Search": "検索",
+  "Sidebar": "サイドバー",
 };

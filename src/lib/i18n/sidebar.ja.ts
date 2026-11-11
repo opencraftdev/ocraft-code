@@ -52,7 +52,4 @@ export const SIDEBAR_JA: Record<string, string> = {
   "Collapse": "折りたたむ",
   "Expand": "展開",
   "Shell": "シェル",
-  "New": "新規",
-  "Search": "検索",
-  "Sidebar": "サイドバー",
 };

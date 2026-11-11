@@ -119,6 +119,8 @@ const BASE: Record<string, string> = {
   "Workflow file couldn't be read. Showing the last available graph.": "无法读取工作流文件。正在显示上次可用的关系图。",
   "Connection interrupted. Showing the last recorded activity.": "连接已中断。正在显示上次记录的活动。",
   "Loading agent activity": "正在加载智能体活动",
+  "Rename": "重命名",
+  "New tab with agent…": "用 Agent 新建标签页…",
   "Still reading agents from {machine}…": "仍在从 {machine} 读取智能体…",
   "Agent activity unavailable": "无法获取智能体活动",
   "Running agents": "正在运行的智能体",

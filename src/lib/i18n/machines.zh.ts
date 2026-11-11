@@ -27,7 +27,6 @@ export const MACHINES_ZH: Record<string, string> = {
   "Manage {name}": "管理 {name}",
   "Manage PC": "管理 PC",
   "PC name": "PC 名称",
-  "Rename": "重命名",
   "Disconnect": "断开连接",
   "Bridge connection conflict": "桥接连接冲突",
   "Update the apps connected to this PC to the same version, or disconnect the other app, then reconnect here. Sessions keep running.": "将连接此电脑的应用更新到相同版本，或断开其他应用的连接，然后在此重新连接。会话会继续运行。",
@@ -96,7 +95,6 @@ export const MACHINES_ZH: Record<string, string> = {
   "1 PC hidden on this device": "此设备上隐藏了 1 台 PC",
   "{n} PCs hidden on this device": "此设备上隐藏了 {n} 台 PC",
   "Filter": "筛选",
-  "Workspaces and agents": "工作区和代理",
   "Clear filter": "清除筛选",
   "Close filter": "关闭筛选",
   "No workspaces or agents match": "没有匹配的工作区或代理",
@@ -119,4 +117,7 @@ export const MACHINES_ZH: Record<string, string> = {
   "Update this PC's Ovis and connect": "更新此 PC 的 Ovis 并连接",
   "Updating {name}'s own Ovis": "正在更新 {name} 的 Ovis",
   "That PC's own updater installs it there. Existing herdr sessions keep running.": "由那台 PC 自己的更新程序在那里安装。现有的 herdr 会话继续运行。",
+  "New": "新建",
+  "Search": "搜索",
+  "Sidebar": "侧边栏",
 };

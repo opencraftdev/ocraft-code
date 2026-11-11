@@ -27,7 +27,6 @@ export const MACHINES_KO: Record<string, string> = {
   "Manage {name}": "{name} 관리",
   "Manage PC": "PC 관리",
   "PC name": "PC 이름",
-  "Rename": "이름 바꾸기",
   "Disconnect": "연결 끊기",
   "Bridge connection conflict": "브리지 연결 충돌",
   "Update the apps connected to this PC to the same version, or disconnect the other app, then reconnect here. Sessions keep running.": "이 PC에 연결된 앱들을 같은 버전으로 업데이트하거나 다른 앱의 연결을 해제한 뒤 여기서 다시 연결하세요. 세션은 계속 실행됩니다.",
@@ -96,7 +95,6 @@ export const MACHINES_KO: Record<string, string> = {
   "1 PC hidden on this device": "이 기기에서 숨긴 PC 1대",
   "{n} PCs hidden on this device": "이 기기에서 숨긴 PC {n}대",
   "Filter": "필터",
-  "Workspaces and agents": "워크스페이스와 에이전트",
   "Clear filter": "필터 지우기",
   "Close filter": "필터 닫기",
   "No workspaces or agents match": "일치하는 워크스페이스나 에이전트가 없습니다",
@@ -119,4 +117,7 @@ export const MACHINES_KO: Record<string, string> = {
   "Update this PC's Ovis and connect": "이 PC의 Ovis를 업데이트하고 연결",
   "Updating {name}'s own Ovis": "{name}의 Ovis 업데이트 중",
   "That PC's own updater installs it there. Existing herdr sessions keep running.": "그 PC의 자체 업데이터가 그곳에 설치합니다. 기존 herdr 세션은 계속 돕니다.",
+  "New": "새로 만들기",
+  "Search": "검색",
+  "Sidebar": "사이드바",
 };
