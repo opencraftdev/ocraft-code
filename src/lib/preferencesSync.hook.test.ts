@@ -202,8 +202,9 @@ describe("preferences sync real send path", () => {
     const client = await open({});
     expect(client.settings.palette).toBe("catppuccin");
     expect(client.settings[theme === "dark" ? "darkTheme" : "lightTheme"]).toBe("catppuccin");
-    expect(client.rendered).toMatchObject({ id: "catppuccin", mode: theme });
-    expect(document.documentElement.dataset["palette"]).toBe("catppuccin");
+    // the saved choice syncs, but this fork draws one static scheme (lib/themeBoot.ts STATIC_THEME_ENTRY)
+    expect(client.rendered).toMatchObject({ id: "codex", mode: "dark" });
+    expect(document.documentElement.dataset["palette"]).toBe("codex");
     await windows(3);
     expect(store.get().revision).toBe(2);
     expect(revisions).toEqual([]);

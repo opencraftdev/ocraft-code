@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ChevronDown, ChevronRight, Folder, GitBranch, GitCompare, GitFork, Layers, Monitor, PanelRightClose, RefreshCw, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, FileDiff, Folder, GitBranch, GitFork, Layers, Monitor, PanelRightClose, RefreshCw, X } from "lucide-react";
 import type { HerdrPane, RepoDiffFile } from "../../shared/protocol.ts";
 import { AgentGraphView, graphStateWord } from "./AgentGraphView.tsx";
 import { agentActivityGroups, sessionGraph, type AgentGraphNode } from "../lib/agentGraph.ts";
@@ -167,7 +167,7 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
             : !changes.listing ? <p className="agent-panel-note">{t("Changes unavailable")}</p>
             : changes.listing.files.length === 0 ? <p className="agent-panel-note">{t("No changes")}</p>
             : <button type="button" className="agent-panel-action agent-change-summary" onClick={() => onBrowseFiles("changes")}>
-              <GitCompare aria-hidden="true" />
+              <FileDiff aria-hidden="true" />
               {(() => {
                 // one line, as Claude desktop sums a branch: lines added and removed, or the file count when git gave no counts
                 const files = changes.listing.files;

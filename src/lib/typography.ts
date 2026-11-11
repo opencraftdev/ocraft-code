@@ -14,7 +14,7 @@ import type { Language } from "./i18n.ts";
  * the two equal). A copy, because a chosen font is written as `--font-ui` itself, and a token
  * cannot fall back to its own stylesheet value.
  */
-export const UI_FONT_STACK = '"Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", "Malgun Gothic", sans-serif';
+export const UI_FONT_STACK = '-apple-system, BlinkMacSystemFont, system-ui, "Pretendard Variable", Pretendard, "Segoe UI", Roboto, "Noto Sans KR", "Malgun Gothic", sans-serif';
 
 export const UI_FONT_PRESETS = ["default", "system", "noto"] as const;
 export type UiFontPreset = (typeof UI_FONT_PRESETS)[number];

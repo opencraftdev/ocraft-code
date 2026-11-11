@@ -14,9 +14,8 @@ import type { AlertPrefs, DoneAlerts } from "../../shared/notify-policy.ts";
 import { chatFontStack, sanitizeFontFamily } from "./fontFamily.ts";
 import { fontScale, sanitizeUiFontSize, uiFontStack } from "./typography.ts";
 import { sanitizeKeyBarExtras, type KeyBarExtra } from "./keys.ts";
-import { themeFor } from "./themeFor.ts";
 import { DEFAULT_KEY_BAR_ITEMS, migrateKeyBarItems, sanitizeKeyBarItems, type KeyBarItem } from "./keyBar.ts";
-import { applyThemeEntry, DARK_QUERY, readStoredAppearance, resolveTheme, sanitizeAppearance, SETTINGS_STORAGE_KEY, THEMES_STORAGE_KEY, type ResolvedTheme, type ThemeSetting } from "./themeBoot.ts";
+import { applyThemeEntry, DARK_QUERY, STATIC_THEME_ENTRY, readStoredAppearance, resolveTheme, sanitizeAppearance, SETTINGS_STORAGE_KEY, THEMES_STORAGE_KEY, type ResolvedTheme, type ThemeSetting } from "./themeBoot.ts";
 
 export { resolveTheme };
 export type { ResolvedTheme, ThemeSetting };
@@ -686,9 +685,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     return () => query.removeEventListener("change", onChange);
   }, []);
 
-  const resolvedTheme: ResolvedTheme = settings.theme === "system" ? (systemDark ? "dark" : "light") : settings.theme;
+  // ponytail: this fork draws one static scheme, Claude Code's dark surfaces (STATIC_THEME_ENTRY); the
+  // chosen theme is kept in the settings and comes back by resolving it here again
+  void systemDark;
+  const resolvedTheme: ResolvedTheme = STATIC_THEME_ENTRY.mode;
 
-  const resolvedEntry = themeFor(settings, resolvedTheme);
+  const resolvedEntry = STATIC_THEME_ENTRY;
 
   const [browserLanguages, setBrowserLanguages] = useState<readonly string[]>(() => (typeof navigator !== "undefined" ? navigator.languages : []));
   useEffect(() => {

@@ -7,10 +7,11 @@
  */
 // first: this script runs before main.tsx, so it moves the settings saved under the old key itself
 import "./lib/legacyStorage.ts";
-import { applyThemeEntry, savedThemeEntry } from "./lib/themeBoot.ts";
+import { applyThemeEntry, STATIC_THEME_ENTRY } from "./lib/themeBoot.ts";
 
 const root = document.documentElement;
-const entry = savedThemeEntry(() => window.localStorage);
+// this fork draws one static scheme (lib/themeBoot.ts STATIC_THEME_ENTRY), whatever theme is saved
+const entry = STATIC_THEME_ENTRY;
 applyThemeEntry(root, entry);
 // the frames before the stylesheet arrives: the row's own surface, until the app hands it back to
 // the theme blocks (applyToDocument in lib/settings.ts), or keeps it on the current row when the

@@ -3,7 +3,7 @@
  * page's boot script (src/theme-bootstrap.ts, run before the first paint) and loadSettings use, so
  * the theme the page is first drawn in is the one the app goes on drawing.
  */
-import { DEFAULT_THEME, isThemeId, type ThemeEntry, type ThemeId } from "./themes.ts";
+import { DEFAULT_THEME, isThemeId, rowFor, type ThemeEntry, type ThemeId } from "./themes.ts";
 import { themeFor } from "./themeFor.ts";
 
 export type ThemeSetting = "dark" | "light" | "system";
@@ -92,3 +92,6 @@ export function applyThemeEntry(root: HTMLElement, entry: ThemeEntry): void {
   // `<meta name="theme-color">` follows the panel surface so the PWA title bar matches
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", entry.bgPanel);
 }
+
+/** The one scheme this fork draws, whatever is saved: Claude Code's dark surfaces on the default palette (src/styles.css). */
+export const STATIC_THEME_ENTRY: ThemeEntry = rowFor(DEFAULT_THEME, "dark");

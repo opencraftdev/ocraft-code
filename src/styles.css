@@ -523,6 +523,8 @@
   --syntax-variable: #e6e6e6;
   --syntax-meta: #ad7bf9;
   --bubble-border: transparent;
+  --diff-add: #3fb950;
+  --diff-del: #f85149;
   --shadow-drawer: 0 0 40px rgba(0, 0, 0, 0.6);
   --shadow-pop: 0 16px 48px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--border);
   --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.35);
@@ -3258,4 +3260,17 @@ button, a, [role="button"] {
   .agent-panel .agent-context-heading { font-size: 14px; font-weight: var(--fw-regular); }
   .agent-panel .agent-panel-environment-row,
   .agent-panel .agent-change-summary { font-size: 14px; }
+}
+
+/* ── Claude desktop look: one quiet icon color ───────────────────────────────────────────────
+   Icons are the secondary text color everywhere; only the diff counts and the context bar carry hue.
+   The model line names the model in words, without the agent's logo. */
+@media (min-width: 769px) {
+  .agent-panel svg,
+  .sidebar-nav-item svg,
+  .app-header .icon-button svg,
+  .composer .composer-under svg { color: var(--text-dim); }
+  .app-header .view-switch > button svg { color: inherit; }
+  .composer .composer-pill .agent-mark { display: none; }
+  .composer .composer-pill { gap: var(--space-1); padding-inline: 0; }
 }
