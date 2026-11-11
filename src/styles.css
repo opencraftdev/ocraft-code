@@ -110,7 +110,7 @@
   --syntax-meta: #b49dd6;
 
   /* type (comfortable density; compact overrides below) */
-  --font-ui: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", "Malgun Gothic", sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, system-ui, "Pretendard Variable", Pretendard, "Segoe UI", Roboto, "Noto Sans KR", "Malgun Gothic", sans-serif;
   /* "JetBrains Mono Web" is the bundled face (fonts/fonts.css): after the icon font, which draws
      the private use area alone, and never in the terminal's own stack (lib/fontFamily.ts) */
   --font-mono: "Symbols Nerd Font Mono", "JetBrains Mono Web", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "D2Coding", monospace;
@@ -478,12 +478,12 @@
 }
 
 [data-theme="dark"][data-palette="codex"] {
-  --composer-send-bg: #315fc6;
-  --composer-send-ink: #f9fafc;
-  --chat-canvas: #0c0d0e;
-  --sidebar-surface: #111214;
-  --composer-surface-bg: #121315;
-  --bg: #181818;
+  --composer-send-bg: #ececec;
+  --composer-send-ink: #191919;
+  --chat-canvas: #191919;
+  --sidebar-surface: #1f1f1f;
+  --composer-surface-bg: #303030;
+  --bg: #191919;
   --bg-panel: #1f1f1f;
   --bg-elevated: #262626;
   --bg-hover: #2f2f2f;
@@ -491,7 +491,7 @@
   --border: #2e2e2e;
   --border-strong: #404040;
   --text: #ececec;
-  --text-dim: #a3a3a3;
+  --text-dim: #999999;
   --text-strong: #ffffff;
   --accent: #3a83f7;
   --accent-tint: rgba(58, 131, 247, 0.16);
@@ -510,7 +510,7 @@
   --notice: #d9b26a;
   --danger-text: #ffd0ce;
   --scrim: rgba(0, 0, 0, 0.6);
-  --term-bg: #181818;
+  --term-bg: #191919;
   --term-fg: #ececec;
   --term-cursor: #ffffff;
   --term-selection: #264f78;
@@ -3200,4 +3200,46 @@ button, a, [role="button"] {
     font-size: var(--fs-xs);
   }
   .agent-change-summary:hover .agent-change-review { color: var(--text); }
+}
+
+/* ── Claude desktop look: measured sizes (claude.ai/code, dark) ───────────────────────────────
+   32px rows on an 8px radius, 14px text, 12px captions, a 44px input on a 14px radius with no
+   edge, the sidebar one step lighter than the page with a faint edge. */
+@media (min-width: 769px) {
+  .app .sidebar { background: var(--sidebar-surface); border-right: var(--hairline) solid var(--border); }
+  .sidebar-nav { padding: var(--space-2); }
+  .sidebar-nav-item,
+  .sidebar-shell .sidebar-filter { min-height: 32px; border-radius: 8px; font-size: 14px; }
+  .sidebar-shell .sidebar-filter-input { font-size: 14px; }
+  .sidebar-shell .machine-header { margin-top: var(--space-3); }
+  .sidebar-shell .machine-header .machine-title { font-size: 12px; font-weight: 520; }
+  .sidebar-shell .workspace-header,
+  .sidebar-shell .workspace-select,
+  .sidebar-shell .workspace-group { min-height: 32px; }
+  .sidebar-shell .workspace-header { border-radius: 8px; }
+  .sidebar-shell .workspace-name { font-size: 14px; }
+  .sidebar-shell .workspace-header:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+  .sidebar-shell .workspace.is-selected > .workspace-header { background: color-mix(in srgb, var(--text) 11%, transparent); }
+  .sidebar-footer { border-top: 0; }
+
+  .app-header .context-title { font-size: 14px; font-weight: var(--fw-regular); border-radius: 8px; }
+  .app-header .view-switch > button,
+  .app-header .header-files-button,
+  .app-header .header-meta > .icon-button,
+  .app-header .header-more-button { border-radius: 8px; }
+
+  .composer .composer-surface { min-height: 44px; border: 0; border-radius: 14px; background: var(--composer-surface-bg); }
+  .composer .composer-surface:focus-within { border: 0; box-shadow: 0 0 0 var(--hairline) var(--border-strong); }
+  .composer .composer-text { font-size: 15px; padding-block: 11px; }
+  /* the field scrolls by wheel and caret; a track beside the send button reads as a stray bar */
+  .composer .composer-text { scrollbar-width: none; }
+  .app-header .icon-button[aria-expanded="true"],
+  .app-header .icon-button[aria-pressed="true"] { border-color: transparent; background: var(--bg-hover); color: var(--text-strong); }
+  .composer .composer-status,
+  .composer .composer-under .bg-tasks-toggle { font-size: 13px; }
+
+  .agent-panel .agent-panel-section-head h2,
+  .agent-panel .agent-context-heading { font-size: 14px; font-weight: var(--fw-regular); }
+  .agent-panel .agent-panel-environment-row,
+  .agent-panel .agent-change-summary { font-size: 14px; }
 }

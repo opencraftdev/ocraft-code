@@ -49,9 +49,9 @@ export const SUPPORTED_ENTRIES = [
     id: "codex",
     mode: "dark",
     roles: ["bg", "bg-panel", "bg-elevated", "bg-hover", "bg-input", "border", "border-strong", "text", "text-dim", "text-strong", "accent", "accent-tint", "primary", "primary-hover", "primary-text", "primary-tint", "status-idle", "status-working", "status-blocked", "status-done", "status-working-tint", "status-blocked-tint", "status-done-tint", "danger-tint", "notice", "danger-text", "scrim", "term-bg", "term-fg", "term-cursor", "term-selection", "line-number", "syntax-function", "syntax-keyword", "syntax-string", "syntax-number", "syntax-type", "syntax-variable", "syntax-meta", "bubble-border", "shadow-drawer", "shadow-pop", "shadow-card"],
-    terminal: { background: "#181818", foreground: "#ececec", cursor: "#ffffff", selectionBackground: "#264f78" },
+    terminal: { background: "#191919", foreground: "#ececec", cursor: "#ffffff", selectionBackground: "#264f78" },
     bgPanel: "#1f1f1f",
-    bg: "#181818",
+    bg: "#191919",
   },
   {
     id: "catppuccin",
