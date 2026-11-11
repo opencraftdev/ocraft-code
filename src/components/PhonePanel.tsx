@@ -84,7 +84,7 @@ export function Address({ url, title }: { url: string; title: string }) {
   );
 }
 
-function Command({ command }: { command: string }) {
+export function Command({ command }: { command: string }) {
   const t = useT();
   const codeRef = useRef<HTMLElement>(null);
   const [copied, setCopied] = useState(false);

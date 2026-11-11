@@ -391,7 +391,8 @@ export async function fetchPaneConversation(paneId: string, machineId = "local",
 export interface HealthInfo {
   ok: boolean;
   herdr: HerdrIdentity;
-  web_ui?: { boot_id: string | null; revision: string | null };
+  /** `assistant`: this server is the Assistant VM (OVIS_ASSISTANT=1), told only to a client that got in */
+  web_ui?: { boot_id: string | null; revision: string | null; assistant?: boolean };
   /** Absent only on a server that predates the token gate. */
   auth?: HealthAuth;
   /** present only while this server is reachable beyond this PC with no token and nothing paired */

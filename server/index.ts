@@ -206,6 +206,8 @@ export function createServer(
     sidecar?: boolean | (() => boolean);
     /** where omo and gjc are found for the offer and the start (server/shell-agent.ts); unset, this server's PATH alone. The real entrypoints (this file's and remote-entry.ts) add their user's login shell; tests pass a fixture one. */
     shellAgents?: ShellAgentLocator;
+    /** whether this server is the Assistant VM (scripts/install-assistant.sh); unset, OVIS_ASSISTANT=1 says so (its systemd unit sets it) */
+    assistant?: boolean;
   } = {},
 ): ServerInstance {
   /**
@@ -215,6 +217,7 @@ export function createServer(
   const bootId = process.env["OVIS_BOOT_ID"] || randomUUID();
   const orderSequence = new OrderSequence(bootId);
   const hostname = options.hostname ?? process.env["HOST"] ?? "127.0.0.1";
+  const assistant = options.assistant ?? process.env["OVIS_ASSISTANT"] === "1";
   /** Empty token = gate disabled; every route then behaves exactly as it did before auth existed. */
   const token = options.token ?? process.env["OVIS_TOKEN"] ?? "";
   /** paired devices (server/devices.ts) and the PC's Tailscale login: the two ways in besides the token and this PC itself */
@@ -534,7 +537,8 @@ export function createServer(
           // a forced answer (tests) and a runtime without the PTY sidecar are told the way a Windows herdr's own would be
           const herdr = attachableIdentity(info, sidecar);
           return jsonResponse({ ok: true, herdr, auth, ...(lan_exposure ? { lan_exposure } : {}), ...(security ? { security } : {}),
-            web_ui: { boot_id: bootId, revision: process.env["OVIS_REVISION"] ?? null } }, 200, securityHeaders);
+            // the Assistant VM is told to a client that got in, as the security summary is
+            web_ui: { boot_id: bootId, revision: process.env["OVIS_REVISION"] ?? null, ...(access.level === "full" ? { assistant } : {}) } }, 200, securityHeaders);
         } catch (error) {
           return errorResponse(error);
         }
