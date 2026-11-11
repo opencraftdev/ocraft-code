@@ -196,3 +196,126 @@
     height: auto;
   }
 }
+
+/* ── New session as a page (Claude Code's New session): the chat area right of the sidebar, a
+   title on top, one message box near the bottom, the folder and the agent's model under it ── */
+.new-session-page-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 60);
+  display: flex;
+  background: var(--chat-canvas, var(--bg));
+}
+@media (min-width: 769px) {
+  .app:not(.sidebar-collapsed) .new-session-page-scrim { left: var(--sidebar-shown-w); }
+}
+.new-session-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  outline: none;
+}
+.new-session-page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--header-h);
+  padding: 0 var(--space-3) 0 var(--space-4);
+  border-bottom: var(--hairline) solid var(--border);
+}
+.new-session-page-title { margin: 0; color: var(--text-dim); font-size: 14px; font-weight: var(--fw-regular); }
+.new-session-page-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  flex: 1;
+  width: min(calc(100% - 2 * var(--space-4)), var(--chat-w, 48rem));
+  margin: 0 auto;
+  padding-bottom: var(--space-5);
+}
+.new-session-page-box {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: 4px 6px 4px var(--space-4);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--bg-elevated);
+}
+.new-session-page-box:focus-within { border-color: color-mix(in srgb, var(--text) 28%, transparent); }
+.new-session-page-text {
+  flex: 1;
+  min-height: 36px;
+  max-height: 40vh;
+  padding: 8px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 15px;
+  line-height: 20px;
+  resize: none;
+  field-sizing: content;
+  scrollbar-width: none;
+}
+.new-session-page-text::placeholder { color: var(--text-dim); }
+.new-session-page-send {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 2px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-strong);
+  cursor: pointer;
+}
+.new-session-page-send:hover:not(:disabled) { background: var(--bg-hover); }
+.new-session-page-send:disabled { color: var(--text-dim); cursor: default; }
+.new-session-page-send svg { width: 16px; height: 16px; }
+.new-session-page-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 36px; margin-top: var(--space-1); }
+.new-session-page-left,
+.new-session-page-right { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+.new-session-page-chip,
+.new-session-page-model,
+.new-session-page-effort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.new-session-page-chip { cursor: pointer; }
+.new-session-page-chip svg { width: 14px; height: 14px; color: var(--text-dim); }
+.new-session-page-chip:hover:not(:disabled),
+.new-session-page-chip[aria-expanded="true"],
+.new-session-page-model:hover,
+.new-session-page-model:focus,
+.new-session-page-effort:hover { background: var(--bg-hover); outline: none; }
+.new-session-page-model { width: 9rem; }
+.new-session-page-model::placeholder { color: var(--text); }
+.new-session-page-effort { color: var(--text-dim); cursor: pointer; }
+.new-session-page-right .agent-picker > button { height: 28px; border: 0; background: transparent; font-size: 13px; }
+.new-session-page-right .agent-picker > button:hover { background: var(--bg-hover); }
+.new-session-page-folder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: var(--hairline) solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+}
+.new-session-page-note { min-height: 1.2em; margin: var(--space-2) 0 0; color: var(--text-dim); font-size: 12px; }
