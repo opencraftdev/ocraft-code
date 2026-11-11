@@ -360,7 +360,7 @@ export function NewSessionDialog({ open, beside = false, machines = [], onMachin
                   autoComplete="off"
                   autoCapitalize="off"
                   spellCheck={false}
-                  placeholder={t("Agent default")}
+                  placeholder={t("Default model")}
                   aria-label={t("Model")}
                   aria-invalid={fault === "model" || undefined}
                   onChange={(event) => setModel(event.target.value)}
@@ -368,7 +368,7 @@ export function NewSessionDialog({ open, beside = false, machines = [], onMachin
                 {suggestions.length > 0 && <datalist id="new-session-models">{suggestions.map((alias) => <option key={alias} value={alias} />)}</datalist>}
               </>}
               {can.efforts.length > 0 && <select id="new-session-effort" className="new-session-page-effort" value={effort} disabled={fieldsDisabled} aria-label={t("Effort")} onChange={(event) => setEffort(event.target.value)}>
-                <option value="">{t("Agent default")}</option>
+                <option value="">{t("Default effort")}</option>
                 {can.efforts.map((level) => <option key={level} value={level}>{level}</option>)}
               </select>}
             </div>

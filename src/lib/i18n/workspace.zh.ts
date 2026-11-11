@@ -79,4 +79,6 @@ export const WORKSPACE_ZH: Record<string, string> = {
   "Remote": "远程",
   "This computer": "这台电脑",
   "Open folder…": "打开文件夹…",
+  "Default model": "默认模型",
+  "Default effort": "默认推理强度",
 };

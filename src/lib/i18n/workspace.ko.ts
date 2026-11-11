@@ -79,4 +79,6 @@ export const WORKSPACE_KO: Record<string, string> = {
   "Remote": "원격",
   "This computer": "이 컴퓨터",
   "Open folder…": "폴더 열기…",
+  "Default model": "기본 모델",
+  "Default effort": "기본 추론 강도",
 };

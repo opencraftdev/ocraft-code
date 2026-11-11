@@ -3313,16 +3313,12 @@ button, a, [role="button"] {
    and Cmd+D closes the other half too. */
 @media (min-width: 769px) {
   .pane-split.is-split .pane-slot { position: relative; }
-  .pane-split.is-split .tab-strip-row,
-  .pane-split.is-split .pane-slot-bar { position: absolute; top: var(--space-2); right: var(--space-2); z-index: 6; min-height: 0; padding: 0; border: 0; background: transparent; }
-  .pane-split.is-split .pane-slot-title,
-  .pane-split.is-split .pane-slot-machine { display: none; }
-  .pane-split.is-split .tab-strip-end,
-  .pane-split.is-split .pane-slot-bar > :not(.pane-slot-title) { opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
-  .pane-split.is-split .pane-slot:hover .tab-strip-end,
-  .pane-split.is-split .pane-slot:hover .pane-slot-bar > *,
-  .pane-split.is-split .tab-strip-end:focus-within { opacity: 1; }
-  .pane-split.is-split .tab-strip-end { display: flex; gap: var(--space-1); padding: 2px; border-radius: 8px; background: var(--bg-elevated); }
+  /* a half is its chat or terminal alone: no tab bar, no floating controls, no active-tab line
+     (Cmd+D, the Terminal panel's own head and the header close them) */
+  .pane-split.is-split .tab-strip-row:not(:has(.is-editing)),
+  .pane-split.is-split .pane-slot-bar { display: none; }
+  /* both halves at full strength: the chat and its terminal are read together */
+  .pane-split.is-split .pane-slot.is-inactive .terminal-host { opacity: 1; }
   .pane-split.is-split .pane-slot + .pane-slot { border-left: var(--hairline) solid var(--border); }
   .pane-split.is-split .pane-slot.is-active { box-shadow: none; }
 }
@@ -3363,4 +3359,21 @@ button, a, [role="button"] {
   .pane-split.is-split .pane-slot:has(.pane-terminal-head) { flex: 0 0 40%; max-width: 40%; }
   .pane-split.is-split .pane-slot:has(.pane-terminal-head) ~ .pane-slot,
   .pane-split.is-split .pane-slot:not(:has(.pane-terminal-head)) { flex: 1 1 0; }
+}
+
+/* ── Claude desktop look: Files and Changes dock as the right column, not a floating card ───── */
+@media (min-width: 769px) {
+  .app .workspace-details-drawer.workspace-file-drawer {
+    top: var(--header-h);
+    right: 0;
+    bottom: 0;
+    width: min(44rem, 42vw);
+    left: auto;
+    border: 0;
+    border-left: var(--hairline) solid var(--border);
+    border-radius: 0;
+    background: var(--chat-canvas, var(--bg));
+    box-shadow: none;
+  }
+  .app:has(.workspace-file-drawer) .pane-column { margin-right: min(44rem, 42vw); }
 }

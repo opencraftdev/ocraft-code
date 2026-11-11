@@ -156,7 +156,6 @@ const BASE: Record<string, string> = {
   // ---- settings ----
   "Settings": "设置",
   "Chat": "聊天",
-  "Agent default": "代理默认",
   "Phone & devices": "手机和设备",
   "Access token": "访问 Token",
   "Install app": "安装应用",

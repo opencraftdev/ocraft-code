@@ -153,7 +153,6 @@ const BASE: Record<string, string> = {
   // ---- settings ----
   "Settings": "設定",
   "Chat": "チャット",
-  "Agent default": "エージェントの既定",
   "Phone & devices": "スマートフォンとデバイス",
   "Access token": "アクセストークン",
   "Install app": "アプリをインストール",

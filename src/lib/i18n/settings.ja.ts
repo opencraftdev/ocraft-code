@@ -335,4 +335,5 @@ export const SETTINGS_JA: Record<string, string> = {
   "Reachable": "接続可能",
   "This request came through Tailscale Funnel, which is open to the public internet.": "このリクエストは公開インターネットに開かれたTailscale Funnelを経由しました。",
   "The server cannot see whether a proxy, tunnel or router makes it reachable from the internet.": "プロキシ、トンネル、ルーターによってインターネットから接続できるかどうかは、サーバーからは分かりません。",
+  "Agent default": "エージェントの既定",
 };

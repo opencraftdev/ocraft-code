@@ -79,4 +79,6 @@ export const WORKSPACE_JA: Record<string, string> = {
   "Remote": "リモート",
   "This computer": "このコンピューター",
   "Open folder…": "フォルダを開く…",
+  "Default model": "既定のモデル",
+  "Default effort": "既定の推論量",
 };
