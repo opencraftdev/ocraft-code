@@ -44,10 +44,13 @@ export interface AgentPanelProps {
   onOpenDiff: (comparison: RepoComparison, file: RepoDiffFile) => void;
   onNewAgent: () => void;
   pinned?: boolean;
+  /** an agent the composer's strip asked to open (`task:<id>`), consumed once */
+  focusAgent?: string | null;
+  onFocusedAgent?: () => void;
 }
 
 /** Reference-style environment and agent sections, using existing read-only bridge APIs. */
-export function AgentPanel({ contextKey, pane, machineName, workspaceName, title, online, watching, tab, drawerOpen, onOpenView, onCloseView, onClose, onBrowseFiles, onOpenDiff, pinned = false }: AgentPanelProps) {
+export function AgentPanel({ contextKey, pane, machineName, workspaceName, title, online, watching, tab, drawerOpen, onOpenView, onCloseView, onClose, onBrowseFiles, onOpenDiff, pinned = false, focusAgent = null, onFocusedAgent }: AgentPanelProps) {
   const t = useT();
   const machineId = useMachineId();
   const branch = usePaneBranch(machineId, pane.workspace_id);
@@ -115,6 +118,13 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
     });
   };
   const showTask = (node: AgentGraphNode, trigger: HTMLButtonElement) => { setSelectedId(node.id); openDrawer("tasks", trigger); };
+  useEffect(() => {
+    if (focusAgent === null) return;
+    setSelectedId(focusAgent); onFocusedAgent?.();
+    drawerRoot.current?.querySelector(".agent-drawer-body")?.scrollTo(0, 0);
+  }, [focusAgent, onFocusedAgent]);
+  // a cold first read on a remote PC can take ten seconds; one that failed is not still loading
+  const waiting = activity.loading ? t(activity.slow ? "Still reading agents from {machine}…" : "Loading agent activity", { machine: machineName }) : null;
   const choose = (node: AgentGraphNode) => { setSelectedId(node.id); onOpenView("details"); drawerRoot.current?.querySelector(".agent-drawer-body")?.scrollTo(0, 0); };
   const row = (node: AgentGraphNode) => <li key={node.id}>
     <button type="button" data-agent-id={node.kind === "agent" ? node.id : undefined} className={`agent-panel-row${node.kind === "agent" ? " is-agent" : ""} state-${node.state}`} aria-pressed={selectedId === node.id} onClick={event => node.kind === "agent" ? showAgent(node, event.currentTarget) : showTask(node, event.currentTarget)} title={node.label}>
@@ -162,14 +172,14 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
       <section className="agent-panel-section agent-panel-tasks" data-expanded={tasksOpen} aria-label={t("Background tasks")}>
         <header className="agent-panel-section-head"><h2><button type="button" className="agent-panel-disclosure" aria-expanded={tasksOpen} aria-controls={`${id}-tasks`} onClick={() => setTasksOpen(value => !value)}>{t("Background tasks")}<ChevronDown aria-hidden="true" /></button></h2></header>
         <div id={`${id}-tasks`} className="agent-panel-launchers" hidden={!tasksOpen}>
-          {runningTasks.length > 0 ? <ul className="agent-panel-list">{runningTasks.slice(0, 2).map(row)}</ul> : activity.runs.some(runGoing) ? <p className="agent-panel-note">{t("{n} running", { n: activity.runs.filter(runGoing).length })}</p> : <p className="agent-panel-note">{t(activity.loading ? "Loading agent activity" : activity.stale ? "Task activity unavailable" : "No background tasks reported.")}</p>}
+          {runningTasks.length > 0 ? <ul className="agent-panel-list">{runningTasks.slice(0, 2).map(row)}</ul> : activity.runs.some(runGoing) ? <p className="agent-panel-note">{t("{n} running", { n: activity.runs.filter(runGoing).length })}</p> : <p className="agent-panel-note">{waiting ?? t(activity.stale ? "Task activity unavailable" : "No background tasks reported.")}</p>}
           <button type="button" className="agent-panel-action" aria-expanded={drawerOpen && tab === "tasks"} aria-controls={`${id}-drawer`} onClick={event => openList("tasks", event, endedCount > 0)}><Layers aria-hidden="true" /><span>{endedCount > 0 ? t("{count} finished", { count: endedCount }) : t("View background tasks")}</span><ChevronRight aria-hidden="true" /></button>
         </div>
       </section>
       <section className="agent-panel-section agent-panel-agents" data-expanded={agentsOpen} aria-label={t("Agents")}>
         <header className="agent-panel-section-head"><h2><button type="button" className="agent-panel-disclosure" aria-expanded={agentsOpen} aria-controls={`${id}-agents-summary`} onClick={() => setAgentsOpen(value => !value)}>{t("Agents")}<ChevronDown aria-hidden="true" /></button></h2></header>
         <div id={`${id}-agents-summary`} className="agent-panel-launchers" hidden={!agentsOpen}>
-          {runningAgents.length > 0 ? <ul className="agent-panel-list">{runningAgents.slice(0, 2).map(row)}</ul> : <p className="agent-panel-note">{t(activity.loading ? "Loading agent activity" : "No agents running.")}</p>}
+          {runningAgents.length > 0 ? <ul className="agent-panel-list">{runningAgents.slice(0, 2).map(row)}</ul> : <p className="agent-panel-note">{waiting ?? t(activity.stale ? "Agent activity unavailable" : "No agents running.")}</p>}
           <button type="button" className="agent-panel-action" aria-expanded={drawerOpen && tab !== "tasks"} aria-controls={`${id}-drawer`} onClick={event => openList("agents", event, endedAgents.length > 0)}><GitFork aria-hidden="true" /><span>{endedAgents.length > 0 ? t("{count} finished", { count: endedAgents.length }) : t("View agents")}</span><ChevronRight aria-hidden="true" /></button>
         </div>
       </section>
@@ -188,7 +198,7 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
       {(activity.stale || (tab === "graph" && activity.dagrFailed)) && <p className="agent-panel-note agent-panel-stale" role="status">{t(activity.dagrFailed && tab === "graph" ? "Workflow file couldn't be read. Showing the last available graph." : "Connection interrupted. Showing the last recorded activity.")}</p>}
       {tab === "agents" ? <div className="agent-roster">
         <h2 className="background-task-group-heading">{t("Running")} <span>{runningAgents.length}</span></h2>
-        {runningAgents.length > 0 ? <ul className="agent-panel-list agent-roster-list">{runningAgents.map(row)}</ul> : <p className="agent-panel-note">{t(activity.loading ? "Loading agent activity" : "No agents running.")}</p>}
+        {runningAgents.length > 0 ? <ul className="agent-panel-list agent-roster-list">{runningAgents.map(row)}</ul> : <p className="agent-panel-note">{waiting ?? t(activity.stale ? "Agent activity unavailable" : "No agents running.")}</p>}
         {endedAgents.length > 0 && <details className="background-finished-group" open={showEnded} onToggle={event => setShowEnded(event.currentTarget.open)}><summary><ChevronDown aria-hidden="true" />{t("Finished")} <span>{endedAgents.length}</span></summary><ul className="agent-panel-list agent-roster-list">{endedAgents.map(row)}</ul></details>}
       </div> : tab === "tasks" ? <BackgroundTaskCards running={runningTasks} ended={endedTasks} runs={activity.runs} receipts={receipts} selectedId={selectedId} showEnded={showEnded} onShowEnded={setShowEnded} now={now} loading={activity.loading} moreRunning={activity.moreRunning} /> : tab === "details" ? selected && <AgentWorkDetail key={selected.id} paneId={pane.pane_id} node={selected} receipt={selected.task ? receipts.get(selected.task.id) : undefined} online={online} watching={watching} refresh={refresh} now={now} /> : <>
         {selected && <h2 className="agent-details-name">{selected.label}</h2>}

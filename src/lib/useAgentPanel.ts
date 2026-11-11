@@ -10,5 +10,8 @@ export function useAgentPanel(owner: string | null) {
   const setAgentDrawerOpen = useCallback((open: boolean) => setDrawer({ owner, open }), [owner]);
   const agentPanelToggle = useRef<HTMLButtonElement>(null);
   const closeAgentPanel = useCallback(() => { setAgentPanelOpen(false); setDrawer(before => ({ ...before, open: false })); agentPanelToggle.current?.focus({ preventScroll: true }); }, []);
-  return { agentPanelOpen, setAgentPanelOpen, agentPanelTab, setAgentPanelTab, agentDrawerOpen, setAgentDrawerOpen, agentPanelToggle, closeAgentPanel };
+  // an agent the composer's strip asked the panel to open (`task:<id>`), until the panel takes it
+  const [focusAgent, setFocusAgent] = useState<string | null>(null);
+  const clearFocusAgent = useCallback(() => setFocusAgent(null), []);
+  return { focusAgent, setFocusAgent, clearFocusAgent, agentPanelOpen, setAgentPanelOpen, agentPanelTab, setAgentPanelTab, agentDrawerOpen, setAgentDrawerOpen, agentPanelToggle, closeAgentPanel };
 }

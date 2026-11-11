@@ -1,0 +1,35 @@
+/* The running subagents over the composer (AgentStrip.tsx), on the composer's column. */
+.agent-strip {
+  flex: none;
+  width: min(calc(100% - 2 * var(--space-4)), var(--chat-w));
+  margin: 0 auto var(--space-1);
+}
+.agent-strip ul { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.agent-strip-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+  min-height: var(--control-h);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-xs);
+  text-align: start;
+}
+.agent-strip-row:not(:disabled) { cursor: pointer; }
+.agent-strip-row:not(:disabled):hover { background: var(--surface-hover, color-mix(in srgb, var(--text) 6%, transparent)); }
+.agent-strip-row:focus-visible { outline: var(--focus-ring, 2px solid var(--status-working)); outline-offset: -2px; }
+.agent-strip-dot { flex: none; width: var(--dot-size); height: var(--dot-size); border-radius: var(--radius-pill); background: var(--status-working); }
+.agent-strip-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-strip-meta { flex: none; color: var(--text-dim); }
+.agent-strip-num { font-variant-numeric: tabular-nums; }
+.agent-strip-more { color: var(--text-dim); }
+.agent-strip-more svg { flex: none; width: var(--dot-size); height: var(--dot-size); }
+@media (max-width: 599px) {
+  /* a phone keeps the name and the time */
+  .agent-strip-meta:not(.agent-strip-num) { display: none; }
+}

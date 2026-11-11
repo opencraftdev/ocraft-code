@@ -39,6 +39,7 @@ import { SecretInput } from "./SecretInput.tsx";
 import { ChatView } from "./ChatView.tsx";
 import { RenderBoundary } from "./RenderBoundary.tsx";
 import { Composer } from "./Composer.tsx";
+import { AgentStrip } from "./AgentStrip.tsx";
 import { ComposerNotices, type ComposerNoticeRow } from "./ComposerNotices.tsx";
 import { PendingMessages } from "./PendingMessages.tsx";
 import type { AgentStatus, ClientRole, PlanSummary, ServerMessage } from "../../shared/protocol.ts";
@@ -121,6 +122,8 @@ export interface PaneTerminalProps {
   /** opens the New tab dialog on the pane's workspace (App's NewSessionDialog): the composer's new-agent button */
   onOpenNewSession?: () => void;
   onForked?: (result: import("../../shared/protocol.ts").ConversationForkResponse) => void;
+  /** opens a running subagent (or, with null, the list) in the agent panel: the agent strip's rows */
+  onOpenAgent?: (taskId: string | null) => void;
   findRequest?: number;
   controls?: { current: PaneControls | null };
   /** Only the selected tile may take keyboard focus after async work or a lens change. */
@@ -192,6 +195,7 @@ export function PaneTerminal({
   onOpenHistory,
   onOpenNewSession,
   onForked,
+  onOpenAgent,
   onRoleAck,
   onConnectionChange,
   onServerMessage,
@@ -1258,6 +1262,10 @@ export function PaneTerminal({
       {presented && paneId !== null && chatMounted && <div className="prompt-dock" ref={setPromptDock} aria-live="polite" inert={peek !== null || undefined} />}
       {/* the composer belongs to the chat lens: in terminal mode the grid itself is
           the input surface (key bar included), so a second box would only duplicate it */}
+      {/* a Claude pane's running subagents, over the input: one may keep chatting while they work */}
+      {presented && paneId !== null && chatMounted && !secretActive && !observing && !ended && agent === "claude" && backgroundTasks > 0 && (
+        <AgentStrip paneId={paneId} agent={agent} online={connected} count={backgroundTasks} onOpen={onOpenAgent} />
+      )}
       {presented && paneId !== null && chatMounted && !secretActive && !observing && !ended && (
         <Composer
           key={paneId}

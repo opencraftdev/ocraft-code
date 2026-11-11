@@ -24,3 +24,10 @@
 - Simplify Agents to active/finished entries, and open prompt, model and recorded activity details
   when selecting an agent. Fold tool-call batches and keep the graph as an explicit separate action.
 - Read completed subagent details as well as running work, preserving Back navigation and focus.
+- List a Claude pane's running subagents over the composer, with elapsed time and tokens, so you
+  can keep chatting while they work; a row opens the agent's details in the right drawer.
+
+### Fixed
+- Stop the Agents card from staying on "Loading agent activity" for a remote PC: a slow first
+  read gets more time and says so, each answer shows as it arrives, and a changing task count no
+  longer cancels the read in progress.

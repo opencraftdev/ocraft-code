@@ -203,11 +203,13 @@ export function App() {
   const { renameRequest, requestRename, clearRenameRequest } = useRenameRequest(selectedMachineId, selectedPaneId);
   // the header's More menu: its button
   const [more, setMore] = useState<{ anchor: HTMLElement } | null>(null);
-  const { agentPanelOpen, setAgentPanelOpen, agentPanelTab, setAgentPanelTab, agentDrawerOpen, setAgentDrawerOpen, agentPanelToggle, closeAgentPanel } = useAgentPanel(conversationContextKey(selectedMachineId, snapshot?.panes.find(item => item.pane_id === selectedPaneId) ?? null, snapshot?.finish_epoch));
+  const { agentPanelOpen, setAgentPanelOpen, agentPanelTab, setAgentPanelTab, agentDrawerOpen, setAgentDrawerOpen, agentPanelToggle, closeAgentPanel, focusAgent, setFocusAgent, clearFocusAgent } = useAgentPanel(conversationContextKey(selectedMachineId, snapshot?.panes.find(item => item.pane_id === selectedPaneId) ?? null, snapshot?.finish_epoch));
   const closeMore = useCallback(() => setMore(null), []);
   // the pane canvas's actions, for the phone's tab menu (TabStrip)
   const paneActionsRef = useRef<((target: HerdrPane) => RowMenuItem[]) | null>(null);
   const { filesOpen, setFilesOpen, filesTab, showWorkspaceFiles, openAgentView, closeAgentView, viewing, openFile, closeFile, releaseFile, diffViewing, openDiff, closeDiff, releaseDiff, presentation, fileDocked, webPage, setWebPage, openWebPage, reportFileKind, toggleFilePresentation, viewFile } = useFilePanels({ settings, filePanelAvailable, selectedPaneId, selectedMachineId, agentPanel: { setView: setAgentPanelTab, setOpen: setAgentDrawerOpen } });
+  // an agent the composer's strip opens in the panel's drawer (AgentStrip): the selected pane's own
+  const openAgentDetails = (taskId: string | null) => { setAgentPanelOpen(true); setFocusAgent(taskId === null ? null : `task:${taskId}`); openAgentView(taskId === null ? "agents" : "details"); };
   const { settingsOpen, setSettingsOpen, settingsLinkPage, setSettingsLinkPage, settingsLinkSection, settingsPage, settingsSection, setSettingsSection, closeSettings, onSettingsPage } = useSettingsDialog(initialLink);
   const { newSessionOpen, setNewSessionOpen, newPrefill, setNewPrefill, newFields, setNewFields, pendingCreate, newTab, setNewTab, sessionHistory, setSessionHistory } = useNewSessionState({ initialLink });
   const { connected, setConnected, connectedBefore, setConnectedBefore, paneLost, outputStopped, setOutputStopped } = useConnectionChip();
@@ -604,7 +606,7 @@ export function App() {
     onClose={() => setFilesOpen(false)} />;
   const agentDetails = agentPanelShown && selectedPane?.agent && <MachineContext.Provider value={selectedMachineId}>
     <AgentPanel key={JSON.stringify([selectedMachineId, selectedPane.pane_id, selectedPane.terminal_id, selectedPane.agent_session?.value, selectedMachine?.snapshot?.finish_epoch])} pane={selectedPane} panes={snapshot?.panes ?? []} title={selectedTitle ?? selectedPane.agent} machineName={selectedMachine?.name ?? selectedMachineId} workspaceName={selectedWorkspace?.label ?? selectedPane.workspace_id}
-      online={selectedMachine?.state === "connected"} watching={auth?.role === "watch"} tab={agentPanelTab} drawerOpen={agentDrawerOpen} onOpenView={openAgentView} onCloseView={closeAgentView} onClose={closeAgentPanel} pinned={pinnedAgentPanel}
+      online={selectedMachine?.state === "connected"} watching={auth?.role === "watch"} tab={agentPanelTab} drawerOpen={agentDrawerOpen} onOpenView={openAgentView} onCloseView={closeAgentView} onClose={closeAgentPanel} pinned={pinnedAgentPanel} focusAgent={focusAgent} onFocusedAgent={clearFocusAgent}
       contextKey={conversationContextKey(selectedMachineId, selectedPane, selectedMachine?.snapshot?.finish_epoch)}
       onSelectPane={id => { closeAgentView(); selectPane(id); }} onBrowseFiles={showWorkspaceFiles} onOpenDiff={(comparison, file) => { showWorkspaceFiles("changes"); openDiff({ machineId: selectedMachineId, paneId: selectedPane.pane_id, directory: selectedPane.foreground_cwd ?? selectedPane.cwd ?? null, ...comparison, path: file.path, oldPath: file.old_path }); }} onNewAgent={() => actions.openNewTab()} />
   </MachineContext.Provider>;
@@ -898,6 +900,8 @@ export function App() {
                         // an offline PC's cached plan cannot be read
                         plan={machine?.state === "connected" ? (item as HerdrPane | undefined)?.plan ?? null : null}
                         backgroundWait={item?.background_wait === true}
+                        // the agent strip opens details in the panel, which shows the selected pane alone
+                        onOpenAgent={active && item?.pane_id === selectedPaneId && machineId === selectedMachineId ? openAgentDetails : undefined}
                         cwd={item?.cwd ?? null}
                         workspaceId={item?.workspace_id ?? null}
                         worktreeRepo={worktreeRepoName(item === null ? undefined : slotSnapshot?.workspaces.find((workspace) => workspace.workspace_id === item.workspace_id))}
