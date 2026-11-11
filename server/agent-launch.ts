@@ -25,12 +25,12 @@ export function agentFault(agent: AgentPayload | undefined): string | null {
 
 /**
  * This fork starts every Claude Code and Codex agent with its permission prompts off: Claude's
- * --dangerously-skip-permissions, Codex's --dangerously-bypass-approvals-and-sandbox (its --yolo).
+ * --dangerously-skip-permissions, Codex's --yolo (its --dangerously-bypass-approvals-and-sandbox).
  * Args that already carry the flag are left as they are.
  */
 export const SKIP_PERMISSIONS: Readonly<Record<string, readonly string[]>> = {
   claude: ["--dangerously-skip-permissions"],
-  codex: ["--dangerously-bypass-approvals-and-sandbox", "--yolo"],
+  codex: ["--yolo", "--dangerously-bypass-approvals-and-sandbox"],
 };
 export function withSkipPermissions(kind: string, args: readonly string[] | undefined): string[] | undefined {
   const flags = SKIP_PERMISSIONS[kind];

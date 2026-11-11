@@ -319,3 +319,50 @@
   background: var(--bg-panel);
 }
 .new-session-page-note { min-height: 1.2em; margin: var(--space-2) 0 0; color: var(--text-dim); font-size: 12px; }
+
+/* the environment and folder chips' menus (Claude Code's): above the chip, quiet labels, a check on the choice */
+.new-session-page-pop { position: relative; display: inline-flex; }
+.new-session-page-menu {
+  position: absolute;
+  bottom: calc(100% + var(--space-2));
+  left: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  min-width: 15rem;
+  max-width: min(22rem, 80vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-pop);
+}
+.new-session-page-menu-label { margin: var(--space-2) var(--space-2) var(--space-1); color: var(--text-dim); font-size: 13px; }
+.new-session-page-menu-label:first-child { margin-top: var(--space-1); }
+.new-session-page-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 32px;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 14px;
+  text-align: start;
+  cursor: pointer;
+}
+.new-session-page-menu-item:hover,
+.new-session-page-menu-item:focus-visible { background: var(--bg-hover); outline: none; }
+.new-session-page-menu-item > span { display: flex; flex-direction: column; min-width: 0; }
+.new-session-page-menu-item small { color: var(--text-dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.new-session-page-menu-item svg { flex: none; width: 16px; height: 16px; color: var(--accent); }
+.new-session-page-menu-rule { width: 100%; margin: var(--space-1) 0; border: 0; border-top: var(--hairline) solid var(--border); }
+.new-session-page-chip:disabled { cursor: default; opacity: 1; }
+.new-session-page-main { padding-top: var(--space-5); }

@@ -119,6 +119,7 @@ const BASE: Record<string, string> = {
   "Workflow file couldn't be read. Showing the last available graph.": "无法读取工作流文件。正在显示上次可用的关系图。",
   "Connection interrupted. Showing the last recorded activity.": "连接已中断。正在显示上次记录的活动。",
   "Loading agent activity": "正在加载智能体活动",
+  "Recent": "最近",
   "No changes": "没有更改",
   "Review": "查看",
   "{n} file": "{n} 个文件",

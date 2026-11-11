@@ -41,7 +41,6 @@ export const WORKSPACE_KO: Record<string, string> = {
   "Resume": "이어하기",
   "Resuming…": "이어하는 중…",
   "Started {started} · last active {updated}": "{started}에 시작 · 마지막 사용 {updated}",
-  "Close dialog": "창 닫기",
   "Agent": "에이전트",
   "Directory": "폴더",
   "Name": "이름",
@@ -80,4 +79,8 @@ export const WORKSPACE_KO: Record<string, string> = {
   "The folder could not be made.": "폴더를 만들 수 없습니다.",
   "Choose folder": "폴더 선택",
   "Describe a task or ask a question": "작업을 설명하거나 질문하세요",
+  "Local": "로컬",
+  "Remote": "원격",
+  "This computer": "이 컴퓨터",
+  "Open folder…": "폴더 열기…",
 };

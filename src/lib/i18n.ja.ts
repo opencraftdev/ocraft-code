@@ -116,6 +116,7 @@ const BASE: Record<string, string> = {
   "Workflow file couldn't be read. Showing the last available graph.": "ワークフローファイルを読み込めません。最後に取得したグラフを表示しています。",
   "Connection interrupted. Showing the last recorded activity.": "接続が中断されました。最後に記録された活動を表示しています。",
   "Loading agent activity": "エージェントの活動を読み込み中",
+  "Recent": "最近",
   "No changes": "変更なし",
   "Review": "確認",
   "{n} file": "{n} 個のファイル",

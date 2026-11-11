@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
-import { ChevronDown, CornerDownLeft, FolderOpen, X } from "lucide-react";
+import { Check, ChevronDown, CornerDownLeft, Folder, FolderOpen, Laptop } from "lucide-react";
 
 import "./NewSessionDialog.css";
 
@@ -36,6 +36,9 @@ export interface NewSessionDialogProps {
   /** opened by Cmd+D: the page takes the right half of the chat area, beside the session it was asked from */
   beside?: boolean;
   machineName?: string;
+  /** the PCs a new session can start on (the environment chip); picking one reopens the page on it */
+  machines?: readonly { id: string; name: string; local: boolean }[];
+  onMachine?: (machineId: string) => void;
   defaultCwd: string | null;
   /** set, the dialog makes a tab in that workspace instead of a workspace */
   tab?: NewTabTarget | null;
@@ -83,7 +86,7 @@ export function insertToken(text: string, at: number, token: string): { text: st
 
 const NEW_SESSION_AGENTS = ["claude", "codex"];
 
-export function NewSessionDialog({ open, beside = false, defaultCwd, tab = null, onClose, onCreated, machineName, prefill = null, onDraft, worktrees = [] }: NewSessionDialogProps) {
+export function NewSessionDialog({ open, beside = false, machines = [], onMachine, defaultCwd, tab = null, onClose, onCreated, machineName, prefill = null, onDraft, worktrees = [] }: NewSessionDialogProps) {
   const t = useT();
   const { settings } = useSettings();
   const machineId = useMachineId();
@@ -106,6 +109,16 @@ export function NewSessionDialog({ open, beside = false, defaultCwd, tab = null,
   const [browsing, setBrowsing] = useState(false);
   /** the folder chip panel: the path field, Browse and the recent folders */
   const [folderOpen, setFolderOpen] = useState(false);
+  /** the chip menu that is open under the box: the environment (PC) or the folder */
+  const [menu, setMenu] = useState<"env" | "folder" | null>(null);
+  // the page is the chat area itself: going to a session in the sidebar leaves it
+  useEffect(() => {
+    if (!open) return;
+    const leave = (event: PointerEvent): void => { if ((event.target as Element | null)?.closest?.(".sidebar")) onClose(); };
+    window.addEventListener("pointerdown", leave, true);
+    return () => window.removeEventListener("pointerdown", leave, true);
+  }, [open, onClose]);
+  useEffect(() => { if (!open) setMenu(null); }, [open]);
   // beside (Cmd+D): the chat it was asked from narrows to the left half (styles.css, body.is-new-beside)
   // and the page takes the right one, measured once the chat has narrowed
   const [besideFrame, setBesideFrame] = useState<{ left: number; top: number; right: number; bottom: number } | null>(null);
@@ -299,12 +312,6 @@ export function NewSessionDialog({ open, beside = false, defaultCwd, tab = null,
   return (
     <div className={`new-session-page-scrim${besideStyle ? " is-beside" : ""}`} style={besideStyle} onMouseDown={closeFromScrim}>
       <form ref={surface} className="new-session-page" role="dialog" aria-modal="true" aria-labelledby="new-session-title" tabIndex={-1} onSubmit={(event) => { event.preventDefault(); submit(); }}>
-        <header className="new-session-page-head">
-          <h2 className="new-session-page-title" id="new-session-title">{tab ? `${t("New tab")} · ${tab.workspaceLabel}` : `${t("New workspace")} · ${machineName ?? machineId}`}</h2>
-          <button type="button" className="icon-button" aria-label={t("Close dialog")} disabled={pending} onClick={onClose}>
-            <X aria-hidden="true" />
-          </button>
-        </header>
         <div className="new-session-page-main">
           <div className="new-session-page-box">
             <textarea
@@ -331,10 +338,41 @@ export function NewSessionDialog({ open, beside = false, defaultCwd, tab = null,
           </div>
           <div className="new-session-page-bar">
             <div className="new-session-page-left">
-              {tab ? <span className="new-session-page-chip" title={tab.cwd ?? tab.workspaceLabel}><FolderOpen aria-hidden="true" />{folderName}</span>
-                : <button type="button" className="new-session-page-chip" aria-expanded={folderOpen} title={cwd || undefined} disabled={fieldsDisabled} onClick={() => setFolderOpen((value) => !value)}>
-                  <FolderOpen aria-hidden="true" />{folderName}<ChevronDown aria-hidden="true" />
-                </button>}
+              {/* the environment: which PC the session starts on */}
+              <span className="new-session-page-pop">
+                <button type="button" className="new-session-page-chip" aria-haspopup="menu" aria-expanded={menu === "env"} disabled={fieldsDisabled || tab !== null || machines.length < 2} onClick={() => setMenu((value) => value === "env" ? null : "env")}>
+                  <Laptop aria-hidden="true" />{machineId === "local" ? t("This computer") : machineName ?? machineId}{!tab && machines.length > 1 && <ChevronDown aria-hidden="true" />}
+                </button>
+                {menu === "env" && <div className="new-session-page-menu" role="menu">
+                  {[[t("Local"), machines.filter((machine) => machine.local)], [t("Remote"), machines.filter((machine) => !machine.local)]].map(([label, list]) => (list as typeof machines).length > 0 && <div key={label as string} role="group" aria-label={label as string}>
+                    <p className="new-session-page-menu-label">{label as string}</p>
+                    {(list as typeof machines).map((machine) => <button type="button" role="menuitemradio" aria-checked={machine.id === machineId} key={machine.id} className="new-session-page-menu-item" onClick={() => { setMenu(null); if (machine.id !== machineId) onMachine?.(machine.id); }}>
+                      <span>{machine.local ? t("This computer") : machine.name}</span>{machine.id === machineId && <Check aria-hidden="true" />}
+                    </button>)}
+                  </div>)}
+                </div>}
+              </span>
+              {/* the folder: a recent one, or another opened with Browse */}
+              <span className="new-session-page-pop">
+                {tab ? <span className="new-session-page-chip" title={tab.cwd ?? tab.workspaceLabel}><Folder aria-hidden="true" />{folderName}</span>
+                  : <button type="button" className="new-session-page-chip" aria-haspopup="menu" aria-expanded={menu === "folder"} title={cwd || undefined} disabled={fieldsDisabled} onClick={() => setMenu((value) => value === "folder" ? null : "folder")}>
+                    <Folder aria-hidden="true" />{folderName}<ChevronDown aria-hidden="true" />
+                  </button>}
+                {menu === "folder" && <div className="new-session-page-menu" role="menu">
+                  {shownFolders.length > 0 && <p className="new-session-page-menu-label">{t("Recent")}</p>}
+                  {shownFolders.map((path) => {
+                    const name = directoryBasename(path);
+                    // two recent folders with one name say where each is
+                    const twin = shownFolders.some((other) => other !== path && directoryBasename(other) === name);
+                    const chosen = path === cwd.trim();
+                    return <button type="button" role="menuitemradio" aria-checked={chosen} key={path} className="new-session-page-menu-item" title={path} onClick={() => { setCwd(path); setMenu(null); setFolderOpen(false); }}>
+                      <span><span>{name}</span>{twin && <small>{path.replace(/\/[^/]+\/?$/, "")}</small>}</span>{chosen && <Check aria-hidden="true" />}
+                    </button>;
+                  })}
+                  {shownFolders.length > 0 && <hr className="new-session-page-menu-rule" />}
+                  <button type="button" role="menuitem" className="new-session-page-menu-item" onClick={() => { setMenu(null); setFolderOpen(true); setBrowsing(true); }}><span>{t("Open folder…")}</span></button>
+                </div>}
+              </span>
             </div>
             <div className="new-session-page-right">
               <AgentPicker ref={firstFieldRef} agents={agents} shell={agents.length === 0} value={agentKind} disabled={fieldsDisabled} labelledBy="new-session-title" hints={pickerHints} onChange={pickAgent} />

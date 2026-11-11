@@ -41,7 +41,6 @@ export const WORKSPACE_ZH: Record<string, string> = {
   "Resume": "继续",
   "Resuming…": "正在继续…",
   "Started {started} · last active {updated}": "开始于 {started} · 最后使用 {updated}",
-  "Close dialog": "关闭对话框",
   "Agent": "Agent",
   "Directory": "目录",
   "Name": "名称",
@@ -80,4 +79,8 @@ export const WORKSPACE_ZH: Record<string, string> = {
   "The folder could not be made.": "无法创建文件夹。",
   "Choose folder": "选择文件夹",
   "Describe a task or ask a question": "描述任务或提出问题",
+  "Local": "本地",
+  "Remote": "远程",
+  "This computer": "这台电脑",
+  "Open folder…": "打开文件夹…",
 };

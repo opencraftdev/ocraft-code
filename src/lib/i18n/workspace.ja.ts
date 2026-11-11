@@ -41,7 +41,6 @@ export const WORKSPACE_JA: Record<string, string> = {
   "Resume": "再開",
   "Resuming…": "再開中…",
   "Started {started} · last active {updated}": "開始 {started} · 最終使用 {updated}",
-  "Close dialog": "ダイアログを閉じる",
   "Agent": "エージェント",
   "Directory": "ディレクトリ",
   "Name": "名前",
@@ -80,4 +79,8 @@ export const WORKSPACE_JA: Record<string, string> = {
   "The folder could not be made.": "フォルダーを作成できませんでした。",
   "Choose folder": "フォルダを選択",
   "Describe a task or ask a question": "タスクを説明するか質問してください",
+  "Local": "ローカル",
+  "Remote": "リモート",
+  "This computer": "このコンピューター",
+  "Open folder…": "フォルダを開く…",
 };
