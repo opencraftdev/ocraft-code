@@ -766,8 +766,8 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
             {foldedCount > 0 && <span className="workspace-fold-count" aria-hidden="true">+{foldedCount}</span>}
             {filterNote}
           </span>}
+          {(ownPanes.length > 0 ? ownPanes : panes).map((candidate) => screenBadge(candidate.pane_id)).find(Boolean)}
           <span className="sidebar-pane-meta">
-            {(ownPanes.length > 0 ? ownPanes : panes).map((candidate) => screenBadge(candidate.pane_id)).find(Boolean)}
             <span className="visually-hidden">{markName(pane)}</span>
             {online && pane.restore_error ? <RestoreErrorBadge reason={pane.restore_error} /> : <StatusBadge compact status={online ? rollupStatus(statusPanes.map((candidate) => activity.status(machineId, candidate))) : undefined} />}
           </span>

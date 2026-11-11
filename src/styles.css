@@ -3146,6 +3146,8 @@ button, a, [role="button"] {
 
 /* the screen a chat is on, when two are side by side: the sidebar row and the panel say 1 or 2 */
 .screen-badge { display: inline-grid; flex: none; place-items: center; width: 16px; height: 16px; border: var(--hairline) solid var(--border); border-radius: var(--radius-sm); color: var(--text-dim); font-size: var(--fs-2xs); font-variant-numeric: tabular-nums; line-height: 1; }
+/* in a sidebar row it sits in the line after the title, which shortens for it */
+.workspace-select > .screen-badge, .workspace-session > .screen-badge { margin-inline: var(--space-1); }
 
 .chat-turn-user .chat-bubble { border-color: transparent; border-radius: var(--radius-lg); background: var(--bg-hover); }
 
