@@ -102,6 +102,10 @@ describe("Assistant machines and projects", () => {
       expect((await state()).machines[0]!.maxRunning).toBe(5);
       expect(JSON.parse(readFileSync(join(root, "state", "assistant", "machines.json"), "utf8"))).toEqual({ [machine.id]: { maxRunning: 5 } });
       expect((await send("/machines/not-a-machine", "PATCH", { maxRunning: 2 })).status).toBe(404);
+      // a card's Cancel: this app's pages only
+      expect((await send("/tasks/9/cancel", "POST", {}, false)).status).toBe(403);
+      expect((await send("/tasks/9/cancel", "POST", {})).status).toBe(404);
+      expect((await send("/tasks/9/cancel", "GET")).status).toBe(405);
     } finally { app.stop(); rmSync(root, { recursive: true, force: true }); }
   });
 

@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from
 
 import type { AssistantAgent, AssistantMachine, AssistantProblem, AssistantProject, AssistantSession, AssistantState, AssistantTask, AssistantTranscript, MergeMode, ProjectChange, TaskStatus } from "../../shared/assistant.ts";
 import type { InteractivePrompt } from "../../shared/protocol.ts";
-import { addAssistantProject, ApiError, changeAssistantProject, fetchAssistant, fetchAssistantTranscript, fetchPanePrompt, fixAssistantMachine, removeAssistantProject, restartAssistantTask, setAssistantMaxRunning, startAssistantSession } from "../lib/api.ts";
+import { addAssistantProject, ApiError, cancelAssistantTask, changeAssistantProject, fetchAssistant, fetchAssistantTranscript, fetchPanePrompt, fixAssistantMachine, removeAssistantProject, restartAssistantTask, setAssistantMaxRunning, startAssistantSession } from "../lib/api.ts";
 import { ASSISTANT_INSTALL_COMMAND, assistantLink, storeAssistantAddress, storedAssistantAddress } from "../lib/assistantMode.ts";
-import { useT, type Translate } from "../lib/i18n.ts";
+import { useLocale, useT, type Translate } from "../lib/i18n.ts";
 import { MachineContext } from "../lib/machineContext.tsx";
 import { Command } from "./PhonePanel.tsx";
 import { PromptCard } from "./PromptCard.tsx";
@@ -86,7 +86,7 @@ function AssistantLayout({ renderChat, onOpenTask }: { renderChat?: (paneId: str
           : (current.pane_id !== null && renderChat?.(current.pane_id)) || <p className="assistant-chat-note">{t("The Assistant's pane is not open. Start a new chat.")}</p>}
       </main>
       <aside className="assistant-board" aria-label={t("Tasks")}>
-        <TaskBoard tasks={state?.tasks ?? []} projects={projects} onChange={setState} onOpenTask={onOpenTask} />
+        <TaskBoard tasks={state?.tasks ?? []} projects={projects} machines={machines} onChange={setState} onOpenTask={onOpenTask} />
       </aside>
     </div>
   );
@@ -162,8 +162,9 @@ function columnTitle(t: Translate, first: TaskStatus): string {
  * each. A card opens its pane in Code mode; a Needs you card answers its agent's question in place
  * with the chat's own prompt card, through the machine's prompt-answer route.
  */
-function TaskBoard({ tasks, projects, onChange, onOpenTask }: { tasks: AssistantTask[]; projects: AssistantProject[]; onChange(state: AssistantState): void; onOpenTask?: OpenTask }) {
+function TaskBoard({ tasks, projects, machines, onChange, onOpenTask }: { tasks: AssistantTask[]; projects: AssistantProject[]; machines: AssistantMachine[]; onChange(state: AssistantState): void; onOpenTask?: OpenTask }) {
   const t = useT();
+  const locale = useLocale();
   const columns = COLUMNS.map((statuses) => ({ statuses, tasks: tasks.filter((task) => statuses.includes(task.status)) })).filter((column) => column.tasks.length > 0);
   return (
     <>
@@ -171,34 +172,61 @@ function TaskBoard({ tasks, projects, onChange, onOpenTask }: { tasks: Assistant
       {columns.map(({ statuses, tasks: shown }) => (
         <section key={statuses[0]} className="assistant-section" data-column={statuses[0]}>
           <h3 className="assistant-column">{columnTitle(t, statuses[0]!)} <span className="assistant-dim">{shown.length}</span></h3>
-          {shown.map((task) => <TaskCard key={task.id} task={task} project={projects.find((project) => project.id === task.project)} onChange={onChange} onOpenTask={onOpenTask} />)}
+          {shown.map((task) => <TaskCard key={task.id} task={task} project={projects.find((project) => project.id === task.project)} waiting={waitReason(t, locale, task, tasks, machines)} onChange={onChange} onOpenTask={onOpenTask} />)}
         </section>
       ))}
     </>
   );
 }
 
-function TaskCard({ task, project, onChange, onOpenTask }: { task: AssistantTask; project: AssistantProject | undefined; onChange(state: AssistantState): void; onOpenTask?: OpenTask }) {
+/** a time on the board: its clock time today, with the date on another day */
+function clockTime(locale: string, ms: number): string {
+  const at = new Date(ms);
+  const today = at.toDateString() === new Date().toDateString();
+  return at.toLocaleString(locale, today ? { hour: "2-digit", minute: "2-digit" } : { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+/** What a Queued or Scheduled task waits for, as the server's queue decides it (server/assistant-tasks.ts). */
+function waitReason(t: Translate, locale: string, task: AssistantTask, tasks: AssistantTask[], machines: AssistantMachine[]): string | null {
+  if (task.status === "scheduled") {
+    if (task.cron !== undefined) return task.next === undefined ? t("Every {cron}", { cron: task.cron }) : t("Every {cron}, next {time}", { cron: task.cron, time: clockTime(locale, task.next) });
+    return task.at === undefined ? null : t("At {time}", { time: clockTime(locale, Date.parse(task.at)) });
+  }
+  if (task.status !== "queued") return null;
+  const after = tasks.find((candidate) => candidate.id === task.after);
+  if (after && after.status !== "done") return t("After #{id} {title}", { id: after.id, title: after.title });
+  const machine = machines.find((candidate) => candidate.id === task.machine);
+  if (machine?.state !== "connected") return t("Waiting for {machine}", { machine: machine?.name ?? task.machine });
+  return t("Waiting for a free slot on {machine}", { machine: machine.name });
+}
+
+function TaskCard({ task, project, waiting, onChange, onOpenTask }: { task: AssistantTask; project: AssistantProject | undefined; waiting: string | null; onChange(state: AssistantState): void; onOpenTask?: OpenTask }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const paneId = task.paneId;
-  // only on this click: nothing restarts a task by itself
-  const restart = () => {
+  // only on these clicks: nothing restarts or cancels a task by itself
+  const act = (action: (id: string) => Promise<AssistantState>) => {
     setBusy(true); setError(null);
-    restartAssistantTask(task.id).then(onChange, (failure: unknown) => setError(failure instanceof ApiError ? failure.detail : String(failure))).finally(() => setBusy(false));
+    action(task.id).then(onChange, (failure: unknown) => setError(failure instanceof ApiError ? failure.detail : String(failure))).finally(() => setBusy(false));
   };
   return (
     <div className="assistant-row assistant-task">
       <button type="button" className="assistant-task-open" disabled={paneId === null || task.status === "cancelled" || !onOpenTask} onClick={() => paneId !== null && onOpenTask?.(task.machine, paneId)}>
         <span className="assistant-row-name">{task.title}</span>
-        <span className="assistant-dim">#{task.id} · {project?.id ?? task.project} · {task.branch}</span>
+        <span className="assistant-dim">#{task.id} · {project?.id ?? task.project}{task.cron === undefined ? ` · ${task.branch}` : ""}</span>
       </button>
       {task.status === "cancelled" && <p className="assistant-dim">{t("Cancelled")}</p>}
       {task.status === "failed" && (
         <div className="assistant-problem">
           <span>{task.error ?? t("Failed")}</span>
-          {task.worktree !== null && <button type="button" className="btn" disabled={busy} onClick={restart}>{t("Restart agent")}</button>}
+          {task.worktree !== null && <button type="button" className="btn" disabled={busy} onClick={() => act(restartAssistantTask)}>{t("Restart agent")}</button>}
+        </div>
+      )}
+      {waiting !== null && (
+        <div className="assistant-problem">
+          <span className="assistant-dim">{waiting}</span>
+          <button type="button" className="btn" disabled={busy} onClick={() => act(cancelAssistantTask)}>{t("Cancel")}</button>
         </div>
       )}
       {task.status === "needs_you" && paneId !== null && <TaskQuestion machineId={task.machine} paneId={paneId} />}
