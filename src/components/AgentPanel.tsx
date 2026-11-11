@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, ChevronDown, ChevronRight, Ellipsis, ExternalLink, FileDiff, Folder, GitBranch, GitFork, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, Layers, Link, Monitor, PanelRightClose, RefreshCw, X } from "lucide-react";
 import type { HerdrPane, RepoDiffFile } from "../../shared/protocol.ts";
@@ -8,7 +8,7 @@ import type { AgentPanelView } from "../lib/useAgentPanel.ts";
 import { useRepoChangesSummary } from "../lib/useRepoChangesSummary.ts";
 import { diffErrorMessage, type RepoComparison } from "../lib/repoDiff.ts";
 import { useAgentActivity } from "../lib/useAgentActivity.ts";
-import { useMachineId } from "../lib/machineContext.tsx";
+import { MachineContext, useMachineId } from "../lib/machineContext.tsx";
 import { usePaneBranch, DETACHED } from "../lib/paneBranch.ts";
 import { useT } from "../lib/i18n.ts";
 import { useConversationContext } from "../lib/conversationContext.ts";
@@ -49,16 +49,29 @@ export interface AgentPanelProps {
   /** an agent the composer's strip asked to open (`task:<id>`), consumed once */
   focusAgent?: string | null;
   onFocusedAgent?: () => void;
-  /** with two chats side by side, each has its own panel, headed by its chat's title */
-  chatTitle?: string;
-  panelId?: string;
+  /** with two chats side by side: this chat's screen number, and the other chat */
+  screen?: number;
+  beside?: PanelChat | null;
+}
+
+/** One chat's place in the panel. */
+export interface PanelChat {
+  screen: number;
+  title: string;
+  pane: HerdrPane;
+  machineId: string;
+  machineName: string;
+  workspaceName: string;
+  online: boolean;
+  contextKey: string | null;
+  onBrowseFiles: (tab: "browse" | "changes") => void;
+  onOpenDiff: (comparison: RepoComparison, file: RepoDiffFile) => void;
 }
 
 /** Reference-style environment and agent sections, using existing read-only bridge APIs. */
-export function AgentPanel({ contextKey, pane, machineName, workspaceName, title, online, watching, tab, drawerOpen, onOpenView, onCloseView, onClose, onBrowseFiles, onOpenDiff, pinned = false, focusAgent = null, onFocusedAgent, chatTitle, panelId = "agent-details-panel" }: AgentPanelProps) {
+export function AgentPanel({ contextKey, pane, machineName, workspaceName, title, online, watching, tab, drawerOpen, onOpenView, onCloseView, onClose, onBrowseFiles, onOpenDiff, pinned = false, focusAgent = null, onFocusedAgent, screen, beside = null }: AgentPanelProps) {
   const t = useT();
   const machineId = useMachineId();
-  const branch = usePaneBranch(machineId, pane.workspace_id);
   const [refresh, setRefresh] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showEnded, setShowEnded] = useState(false);
@@ -77,9 +90,6 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
     onOpenView(next);
     if (drawerOpen) drawerRoot.current?.focus({ preventScroll: true });
   };
-  const context = useConversationContext(contextKey);
-  const left = context ? contextLeftPercent(context) : null;
-  const percent = left === null ? null : 100 - left;
   const root = useRef<HTMLElement>(null);
   const narrow = useMediaQuery("(max-width: 979px)");
   usePhoneSheetBack(onClose, narrow && !pinned, true);
@@ -92,7 +102,11 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
     return () => window.removeEventListener("keydown", close);
   }, [narrow, onClose, pinned]);
   const id = useId();
-  const directory = pane.foreground_cwd ?? pane.cwd;
+  const [changesRefresh, setChangesRefresh] = useState(0);
+  const [changeCount, setChangeCount] = useState<string | number | null>(null);
+  // this chat and, with two side by side, the other: each section lists both, numbered as the sidebar marks them
+  const chats: PanelChat[] = [{ screen: screen ?? 1, title, pane, machineId, machineName, workspaceName, online, contextKey, onBrowseFiles, onOpenDiff }, ...(beside ? [beside] : [])].sort((a, b) => a.screen - b.screen);
+  const tag = (chat: PanelChat) => chats.length > 1 && <span className="agent-panel-chat" title={chat.title}><span className="screen-badge" aria-label={t("Screen {n}", { n: chat.screen })}>{chat.screen}</span><span>{chat.title}</span></span>;
   const activity = useAgentActivity(pane.pane_id, pane.agent ?? null, drawerOpen && tab === "graph", watching, online, refresh, pane.background_tasks ?? 0);
   const session = useMemo(() => sessionGraph({ paneId: pane.pane_id, title, status: pane.agent_status, tasks: activity.tasks, steps: activity.steps, agents: activity.agents }), [activity, pane.pane_id, pane.agent_status, title]);
   const graph = activity.dagr ?? session;
@@ -106,10 +120,6 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
   const receipts = useBackgroundTaskReceipts(contextKey);
   const now = useActivityClock(runningAgents.length > 0 || runningTasks.length > 0 || activity.runs.some(runGoing), activity.clockOffset);
   const endedCount = endedTasks.length + activity.runs.filter(run => !runGoing(run)).length;
-  const changes = useRepoChangesSummary(pane.pane_id, directory ?? "", online, pane.finish_id);
-  const [prRefresh, setPrRefresh] = useState(0);
-  const prs = usePanePrs(pane.pane_id, directory ?? "", online, pane.finish_id, prRefresh);
-  const [prMenu, setPrMenu] = useState<{ anchor: HTMLElement; url: string; title: string } | null>(null);
   const agentListScroll = useRef(0);
   const showAgent = (node: AgentGraphNode, trigger: HTMLButtonElement) => {
     if (drawerRoot.current?.contains(trigger)) agentListScroll.current = drawerRoot.current.querySelector(".agent-drawer-body")?.scrollTop ?? 0;
@@ -142,75 +152,28 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
     </button>
   </li>;
   const openList = (view: "agents" | "tasks", event: MouseEvent<HTMLButtonElement>, ended = false) => { setSelectedId(null); setShowEnded(ended); openDrawer(view, event.currentTarget); };
-  return <><aside ref={root} tabIndex={-1} className="agent-panel" id={panelId} aria-label={chatTitle ?? t("Workspace and agents")}>
+  return <><aside ref={root} tabIndex={-1} className="agent-panel" id="agent-details-panel" aria-label={t("Workspace and agents")}>
     <div className="agent-panel-card">
-      {chatTitle && <h2 className="agent-panel-chat" title={chatTitle}>{chatTitle}</h2>}
       <section className="agent-panel-section agent-panel-environment" data-expanded={environmentOpen} aria-label={t("Environment")}>
         <header className="agent-panel-section-head">
           <h2><button type="button" className="agent-panel-disclosure" aria-expanded={environmentOpen} aria-controls={`${id}-environment`} onClick={() => setEnvironmentOpen(value => !value)}>{t("Environment")}<ChevronDown aria-hidden="true" /></button></h2>
           {!pinned && <button type="button" className="icon-button" onClick={onClose} aria-label={t("Close agent panel")}><PanelRightClose aria-hidden="true" /></button>}
         </header>
         <div id={`${id}-environment`} className="agent-panel-environment-body" hidden={!environmentOpen}>
-          <div className="agent-panel-environment-row"><Monitor aria-hidden="true" /><span title={machineName}>{machineName}</span></div>
-          <div className="agent-panel-environment-row agent-panel-directory" title={directory ?? workspaceName}><Folder aria-hidden="true" /><span>{workspaceName}{directory && directory !== workspaceName && <small> · {directory}</small>}</span></div>
-          {branch && <div className="agent-panel-environment-row"><GitBranch aria-hidden="true" /><span title={branch === DETACHED ? t("Detached HEAD") : branch}>{branch === DETACHED ? t("Detached HEAD") : branch}</span></div>}
+          {chats.map((chat) => <MachineContext.Provider key={chat.screen} value={chat.machineId}>{tag(chat)}<EnvironmentRows chat={chat} /></MachineContext.Provider>)}
         </div>
       </section>
       <section className="agent-panel-section agent-panel-context" aria-label={t("Context")}>
-        <h2 className="agent-context-heading"><button type="button" className="agent-panel-disclosure" aria-label={percent === null ? undefined : `${t("Context used")}: ${percent}%`} aria-expanded={contextOpen} aria-controls={`${id}-context`} onClick={() => setContextOpen(value => !value)}>
-          {t("Context")}<ChevronDown aria-hidden="true" />
-          <span className="agent-context-usage">{percent !== null ? `${percent}%` : context ? t("{used} tokens", { used: formatTokens(context.used) }) : t("Not reported")}</span>
-          {percent !== null && <span className={`agent-context-track${percent >= 80 ? " is-high" : ""}`} aria-hidden="true"><span style={{ transform: `scaleX(${percent / 100})` }} /></span>}
-        </button></h2>
-        <div id={`${id}-context`} className="agent-context-details" hidden={!contextOpen}>
-          <ContextUsage context={context} />
-        </div>
+        {chats.length > 1 && <header className="agent-panel-section-head"><h2>{t("Context")}</h2></header>}
+        {chats.map((chat) => <ContextRow key={chat.screen} chat={chat} label={chats.length > 1 ? tag(chat) : t("Context")} open={contextOpen} onToggle={() => setContextOpen(value => !value)} detailsId={`${id}-context-${chat.screen}`} />)}
       </section>
       <section className="agent-panel-section agent-panel-changes" data-expanded={changesOpen} aria-label={t("Changes")}>
         <header className="agent-panel-section-head">
-          <h2><button type="button" className="agent-panel-disclosure" aria-expanded={changesOpen} aria-controls={`${id}-changes`} onClick={() => setChangesOpen(value => !value)}>{t("Changes")}<ChevronDown aria-hidden="true" />{changes.listing && <span className="agent-panel-count">{changes.listing.total ?? `${changes.listing.files.length}${changes.listing.truncated ? "+" : ""}`}</span>}</button></h2>
-          <button type="button" className="icon-button" disabled={changes.loading || !online} aria-label={t("Refresh changes")} title={t("Refresh changes")} onClick={() => { changes.refresh(); setPrRefresh((value) => value + 1); }}><RefreshCw aria-hidden="true" /></button>
+          <h2><button type="button" className="agent-panel-disclosure" aria-expanded={changesOpen} aria-controls={`${id}-changes`} onClick={() => setChangesOpen(value => !value)}>{t("Changes")}<ChevronDown aria-hidden="true" />{changeCount !== null && <span className="agent-panel-count">{changeCount}</span>}</button></h2>
+          <button type="button" className="icon-button" disabled={!online} aria-label={t("Refresh changes")} title={t("Refresh changes")} onClick={() => setChangesRefresh((value) => value + 1)}><RefreshCw aria-hidden="true" /></button>
         </header>
         <div id={`${id}-changes`} className="agent-panel-launchers" hidden={!changesOpen}>
-          {/* the session's pull requests, each with its CI (checks passed of all), as Claude's Changes lists them */}
-          {prs.length > 0 && <ul className="agent-pr-list">
-            {prs.map((pr) => {
-              const ci = pr.checks;
-              const tone = !ci ? "" : ci.failed > 0 ? " is-failed" : ci.pending > 0 ? " is-pending" : " is-passed";
-              const Icon = pr.state === "merged" ? GitMerge : pr.state === "closed" ? GitPullRequestClosed : pr.state === "draft" ? GitPullRequestDraft : GitPullRequest;
-              return <li key={pr.url} className={`agent-pr state-${pr.state}`}>
-                <a className="agent-pr-main" href={pr.url} target="_blank" rel="noreferrer" title={`${pr.title}${pr.branch ? ` · ${pr.branch}` : ""}`}>
-                  <Icon className="agent-pr-icon" aria-label={t(pr.state === "merged" ? "Merged" : pr.state === "closed" ? "Closed" : pr.state === "draft" ? "Draft" : "Open")} />
-                  <span className="agent-pr-text">
-                    <span className="agent-pr-title">{pr.title}</span>
-                    <span className="agent-pr-meta">{pr.repo} #{pr.number}{pr.additions + pr.deletions > 0 && <> <span className="agent-change-added">+{pr.additions.toLocaleString()}</span> <span className="agent-change-removed">−{pr.deletions.toLocaleString()}</span></>}</span>
-                  </span>
-                  {ci && <span className={`agent-pr-ci${tone}`} title={t("CI: {passed} of {total} checks passed", { passed: ci.passed, total: ci.total })}><span className="agent-pr-ci-dot" aria-hidden="true" />{ci.passed}/{ci.total}</span>}
-                </a>
-                <button type="button" className="icon-button agent-pr-more" aria-label={t("More for {title}", { title: pr.title })} aria-haspopup="menu" onClick={(event) => setPrMenu({ anchor: event.currentTarget, url: pr.url, title: pr.title })}><Ellipsis aria-hidden="true" /></button>
-              </li>;
-            })}
-          </ul>}
-          {prMenu && <RowMenu anchor={prMenu.anchor} title={prMenu.title} onClose={() => setPrMenu(null)} items={[
-            { id: "open", label: t("Open on GitHub"), icon: ExternalLink, run: () => { window.open(prMenu.url, "_blank", "noopener"); } },
-            { id: "copy", label: t("Copy link"), icon: Link, run: () => { void copyText(prMenu.url); } },
-          ]} />}
-          {changes.error ? <p className="agent-panel-note">{diffErrorMessage(t, changes.error)}</p>
-            : changes.loading && !changes.listing ? <p className="agent-panel-note" role="status">{t("Loading…")}</p>
-            : !changes.listing ? <p className="agent-panel-note">{t("Changes unavailable")}</p>
-            : changes.listing.files.length === 0 ? prs.length > 0 ? null : <p className="agent-panel-note">{t("No changes")}</p>
-            : <button type="button" className="agent-panel-action agent-change-summary" onClick={() => onBrowseFiles("changes")}>
-              <FileDiff aria-hidden="true" />
-              {(() => {
-                // one line, as Claude desktop sums a branch: lines added and removed, or the file count when git gave no counts
-                const files = changes.listing.files;
-                const added = files.reduce((sum, file) => sum + (file.additions ?? 0), 0), removed = files.reduce((sum, file) => sum + (file.deletions ?? 0), 0);
-                return added + removed > 0
-                  ? <span><span className="agent-change-added">+{added.toLocaleString()}</span> <span className="agent-change-removed">−{removed.toLocaleString()}</span></span>
-                  : <span>{t(files.length === 1 ? "{n} file" : "{n} files", { n: changes.listing.total ?? files.length })}</span>;
-              })()}
-              <small className="agent-change-review">{t("Review")}</small>
-            </button>}
+          {chats.map((chat) => <MachineContext.Provider key={chat.screen} value={chat.machineId}>{tag(chat)}<ChangesBody chat={chat} refresh={changesRefresh} onCount={chats.length === 1 ? setChangeCount : undefined} /></MachineContext.Provider>)}
         </div>
       </section>
       {/* shown only while work runs: what ended is in the drawer, opened from the chat's strip and chip */}
@@ -256,5 +219,89 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
       </>}
     </div>
   </aside>, document.getElementById("ovis-workspace") ?? document.body)}
+  </>;
+}
+
+/** A chat's machine, folder and branch. */
+function EnvironmentRows({ chat }: { chat: PanelChat }) {
+  const t = useT();
+  const branch = usePaneBranch(chat.machineId, chat.pane.workspace_id);
+  const directory = chat.pane.foreground_cwd ?? chat.pane.cwd;
+  return <>
+    <div className="agent-panel-environment-row"><Monitor aria-hidden="true" /><span title={chat.machineName}>{chat.machineName}</span></div>
+    <div className="agent-panel-environment-row agent-panel-directory" title={directory ?? chat.workspaceName}><Folder aria-hidden="true" /><span>{chat.workspaceName}{directory && directory !== chat.workspaceName && <small> · {directory}</small>}</span></div>
+    {branch && <div className="agent-panel-environment-row"><GitBranch aria-hidden="true" /><span title={branch === DETACHED ? t("Detached HEAD") : branch}>{branch === DETACHED ? t("Detached HEAD") : branch}</span></div>}
+  </>;
+}
+
+/** A chat's context use: the share of its window, opened for the details. */
+function ContextRow({ chat, label, open, onToggle, detailsId }: { chat: PanelChat; label: ReactNode; open: boolean; onToggle: () => void; detailsId: string }) {
+  const t = useT();
+  const context = useConversationContext(chat.contextKey);
+  const left = context ? contextLeftPercent(context) : null;
+  const percent = left === null ? null : 100 - left;
+  return <>
+    <h2 className="agent-context-heading"><button type="button" className="agent-panel-disclosure" aria-label={percent === null ? undefined : `${t("Context used")}: ${percent}%`} aria-expanded={open} aria-controls={detailsId} onClick={onToggle}>
+      {label}<ChevronDown aria-hidden="true" />
+      <span className="agent-context-usage">{percent !== null ? `${percent}%` : context ? t("{used} tokens", { used: formatTokens(context.used) }) : t("Not reported")}</span>
+      {percent !== null && <span className={`agent-context-track${percent >= 80 ? " is-high" : ""}`} aria-hidden="true"><span style={{ transform: `scaleX(${percent / 100})` }} /></span>}
+    </button></h2>
+    <div id={detailsId} className="agent-context-details" hidden={!open}>
+      <ContextUsage context={context} />
+    </div>
+  </>;
+}
+
+/** A chat's pull requests, each with its CI (checks passed of all), and its uncommitted changes, as Claude's Changes lists them. */
+function ChangesBody({ chat, refresh, onCount }: { chat: PanelChat; refresh: number; onCount?: (count: string | number | null) => void }) {
+  const t = useT();
+  const { pane, online } = chat;
+  const directory = pane.foreground_cwd ?? pane.cwd;
+  const changes = useRepoChangesSummary(pane.pane_id, directory ?? "", online, pane.finish_id);
+  const prs = usePanePrs(pane.pane_id, directory ?? "", online, pane.finish_id, refresh);
+  const [prMenu, setPrMenu] = useState<{ anchor: HTMLElement; url: string; title: string } | null>(null);
+  const refreshChanges = changes.refresh;
+  useEffect(() => { if (refresh > 0) refreshChanges(); }, [refresh]);
+  const count = changes.listing ? changes.listing.total ?? `${changes.listing.files.length}${changes.listing.truncated ? "+" : ""}` : null;
+  useEffect(() => { onCount?.(count); }, [onCount, count]);
+  return <>
+    {prs.length > 0 && <ul className="agent-pr-list">
+      {prs.map((pr) => {
+        const ci = pr.checks;
+        const tone = !ci ? "" : ci.failed > 0 ? " is-failed" : ci.pending > 0 ? " is-pending" : " is-passed";
+        const Icon = pr.state === "merged" ? GitMerge : pr.state === "closed" ? GitPullRequestClosed : pr.state === "draft" ? GitPullRequestDraft : GitPullRequest;
+        return <li key={pr.url} className={`agent-pr state-${pr.state}`}>
+          <a className="agent-pr-main" href={pr.url} target="_blank" rel="noreferrer" title={`${pr.title}${pr.branch ? ` · ${pr.branch}` : ""}`}>
+            <Icon className="agent-pr-icon" aria-label={t(pr.state === "merged" ? "Merged" : pr.state === "closed" ? "Closed" : pr.state === "draft" ? "Draft" : "Open")} />
+            <span className="agent-pr-text">
+              <span className="agent-pr-title">{pr.title}</span>
+              <span className="agent-pr-meta">{pr.repo} #{pr.number}{pr.additions + pr.deletions > 0 && <> <span className="agent-change-added">+{pr.additions.toLocaleString()}</span> <span className="agent-change-removed">−{pr.deletions.toLocaleString()}</span></>}</span>
+            </span>
+            {ci && <span className={`agent-pr-ci${tone}`} title={t("CI: {passed} of {total} checks passed", { passed: ci.passed, total: ci.total })}><span className="agent-pr-ci-dot" aria-hidden="true" />{ci.passed}/{ci.total}</span>}
+          </a>
+          <button type="button" className="icon-button agent-pr-more" aria-label={t("More for {title}", { title: pr.title })} aria-haspopup="menu" onClick={(event) => setPrMenu({ anchor: event.currentTarget, url: pr.url, title: pr.title })}><Ellipsis aria-hidden="true" /></button>
+        </li>;
+      })}
+    </ul>}
+    {prMenu && <RowMenu anchor={prMenu.anchor} title={prMenu.title} onClose={() => setPrMenu(null)} items={[
+      { id: "open", label: t("Open on GitHub"), icon: ExternalLink, run: () => { window.open(prMenu.url, "_blank", "noopener"); } },
+      { id: "copy", label: t("Copy link"), icon: Link, run: () => { void copyText(prMenu.url); } },
+    ]} />}
+    {changes.error ? <p className="agent-panel-note">{diffErrorMessage(t, changes.error)}</p>
+      : changes.loading && !changes.listing ? <p className="agent-panel-note" role="status">{t("Loading…")}</p>
+      : !changes.listing ? <p className="agent-panel-note">{t("Changes unavailable")}</p>
+      : changes.listing.files.length === 0 ? prs.length > 0 ? null : <p className="agent-panel-note">{t("No changes")}</p>
+      : <button type="button" className="agent-panel-action agent-change-summary" onClick={() => chat.onBrowseFiles("changes")}>
+        <FileDiff aria-hidden="true" />
+        {(() => {
+          // one line, as Claude desktop sums a branch: lines added and removed, or the file count when git gave no counts
+          const files = changes.listing.files;
+          const added = files.reduce((sum, file) => sum + (file.additions ?? 0), 0), removed = files.reduce((sum, file) => sum + (file.deletions ?? 0), 0);
+          return added + removed > 0
+            ? <span><span className="agent-change-added">+{added.toLocaleString()}</span> <span className="agent-change-removed">−{removed.toLocaleString()}</span></span>
+            : <span>{t(files.length === 1 ? "{n} file" : "{n} files", { n: changes.listing.total ?? files.length })}</span>;
+        })()}
+        <small className="agent-change-review">{t("Review")}</small>
+      </button>}
   </>;
 }

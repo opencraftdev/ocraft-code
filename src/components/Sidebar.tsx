@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type AnimationEvent, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { createContext, Fragment, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type AnimationEvent, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { ChevronDown, ChevronRight, Ellipsis, Folder, FolderOpen, GitBranch, History, Layers, ListChecks, Pencil, Pin, PinOff, Plus, Terminal, Trash2, TriangleAlert, X } from "lucide-react";
 
 import "./Sidebar.css";
@@ -187,11 +187,16 @@ export interface SidebarProps {
  * Spaces follow herdr's workspace roster. A workspace opens its current pane; tabs and split
  * panes are navigated through the tab strip, while Agents is an independent API-backed list.
  */
+/** The chats on screen when two are side by side, `<machine>:<pane>` to 1 (left) or 2 (right): their rows say which. */
+export const ScreensContext = createContext<ReadonlyMap<string, number>>(new Map());
+
 export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = false }: SidebarProps) {
   const t = useT();
   const { settings } = useSettings();
   const twoLine = settings.sidebarRows === "two";
   const machineId = useMachineId();
+  const screens = useContext(ScreensContext);
+  const screenBadge = (paneId: string) => { const n = screens.get(`${machineId}:${paneId}`); return n === undefined ? null : <span className="screen-badge" title={t("Screen {n}", { n })} aria-label={t("Screen {n}", { n })}>{n}</span>; };
   const activity = useSidebarActivity();
   const { closeWorkspace, listWorktrees, moveWorkspace, removeWorktree, renameWorkspace } = useMachineApi();
   // the row menu's Earlier sessions needs the PC's bridge to list them (lib/useSessionHistoryOffered.ts)
@@ -762,6 +767,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
             {filterNote}
           </span>}
           <span className="sidebar-pane-meta">
+            {(ownPanes.length > 0 ? ownPanes : panes).map((candidate) => screenBadge(candidate.pane_id)).find(Boolean)}
             <span className="visually-hidden">{markName(pane)}</span>
             {online && pane.restore_error ? <RestoreErrorBadge reason={pane.restore_error} /> : <StatusBadge compact status={online ? rollupStatus(statusPanes.map((candidate) => activity.status(machineId, candidate))) : undefined} />}
           </span>
@@ -778,6 +784,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
             title={session.title ?? displayPaneTitle(session.pane)} onClick={() => actions.selectPane(session.pane.pane_id)}>
             <span className="workspace-session-branch" aria-hidden="true" />
             <span className="workspace-session-title">{session.title ?? displayPaneTitle(session.pane)}</span>
+            {screenBadge(session.pane.pane_id)}
             {online && <StatusBadge compact status={activity.status(machineId, session.pane)} />}
           </button>
         </li>)}

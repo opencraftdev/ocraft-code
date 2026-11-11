@@ -78,6 +78,7 @@ const BASE: Record<string, string> = {
   "Task activity unavailable": "タスクの活動を読み込めません",
   "Review changes": "変更を確認",
   "Changes unavailable": "変更を読み込めません",
+  "Screen {n}": "画面 {n}",
   "Refresh changes": "変更を更新",
   "Background tasks": "バックグラウンドタスク",
   "Changes": "変更",

@@ -4,7 +4,7 @@ import { Bell, Bot, ChevronDown, Ellipsis, FileDiff, FolderOpen, Link, List, Men
 import type { HerdrPane } from "../shared/protocol.ts";
 import { authenticate, createTab, moveTabToWorkspace, pairDevice, shareSeen, signOut, splitPane, swapPaneWith, zoomPane } from "./lib/api.ts";
 import { deviceLabel } from "./lib/phone.ts";
-import { displayPaneTitle } from "./components/Sidebar.tsx";
+import { displayPaneTitle, ScreensContext } from "./components/Sidebar.tsx";
 import { PaneCanvas } from "./components/PaneCanvas.tsx";
 import { MachineSessionsProvider } from "./lib/machineSessionContext.tsx";
 import { PaneTerminal } from "./components/PaneTerminal.tsx";
@@ -618,19 +618,16 @@ export function App() {
     onClose={() => setFilesOpen(false)} />;
   const besideSlot: SplitSlot = split?.active === "a" ? "b" : "a";
   const besideChat = agentPanelShown && splitOn && Boolean(otherPane?.agent);
+  // two chats side by side are screens 1 (left) and 2 (right): the panel and the sidebar number them alike
+  const screenOf = (slot: SplitSlot): number => split && slotSide(split, slot) === "right" ? 2 : 1;
+  const screens = new Map<string, number>(splitOn && split && selectedPaneId && selectedPane?.agent && otherPane?.agent ? [[`${selectedMachineId}:${selectedPaneId}`, screenOf(split.active)], [`${split.other.machineId}:${split.other.paneId}`, screenOf(besideSlot)]] : []);
   const agentDetails = agentPanelShown && selectedPane?.agent && <MachineContext.Provider value={selectedMachineId}>
     <AgentPanel key={JSON.stringify([selectedMachineId, selectedPane.pane_id, selectedPane.terminal_id, selectedPane.agent_session?.value, selectedMachine?.snapshot?.finish_epoch])} pane={selectedPane} panes={snapshot?.panes ?? []} title={selectedTitle ?? selectedPane.agent} machineName={selectedMachine?.name ?? selectedMachineId} workspaceName={selectedWorkspace?.label ?? selectedPane.workspace_id}
       online={selectedMachine?.state === "connected"} watching={auth?.role === "watch"} tab={agentPanelTab} drawerOpen={agentDrawerOpen} onOpenView={openAgentView} onCloseView={closeAgentView} onClose={closeAgentPanel} pinned={pinnedAgentPanel} focusAgent={focusAgent} onFocusedAgent={clearFocusAgent}
       contextKey={conversationContextKey(selectedMachineId, selectedPane, selectedMachine?.snapshot?.finish_epoch)}
-      onSelectPane={id => { closeAgentView(); selectPane(id); }} onBrowseFiles={showWorkspaceFiles} onOpenDiff={(comparison, file) => { showWorkspaceFiles("changes"); openDiff({ machineId: selectedMachineId, paneId: selectedPane.pane_id, directory: selectedPane.foreground_cwd ?? selectedPane.cwd ?? null, ...comparison, path: file.path, oldPath: file.old_path }); }} onNewAgent={() => actions.openNewTab()} chatTitle={besideChat ? selectedTitle ?? selectedPane.agent : undefined} />
-  </MachineContext.Provider>;
-  // two chats side by side: the other one's panel too, in the order the chats are drawn; its buttons
-  // first make that chat the active one, so drawers and files open for it
-  const besideDetails = besideChat && otherPane && split && <MachineContext.Provider value={split.other.machineId}>
-    <AgentPanel key={JSON.stringify(["beside", split.other.machineId, otherPane.pane_id, otherPane.terminal_id, otherPane.agent_session?.value, otherMachine?.snapshot?.finish_epoch])} pane={otherPane} panes={otherMachine?.snapshot?.panes ?? []} title={displayPaneTitle(otherPane) ?? otherPane.agent!} chatTitle={displayPaneTitle(otherPane) ?? otherPane.agent!} panelId="agent-details-beside" machineName={otherMachine?.name ?? split.other.machineId} workspaceName={otherWorkspace?.label ?? otherPane.workspace_id}
-      online={otherMachine?.state === "connected"} watching={auth?.role === "watch"} tab={agentPanelTab} drawerOpen={false} onOpenView={(view) => { activateSlot(besideSlot); openAgentView(view); }} onCloseView={closeAgentView} onClose={closeAgentPanel} pinned={pinnedAgentPanel}
-      contextKey={conversationContextKey(split.other.machineId, otherPane, otherMachine?.snapshot?.finish_epoch)}
-      onSelectPane={() => activateSlot(besideSlot)} onBrowseFiles={(tab) => { activateSlot(besideSlot); showWorkspaceFiles(tab); }} onOpenDiff={() => { activateSlot(besideSlot); showWorkspaceFiles("changes"); }} onNewAgent={() => actions.openNewTab()} />
+      onSelectPane={id => { closeAgentView(); selectPane(id); }} onBrowseFiles={showWorkspaceFiles} onOpenDiff={(comparison, file) => { showWorkspaceFiles("changes"); openDiff({ machineId: selectedMachineId, paneId: selectedPane.pane_id, directory: selectedPane.foreground_cwd ?? selectedPane.cwd ?? null, ...comparison, path: file.path, oldPath: file.old_path }); }} onNewAgent={() => actions.openNewTab()} screen={besideChat ? screenOf(split!.active) : undefined} beside={besideChat && otherPane && split ? { screen: screenOf(besideSlot), title: displayPaneTitle(otherPane) ?? otherPane.agent!, pane: otherPane, machineId: split.other.machineId, machineName: otherMachine?.name ?? split.other.machineId, workspaceName: otherWorkspace?.label ?? otherPane.workspace_id,
+      online: otherMachine?.state === "connected", contextKey: conversationContextKey(split.other.machineId, otherPane, otherMachine?.snapshot?.finish_epoch),
+      onBrowseFiles: (tab) => { activateSlot(besideSlot); showWorkspaceFiles(tab); }, onOpenDiff: () => { activateSlot(besideSlot); showWorkspaceFiles("changes"); } } : null} />
   </MachineContext.Provider>;
   const fileSurface = filesBrowser
     || (viewing !== null && fileDocked && !filesOpen ? <MachineContext.Provider value={viewing.machineId}>
@@ -784,7 +781,7 @@ export function App() {
           {/* a sidebar that cannot be drawn leaves the panes working */}
           <RenderBoundary resetKey={null} fallback={(retry) => <RegionCrash message={t("The sidebar can't be shown.")} retry={retry} />}>
             <CrashProbe region="sidebar" />
-            <ReorderContext.Provider value={reorderCoordinator}><MachineSidebar machines={sidebarMachines} hiddenCount={machines.length - sidebarMachines.length} watching={auth?.role === "watch"} drawerOpen={drawerOpen} filterRequest={sidebarFilterRequest} selectedMachineId={selectedMachineId} selectedPaneId={selectedPaneId} activity={activity} actions={actions} onSelect={selectTarget} onSetup={(machine, update = false) => { setUpdateRemote(update); setMachineDialog(machine); }} onNew={(id) => { setNewSessionMachineId(id); setNewTab(null); setNewSessionOpen(true); setDrawerOpen(false); }} /></ReorderContext.Provider>
+            <ReorderContext.Provider value={reorderCoordinator}><ScreensContext.Provider value={screens}><MachineSidebar machines={sidebarMachines} hiddenCount={machines.length - sidebarMachines.length} watching={auth?.role === "watch"} drawerOpen={drawerOpen} filterRequest={sidebarFilterRequest} selectedMachineId={selectedMachineId} selectedPaneId={selectedPaneId} activity={activity} actions={actions} onSelect={selectTarget} onSetup={(machine, update = false) => { setUpdateRemote(update); setMachineDialog(machine); }} onNew={(id) => { setNewSessionMachineId(id); setNewTab(null); setNewSessionOpen(true); setDrawerOpen(false); }} /></ScreensContext.Provider></ReorderContext.Provider>
           </RenderBoundary>
           <SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} />
         </aside>
@@ -975,7 +972,7 @@ export function App() {
         </div>
         </WebPanelContext.Provider>
         </OpenFileContext.Provider>
-        {pinnedAgentPanel ? <div className="workspace-details-rail">{besideDetails && split && slotSide(split, besideSlot) === "left" ? <>{besideDetails}{agentDetails}</> : <>{agentDetails}{besideDetails}</>}</div> : agentDetails}
+        {pinnedAgentPanel ? <div className="workspace-details-rail">{agentDetails}</div> : agentDetails}
         {!agentDrawerOpen && fileSurface && <WorkspaceFileDrawer browser={filesOpen} covered={Boolean(diffViewing || (viewing && !fileDocked))}
           onClose={() => { if (filesOpen) setFilesOpen(false); else if (viewing && fileDocked) closeFile(); else setWebPage(null); }}>{fileSurface}</WorkspaceFileDrawer>}
       </div>

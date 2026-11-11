@@ -81,6 +81,7 @@ const BASE: Record<string, string> = {
   "Task activity unavailable": "无法加载任务活动",
   "Review changes": "查看更改",
   "Changes unavailable": "无法加载更改",
+  "Screen {n}": "屏幕 {n}",
   "Refresh changes": "刷新更改",
   "Background tasks": "后台任务",
   "Changes": "更改",

@@ -76,6 +76,7 @@ const BASE: Record<string, string> = {
   "Task activity unavailable": "작업 활동을 불러올 수 없음",
   "Review changes": "변경 사항 검토",
   "Changes unavailable": "변경 사항을 불러올 수 없음",
+  "Screen {n}": "화면 {n}",
   "Refresh changes": "변경 사항 새로 고침",
   "Background tasks": "백그라운드 작업",
   "Changes": "변경 사항",
