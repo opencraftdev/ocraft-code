@@ -49,10 +49,13 @@ export interface AgentPanelProps {
   /** an agent the composer's strip asked to open (`task:<id>`), consumed once */
   focusAgent?: string | null;
   onFocusedAgent?: () => void;
+  /** with two chats side by side, each has its own panel, headed by its chat's title */
+  chatTitle?: string;
+  panelId?: string;
 }
 
 /** Reference-style environment and agent sections, using existing read-only bridge APIs. */
-export function AgentPanel({ contextKey, pane, machineName, workspaceName, title, online, watching, tab, drawerOpen, onOpenView, onCloseView, onClose, onBrowseFiles, onOpenDiff, pinned = false, focusAgent = null, onFocusedAgent }: AgentPanelProps) {
+export function AgentPanel({ contextKey, pane, machineName, workspaceName, title, online, watching, tab, drawerOpen, onOpenView, onCloseView, onClose, onBrowseFiles, onOpenDiff, pinned = false, focusAgent = null, onFocusedAgent, chatTitle, panelId = "agent-details-panel" }: AgentPanelProps) {
   const t = useT();
   const machineId = useMachineId();
   const branch = usePaneBranch(machineId, pane.workspace_id);
@@ -139,8 +142,9 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
     </button>
   </li>;
   const openList = (view: "agents" | "tasks", event: MouseEvent<HTMLButtonElement>, ended = false) => { setSelectedId(null); setShowEnded(ended); openDrawer(view, event.currentTarget); };
-  return <><aside ref={root} tabIndex={-1} className="agent-panel" id="agent-details-panel" aria-label={t("Workspace and agents")}>
+  return <><aside ref={root} tabIndex={-1} className="agent-panel" id={panelId} aria-label={chatTitle ?? t("Workspace and agents")}>
     <div className="agent-panel-card">
+      {chatTitle && <h2 className="agent-panel-chat" title={chatTitle}>{chatTitle}</h2>}
       <section className="agent-panel-section agent-panel-environment" data-expanded={environmentOpen} aria-label={t("Environment")}>
         <header className="agent-panel-section-head">
           <h2><button type="button" className="agent-panel-disclosure" aria-expanded={environmentOpen} aria-controls={`${id}-environment`} onClick={() => setEnvironmentOpen(value => !value)}>{t("Environment")}<ChevronDown aria-hidden="true" /></button></h2>

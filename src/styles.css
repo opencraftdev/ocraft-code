@@ -3161,6 +3161,10 @@ button, a, [role="button"] {
     padding-block: var(--space-2);
   }
   .agent-panel .agent-panel-section:last-child { border-bottom: 0; }
+  /* two chats side by side: one panel each, stacked, each scrolling on its own */
+  .app-body .workspace-details-rail > .agent-panel { flex-basis: 0; }
+  .app-body .workspace-details-rail > .agent-panel + .agent-panel { border-top: var(--hairline) solid var(--border); }
+  .agent-panel-chat { flex: none; margin: 0; padding-block: var(--space-1); overflow: hidden; color: var(--text); font-size: var(--fs-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 }
 
 /* a file dragged over the app attaches to the chat wherever it lands (Composer.tsx) */

@@ -1372,6 +1372,8 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
     return json({ ok: true });
   }
   if (path === "/api/pane/commands") return json({ commands: paneCommandRows(paneId) });
+  // the demo has no GitHub: its sessions have no pull requests
+  if (path === "/api/pane/prs" || path === "/api/prs/lookup") return json({ prs: [] });
   // an agent's commands in a folder before any pane runs it: the new workspace and tab dialogs' skill
   // chips. The static rows the bridge would read for the agent are not bundled here; the skills are
   if (path === "/api/agent/commands") {

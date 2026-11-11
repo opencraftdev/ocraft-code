@@ -616,11 +616,21 @@ export function App() {
     onOpenDiff={(comparison, file) => openDiff({ machineId: selectedMachineId, paneId: selectedPane.pane_id, directory: selectedPane.foreground_cwd ?? selectedPane.cwd ?? null, ...comparison, path: file.path, oldPath: file.old_path })}
     onBrowseFolders={(path) => actions.openPalette(folderQueryFor(path, null))}
     onClose={() => setFilesOpen(false)} />;
+  const besideSlot: SplitSlot = split?.active === "a" ? "b" : "a";
+  const besideChat = agentPanelShown && splitOn && Boolean(otherPane?.agent);
   const agentDetails = agentPanelShown && selectedPane?.agent && <MachineContext.Provider value={selectedMachineId}>
     <AgentPanel key={JSON.stringify([selectedMachineId, selectedPane.pane_id, selectedPane.terminal_id, selectedPane.agent_session?.value, selectedMachine?.snapshot?.finish_epoch])} pane={selectedPane} panes={snapshot?.panes ?? []} title={selectedTitle ?? selectedPane.agent} machineName={selectedMachine?.name ?? selectedMachineId} workspaceName={selectedWorkspace?.label ?? selectedPane.workspace_id}
       online={selectedMachine?.state === "connected"} watching={auth?.role === "watch"} tab={agentPanelTab} drawerOpen={agentDrawerOpen} onOpenView={openAgentView} onCloseView={closeAgentView} onClose={closeAgentPanel} pinned={pinnedAgentPanel} focusAgent={focusAgent} onFocusedAgent={clearFocusAgent}
       contextKey={conversationContextKey(selectedMachineId, selectedPane, selectedMachine?.snapshot?.finish_epoch)}
-      onSelectPane={id => { closeAgentView(); selectPane(id); }} onBrowseFiles={showWorkspaceFiles} onOpenDiff={(comparison, file) => { showWorkspaceFiles("changes"); openDiff({ machineId: selectedMachineId, paneId: selectedPane.pane_id, directory: selectedPane.foreground_cwd ?? selectedPane.cwd ?? null, ...comparison, path: file.path, oldPath: file.old_path }); }} onNewAgent={() => actions.openNewTab()} />
+      onSelectPane={id => { closeAgentView(); selectPane(id); }} onBrowseFiles={showWorkspaceFiles} onOpenDiff={(comparison, file) => { showWorkspaceFiles("changes"); openDiff({ machineId: selectedMachineId, paneId: selectedPane.pane_id, directory: selectedPane.foreground_cwd ?? selectedPane.cwd ?? null, ...comparison, path: file.path, oldPath: file.old_path }); }} onNewAgent={() => actions.openNewTab()} chatTitle={besideChat ? selectedTitle ?? selectedPane.agent : undefined} />
+  </MachineContext.Provider>;
+  // two chats side by side: the other one's panel too, in the order the chats are drawn; its buttons
+  // first make that chat the active one, so drawers and files open for it
+  const besideDetails = besideChat && otherPane && split && <MachineContext.Provider value={split.other.machineId}>
+    <AgentPanel key={JSON.stringify(["beside", split.other.machineId, otherPane.pane_id, otherPane.terminal_id, otherPane.agent_session?.value, otherMachine?.snapshot?.finish_epoch])} pane={otherPane} panes={otherMachine?.snapshot?.panes ?? []} title={displayPaneTitle(otherPane) ?? otherPane.agent!} chatTitle={displayPaneTitle(otherPane) ?? otherPane.agent!} panelId="agent-details-beside" machineName={otherMachine?.name ?? split.other.machineId} workspaceName={otherWorkspace?.label ?? otherPane.workspace_id}
+      online={otherMachine?.state === "connected"} watching={auth?.role === "watch"} tab={agentPanelTab} drawerOpen={false} onOpenView={(view) => { activateSlot(besideSlot); openAgentView(view); }} onCloseView={closeAgentView} onClose={closeAgentPanel} pinned={pinnedAgentPanel}
+      contextKey={conversationContextKey(split.other.machineId, otherPane, otherMachine?.snapshot?.finish_epoch)}
+      onSelectPane={() => activateSlot(besideSlot)} onBrowseFiles={(tab) => { activateSlot(besideSlot); showWorkspaceFiles(tab); }} onOpenDiff={() => { activateSlot(besideSlot); showWorkspaceFiles("changes"); }} onNewAgent={() => actions.openNewTab()} />
   </MachineContext.Provider>;
   const fileSurface = filesBrowser
     || (viewing !== null && fileDocked && !filesOpen ? <MachineContext.Provider value={viewing.machineId}>
@@ -965,7 +975,7 @@ export function App() {
         </div>
         </WebPanelContext.Provider>
         </OpenFileContext.Provider>
-        {pinnedAgentPanel ? <div className="workspace-details-rail">{agentDetails}</div> : agentDetails}
+        {pinnedAgentPanel ? <div className="workspace-details-rail">{besideDetails && split && slotSide(split, besideSlot) === "left" ? <>{besideDetails}{agentDetails}</> : <>{agentDetails}{besideDetails}</>}</div> : agentDetails}
         {!agentDrawerOpen && fileSurface && <WorkspaceFileDrawer browser={filesOpen} covered={Boolean(diffViewing || (viewing && !fileDocked))}
           onClose={() => { if (filesOpen) setFilesOpen(false); else if (viewing && fileDocked) closeFile(); else setWebPage(null); }}>{fileSurface}</WorkspaceFileDrawer>}
       </div>
