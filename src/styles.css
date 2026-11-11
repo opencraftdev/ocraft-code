@@ -3136,3 +3136,22 @@ button, a, [role="button"] {
   }
   .agent-panel .agent-panel-section:last-child { border-bottom: 0; }
 }
+
+/* a file dragged over the app attaches to the chat wherever it lands (Composer.tsx) */
+.app-drop-overlay {
+  position: fixed;
+  inset: var(--space-2);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: calc(var(--hairline) * 2) dashed var(--accent);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--chat-canvas, var(--bg-panel)) 70%, transparent);
+  color: var(--text-strong);
+  font-size: var(--fs-md);
+  pointer-events: none;
+}
+
+/* "Restart it there to load the update" is Settings → Updates' to tell: nothing floats over the chat for it */
+.pane-column > .update-notice.is-warning:has(> a.btn) { display: none; }

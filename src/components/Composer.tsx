@@ -1017,6 +1017,37 @@ export function Composer({
     [t, uploadImages],
   );
 
+  // A file dropped anywhere in the app attaches here, as on the box itself: the active pane's
+  // composer takes a drop nothing else took (the terminal, a split's pane drag, this box).
+  const [appDragging, setAppDragging] = useState(false);
+  useEffect(() => {
+    if (!active) return;
+    const files = (event: globalThis.DragEvent) => event.dataTransfer?.types.includes("Files") === true;
+    const over = (event: globalThis.DragEvent) => {
+      if (!files(event)) return;
+      event.preventDefault();
+      setAppDragging(true);
+    };
+    const leave = (event: globalThis.DragEvent) => { if (event.relatedTarget === null) setAppDragging(false); };
+    const drop = (event: globalThis.DragEvent) => {
+      setAppDragging(false);
+      if (!files(event) || event.defaultPrevented) return;
+      event.preventDefault();
+      void uploadImages(Array.from(event.dataTransfer!.files));
+    };
+    const end = () => setAppDragging(false);
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", drop);
+    window.addEventListener("dragend", end);
+    return () => {
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", drop);
+      window.removeEventListener("dragend", end);
+    };
+  }, [active, uploadImages]);
+
   const onDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
       event.preventDefault();
@@ -1126,9 +1157,10 @@ export function Composer({
         </div>
       )}
 
+      {appDragging && <div className="app-drop-overlay" aria-hidden="true"><span>{t("Drop files to attach")}</span></div>}
       <div
         ref={surfaceRef}
-        className={`composer-surface${dragging ? " is-dragging" : ""}`}
+        className={`composer-surface${dragging || appDragging ? " is-dragging" : ""}`}
         data-compact={statusCompact ? "" : undefined}
         onDragEnter={(event) => {
           event.preventDefault();
