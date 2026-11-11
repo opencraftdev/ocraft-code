@@ -799,6 +799,10 @@ export function App() {
               theme={resolvedEntry.mode} palette={resolvedEntry.id} />
           </MachineContext.Provider>
         );
+      }} onOpenTask={(machineId, paneId) => {
+        // a task's pane opens in Code mode's own pane view, as a sidebar pick does: herdr's focus stays where it is
+        chooseMode("code");
+        selectTarget(machineId, paneId);
       }} /></div> : (
       <div className="app-body" id="ovis-workspace">
         <aside id="workspace-drawer" className={`sidebar${drawerOpen ? " is-open" : ""}`}>

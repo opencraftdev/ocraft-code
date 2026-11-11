@@ -50,6 +50,63 @@ export interface AssistantState {
   projects: AssistantProject[];
   /** newest first; the first one without `archived_at` is the current session */
   sessions: AssistantSession[];
+  /** newest first */
+  tasks: AssistantTask[];
+}
+
+/**
+ * A task's place in its lifecycle (docs/plan/20261111-2112-assistant.md, Task statuses). Phase 4 runs
+ * To do -> Working -> (Needs you <-> Working) -> Ready, and Cancelled or Failed at any point; the
+ * others belong to the queue, review and merge of later phases.
+ */
+export const TASK_STATUSES = ["todo", "scheduled", "queued", "working", "needs_you", "ready", "reviewing", "merging", "done", "cancelled", "failed"] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+/** One task (stateDir/assistant/tasks.json): a coding agent in a worktree of a project, on the project's machine. */
+export interface AssistantTask {
+  id: string;
+  title: string;
+  brief: string;
+  project: string;
+  /** the Remote PCs machine id the task runs on */
+  machine: string;
+  agent: AssistantAgent;
+  status: TaskStatus;
+  /** the agent's pane on that machine's herdr; null before it started */
+  paneId: string | null;
+  /** the worktree's checkout on that machine (absolute), and its herdr workspace */
+  worktree: string | null;
+  workspaceId: string | null;
+  /** `assistant/<id>-<slug>` */
+  branch: string;
+  /** kept for the queue (phase 5): another task's id, a time, a cron line */
+  after?: string;
+  at?: string;
+  cron?: string;
+  /** kept for review and merge (phase 6) */
+  review: boolean;
+  autoMerge: boolean;
+  prUrl?: string;
+  /** ms since the epoch */
+  createdAt: number;
+  startedAt?: number;
+  /** herdr reported the agent at work at least once since it started: at rest after that is Ready */
+  worked?: true;
+  /** why it failed */
+  error?: string;
+}
+
+/** POST /api/ovis-task/create (`ovis-task create`) */
+export interface CreateTaskRequest {
+  project: string;
+  title: string;
+  brief: string;
+  agent?: AssistantAgent;
+  review?: boolean;
+  autoMerge?: boolean;
+  after?: string;
+  at?: string;
+  cron?: string;
 }
 
 /**

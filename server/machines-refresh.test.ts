@@ -100,7 +100,9 @@ async function fixture(options: { bootId?: string; now?: () => number } = {}) {
   await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(path, resolve); });
   const previousSocket = process.env["HERDR_SOCKET"];
   process.env["HERDR_SOCKET"] = path;
-  const push = { seed() {}, async onStatus() {}, async onEnded() {} } as unknown as PushService;
+  /** each status the web push was told, as (pane, status, machine) */
+  const pushed: [string, string, string | undefined][] = [];
+  const push = { seed() {}, async onStatus(paneId: string, status: string, machineId?: string) { pushed.push([paneId, status, machineId]); }, async onEnded() {} } as unknown as PushService;
   const manager = new MachineManager(join(root, "state"), push, new CompletionTracker(null), undefined, options);
   cleanups.push(() => {
     manager.stop(); local.finish();
@@ -126,7 +128,7 @@ async function fixture(options: { bootId?: string; now?: () => number } = {}) {
       if (status) rosters.push(`${machine.id}:${status}`);
     }
   });
-  return { manager, drive, local, rosters };
+  return { manager, drive, local, rosters, pushed };
 }
 
 type TestRuntime = {
@@ -186,6 +188,19 @@ async function remoteFixture(options: { bootId?: string; now?: () => number } = 
     terminalCloses: () => terminalCloses,
   };
 }
+
+// An Assistant task's pane is such a remote pane (server/assistant-tasks.ts): its Needs you (blocked)
+// and Ready (done) reach web push here, under each device's notify policy (server/push.ts).
+it("tells web push a remote pane's status, as it tells the Assistant's tasks", async () => {
+  const f = await remoteFixture();
+  const told: string[] = [];
+  f.manager.subscribe((event) => { if (event.type === "machine-message" && event.message.type === "pane-status") told.push(`${event.machine_id}:${event.message.agent_status}`); });
+  f.send({ type: "pane-status", pane_id: "p7", agent_status: "blocked" });
+  f.send({ type: "pane-status", pane_id: "p7", agent_status: "done" });
+  await until(() => f.pushed.length === 2 && told.length === 2);
+  expect(f.pushed).toEqual([["p7", "blocked", "remote"], ["p7", "done", "remote"]]);
+  expect(told).toEqual(["remote:blocked", "remote:done"]);
+});
 
 it("records a remote bridge failure and a later recovery without its address or token", async () => {
   const f = await remoteFixture();

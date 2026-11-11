@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 
-import type { AssistantAgent, AssistantMachine, AssistantProblem, AssistantProject, AssistantSession, AssistantState, AssistantTranscript, MergeMode, ProjectChange } from "../../shared/assistant.ts";
-import { addAssistantProject, ApiError, changeAssistantProject, fetchAssistant, fetchAssistantTranscript, fixAssistantMachine, removeAssistantProject, setAssistantMaxRunning, startAssistantSession } from "../lib/api.ts";
+import type { AssistantAgent, AssistantMachine, AssistantProblem, AssistantProject, AssistantSession, AssistantState, AssistantTask, AssistantTranscript, MergeMode, ProjectChange, TaskStatus } from "../../shared/assistant.ts";
+import type { InteractivePrompt } from "../../shared/protocol.ts";
+import { addAssistantProject, ApiError, changeAssistantProject, fetchAssistant, fetchAssistantTranscript, fetchPanePrompt, fixAssistantMachine, removeAssistantProject, restartAssistantTask, setAssistantMaxRunning, startAssistantSession } from "../lib/api.ts";
 import { ASSISTANT_INSTALL_COMMAND, assistantLink, storeAssistantAddress, storedAssistantAddress } from "../lib/assistantMode.ts";
 import { useT, type Translate } from "../lib/i18n.ts";
+import { MachineContext } from "../lib/machineContext.tsx";
 import { Command } from "./PhonePanel.tsx";
+import { PromptCard } from "./PromptCard.tsx";
 
 import "./AssistantView.css";
 
@@ -13,9 +16,12 @@ import "./AssistantView.css";
  * `web_ui.assistant`) the layout later phases fill; on any other Ovis the setup page. The switch
  * between the two modes is the Claude app's Chat | Code one.
  */
-export function AssistantView({ vm, renderChat }: { vm: boolean; renderChat?: (paneId: string) => ReactNode }) {
-  return vm ? <AssistantLayout renderChat={renderChat} /> : <AssistantSetup />;
+export function AssistantView({ vm, renderChat, onOpenTask }: { vm: boolean; renderChat?: (paneId: string) => ReactNode; onOpenTask?: OpenTask }) {
+  return vm ? <AssistantLayout renderChat={renderChat} onOpenTask={onOpenTask} /> : <AssistantSetup />;
 }
+
+/** a task's pane in Code mode's own pane view: the machine it runs on, and the pane */
+type OpenTask = (machineId: string, paneId: string) => void;
 
 function AssistantSetup() {
   const t = useT();
@@ -38,7 +44,7 @@ function AssistantSetup() {
   );
 }
 
-function AssistantLayout({ renderChat }: { renderChat?: (paneId: string) => ReactNode }) {
+function AssistantLayout({ renderChat, onOpenTask }: { renderChat?: (paneId: string) => ReactNode; onOpenTask?: OpenTask }) {
   const t = useT();
   const [state, setState] = useState<AssistantState | null>(null);
   // the archived session shown read only; null: the current one, live
@@ -80,7 +86,7 @@ function AssistantLayout({ renderChat }: { renderChat?: (paneId: string) => Reac
           : (current.pane_id !== null && renderChat?.(current.pane_id)) || <p className="assistant-chat-note">{t("The Assistant's pane is not open. Start a new chat.")}</p>}
       </main>
       <aside className="assistant-board" aria-label={t("Tasks")}>
-        <Section title={t("Tasks")} empty />
+        <TaskBoard tasks={state?.tasks ?? []} projects={projects} onChange={setState} onOpenTask={onOpenTask} />
       </aside>
     </div>
   );
@@ -133,6 +139,84 @@ function Section({ title, empty, children }: { title: string; empty: boolean; ch
       {empty && <p className="assistant-empty">{t("None yet")}</p>}
       {children}
     </section>
+  );
+}
+
+/** The board's columns, in the plan's order: what needs the user first. An empty one is left out. */
+const COLUMNS: readonly (readonly TaskStatus[])[] = [["needs_you", "failed"], ["ready", "reviewing"], ["merging"], ["working"], ["queued", "todo"], ["scheduled"], ["done", "cancelled"]];
+
+function columnTitle(t: Translate, first: TaskStatus): string {
+  switch (first) {
+    case "needs_you": return t("Needs you");
+    case "ready": return t("Ready");
+    case "merging": return t("Merging");
+    case "working": return t("Working");
+    case "queued": return t("Queued");
+    case "scheduled": return t("Scheduled");
+    default: return t("Done");
+  }
+}
+
+/**
+ * The task board, as Linear's and Conductor's boards are: one column per status, newest first in
+ * each. A card opens its pane in Code mode; a Needs you card answers its agent's question in place
+ * with the chat's own prompt card, through the machine's prompt-answer route.
+ */
+function TaskBoard({ tasks, projects, onChange, onOpenTask }: { tasks: AssistantTask[]; projects: AssistantProject[]; onChange(state: AssistantState): void; onOpenTask?: OpenTask }) {
+  const t = useT();
+  const columns = COLUMNS.map((statuses) => ({ statuses, tasks: tasks.filter((task) => statuses.includes(task.status)) })).filter((column) => column.tasks.length > 0);
+  return (
+    <>
+      <Section title={t("Tasks")} empty={columns.length === 0} />
+      {columns.map(({ statuses, tasks: shown }) => (
+        <section key={statuses[0]} className="assistant-section" data-column={statuses[0]}>
+          <h3 className="assistant-column">{columnTitle(t, statuses[0]!)} <span className="assistant-dim">{shown.length}</span></h3>
+          {shown.map((task) => <TaskCard key={task.id} task={task} project={projects.find((project) => project.id === task.project)} onChange={onChange} onOpenTask={onOpenTask} />)}
+        </section>
+      ))}
+    </>
+  );
+}
+
+function TaskCard({ task, project, onChange, onOpenTask }: { task: AssistantTask; project: AssistantProject | undefined; onChange(state: AssistantState): void; onOpenTask?: OpenTask }) {
+  const t = useT();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const paneId = task.paneId;
+  // only on this click: nothing restarts a task by itself
+  const restart = () => {
+    setBusy(true); setError(null);
+    restartAssistantTask(task.id).then(onChange, (failure: unknown) => setError(failure instanceof ApiError ? failure.detail : String(failure))).finally(() => setBusy(false));
+  };
+  return (
+    <div className="assistant-row assistant-task">
+      <button type="button" className="assistant-task-open" disabled={paneId === null || task.status === "cancelled" || !onOpenTask} onClick={() => paneId !== null && onOpenTask?.(task.machine, paneId)}>
+        <span className="assistant-row-name">{task.title}</span>
+        <span className="assistant-dim">#{task.id} · {project?.id ?? task.project} · {task.branch}</span>
+      </button>
+      {task.status === "cancelled" && <p className="assistant-dim">{t("Cancelled")}</p>}
+      {task.status === "failed" && (
+        <div className="assistant-problem">
+          <span>{task.error ?? t("Failed")}</span>
+          {task.worktree !== null && <button type="button" className="btn" disabled={busy} onClick={restart}>{t("Restart agent")}</button>}
+        </div>
+      )}
+      {task.status === "needs_you" && paneId !== null && <TaskQuestion machineId={task.machine} paneId={paneId} />}
+      {error !== null && <p className="assistant-error" role="alert">{error}</p>}
+    </div>
+  );
+}
+
+/** The question a Needs you task's agent shows, read from its machine and answered with the chat's prompt card. */
+function TaskQuestion({ machineId, paneId }: { machineId: string; paneId: string }) {
+  const [prompt, setPrompt] = useState<InteractivePrompt | null>(null);
+  const read = useCallback(() => fetchPanePrompt(paneId, machineId).then(setPrompt, () => setPrompt(null)), [machineId, paneId]);
+  useEffect(() => { void read(); }, [read]);
+  if (prompt === null) return null;
+  return (
+    <MachineContext.Provider value={machineId}>
+      <PromptCard key={prompt.id} paneId={paneId} prompt={prompt} onPromptChanged={() => void read()} onAnswered={() => void read()} />
+    </MachineContext.Provider>
   );
 }
 

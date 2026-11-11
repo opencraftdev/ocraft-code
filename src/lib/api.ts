@@ -549,6 +549,11 @@ export async function startAssistantSession(): Promise<AssistantState> {
   return (await sendJson("/api/assistant/sessions", "POST", {})).json() as Promise<AssistantState>;
 }
 
+/** Restart agent: a failed task's agent starts again in its worktree, only on the user's click. */
+export async function restartAssistantTask(taskId: string): Promise<AssistantState> {
+  return (await sendJson(`/api/assistant/tasks/${encodeURIComponent(taskId)}/restart`, "POST", {})).json() as Promise<AssistantState>;
+}
+
 /** An archived Assistant session's saved conversation. */
 export function fetchAssistantTranscript(name: string): Promise<AssistantTranscript> {
   return getJson<AssistantTranscript>(`/api/assistant/sessions/${encodeURIComponent(name)}`);

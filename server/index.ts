@@ -56,6 +56,7 @@ import { bridgeIdentity, loopbackRelay, registerBridge, relayTarget } from "./br
 import { handleMachineRequest, nonCanonicalPath, slowMachinePath } from "./machine-api.ts";
 import { Assistant, handleAssistantRequest, type RunScript } from "./assistant.ts";
 import { AssistantSessions, OVIS_TASK_BIN, type AssistantPanes } from "./assistant-sessions.ts";
+import { machineBridge, type TaskBridge } from "./assistant-tasks.ts";
 import { cliToken, handleOvisTaskRequest } from "./ovis-task.ts";
 import type { AssistantAgent } from "../shared/assistant.ts";
 import { handleSessionHistoryRequest, handleSessionResumeRequest, SESSION_HISTORY_PATH, SESSION_RESUME_PATH } from "./session-history-routes.ts";
@@ -218,6 +219,8 @@ export function createServer(
     assistantAgent?: AssistantAgent;
     /** how Assistant sessions open, read and close their pane (server/assistant-sessions.ts); unset, herdr's. Tests pass their own. */
     assistantPanes?: AssistantPanes;
+    /** how tasks reach a machine's bridge (server/assistant-tasks.ts); unset, through Remote PCs. Tests pass their own. */
+    assistantBridge?: TaskBridge;
   } = {},
 ): ServerInstance {
   /**
@@ -279,7 +282,7 @@ export function createServer(
     OVIS_BUN: process.execPath,
     PATH: `${OVIS_TASK_BIN}${delimiter}${process.env["PATH"] ?? ""}`,
   }), options.assistantPanes);
-  const assistantService = assistant && machines ? new Assistant(stateDir, machines, options.assistantRun ?? ((machine, script) => machines.runScript(machine.id, script)), { sessions: assistantSessions }) : null;
+  const assistantService = assistant && machines ? new Assistant(stateDir, machines, options.assistantRun ?? ((machine, script) => machines.runScript(machine.id, script)), { sessions: assistantSessions, bridge: options.assistantBridge ?? machineBridge(machines) }) : null;
   // read finishes are kept for the herdr run each PC told this server it is in
   const seen = new SeenStore(stateDir, () => machines?.finishEpochs() ?? new Map());
   // started after createCore's Node probe (server/pty/sidecar.ts), which can hold the thread up to 3 s: that wait

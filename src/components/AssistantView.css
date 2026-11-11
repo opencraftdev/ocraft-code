@@ -149,3 +149,27 @@
   .assistant-board { flex: none; border: 0; }
   .assistant-chat { min-height: 40vh; }
 }
+
+/* the task board: a column per status, a card per task */
+.assistant-column {
+  margin: 0 0 var(--space-1);
+  color: var(--text-strong);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.assistant-task-open {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.assistant-task-open:disabled { cursor: default; }
+.assistant-task-open:not(:disabled):hover .assistant-row-name { text-decoration: underline; }
