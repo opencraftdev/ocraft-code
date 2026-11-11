@@ -1,7 +1,7 @@
 import { type Dispatch, type DragEvent, type RefObject, type SetStateAction, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { HerdrPane } from "../../shared/protocol.ts";
 import { paneStorageId, type Machine } from "../../shared/machines.ts";
-import { fetchSession, type HealthInfo } from "./api.ts";
+import { fetchSession, splitPane as splitPaneApi, type HealthInfo } from "./api.ts";
 import { dockPane, draggedPane, dropSide, otherSlot, PANE_DRAG_TYPE, sameTarget, storedSplit, storeSplit, type SplitSide, type SplitSlot, type SplitState, type SplitTarget } from "./split.ts";
 import { paneDrag, type PaneDrag } from "./paneDrag.ts";
 
@@ -349,5 +349,30 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
     return true;
   };
   const dropBeside = (): void => { beside.current = false; };
-  return { besideAsked, startedBeside, dropBeside, otherMachine, otherPane, splitOn, sameTabs, otherWorkspace, otherHerdr, otherAttach, activateSlot, closeSlot, selectInSlot, dockSide, splitDragOn, paneDragOver, paneDragLeave, paneDrop };
+  /**
+   * The chat's terminal (Claude desktop's Terminal panel): the plain shell pane in the selected
+   * agent's tab, shown in the right half in the terminal lens while the chat keeps the left half and
+   * the selection. A tab without one gets one, split from the agent's pane in its folder.
+   */
+  const shellOf = (machineId: string, tabId: string, agentPaneId: string): string | null =>
+    machines.find((machine) => machine.id === machineId)?.snapshot?.panes.find((pane) => pane.tab_id === tabId && pane.pane_id !== agentPaneId && !pane.agent)?.pane_id ?? null;
+  const terminalOpen = (): boolean => splitOn && selectedPane !== null && split.other.machineId === selectedMachineId
+    && split.other.paneId === shellOf(selectedMachineId, selectedPane.tab_id, selectedPane.pane_id);
+  const opening = useRef(false);
+  const toggleTerminal = async (): Promise<void> => {
+    if (!wideScreen || selectedPane === null || selectedPaneId === null || opening.current) return;
+    if (terminalOpen()) { closeSlot(otherSlot(split!.active)); return; }
+    const machineId = selectedMachineId, chat = { machineId, paneId: selectedPaneId };
+    opening.current = true;
+    try {
+      const shell = shellOf(machineId, selectedPane.tab_id, selectedPaneId) ?? (await splitPaneApi(selectedPaneId, "right", false, machineId)).pane_id;
+      pickView?.(machineId, shell, "terminal");
+      pickView?.(machineId, chat.paneId, "chat");
+      const active: SplitSlot = splitOn ? split.active : soloSlot;
+      applySplit({ other: { machineId, paneId: shell }, bSide: active === "a" ? "right" : "left", active }, chat, true);
+    } finally {
+      opening.current = false;
+    }
+  };
+  return { toggleTerminal, terminalOpen, besideAsked, startedBeside, dropBeside, otherMachine, otherPane, splitOn, sameTabs, otherWorkspace, otherHerdr, otherAttach, activateSlot, closeSlot, selectInSlot, dockSide, splitDragOn, paneDragOver, paneDragLeave, paneDrop };
 }

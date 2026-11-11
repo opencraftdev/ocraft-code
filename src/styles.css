@@ -3336,3 +3336,31 @@ button, a, [role="button"] {
 .new-session-page-right { flex-wrap: wrap; justify-content: flex-end; }
 .new-session-page-scrim.is-beside .new-session-page-model { width: 6.5rem; }
 .new-session-page-chip { max-width: 14rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Claude desktop look: the chat's Terminal panel (the tab's shell pane beside the chat) ───── */
+.pane-terminal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  min-height: 44px;
+  padding: 0 var(--space-2) 0 var(--space-4);
+  border-bottom: var(--hairline) solid var(--border);
+  background: var(--chat-canvas, var(--bg));
+}
+.pane-terminal-head-title { color: var(--text-strong); font-size: 14px; }
+.pane-terminal-head-place { flex: 1; min-width: 0; overflow: hidden; color: var(--text-dim); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.pane-terminal-head .icon-button { color: var(--text-dim); border-radius: 8px; }
+.pane-terminal-head .icon-button:hover { color: var(--text); background: var(--bg-hover); }
+@media (min-width: 769px) {
+  /* the head carries its close: the hover controls are the chat half's */
+  .pane-split.is-split .pane-slot:not(.is-chat) .tab-strip-row,
+  .pane-split.is-split .pane-slot:not(.is-chat) .pane-slot-bar { display: none; }
+}
+@media (min-width: 769px) {
+  /* the Terminal panel is narrower than a chat beside a chat, as Claude's is */
+  .pane-split.is-split .pane-slot:has(> .pane-terminal-head),
+  .pane-split.is-split .pane-slot:has(.pane-terminal-head) { flex: 0 0 40%; max-width: 40%; }
+  .pane-split.is-split .pane-slot:has(.pane-terminal-head) ~ .pane-slot,
+  .pane-split.is-split .pane-slot:not(:has(.pane-terminal-head)) { flex: 1 1 0; }
+}

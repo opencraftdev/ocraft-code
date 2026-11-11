@@ -114,6 +114,7 @@ const BASE: Record<string, string> = {
   "Workflow file couldn't be read. Showing the last available graph.": "워크플로 파일을 읽지 못했습니다. 마지막 그래프를 보여줍니다.",
   "Connection interrupted. Showing the last recorded activity.": "연결이 끊어졌습니다. 마지막으로 기록된 활동을 보여줍니다.",
   "Loading agent activity": "에이전트 활동을 불러오는 중",
+  "Close terminal": "터미널 닫기",
   "Recent": "최근",
   "No changes": "변경 사항 없음",
   "Review": "검토",

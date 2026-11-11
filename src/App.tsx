@@ -341,7 +341,7 @@ export function App() {
   // up under a sheet or Settings opened over it: their close, or a Back, comes back to the peek
   usePhoneSheetBack(() => endPeek(), terminalPeek !== null, true);
 
-  const { besideAsked, startedBeside, dropBeside, otherMachine, otherPane, splitOn, sameTabs, otherWorkspace, otherHerdr, otherAttach, activateSlot, closeSlot, selectInSlot, dockSide, splitDragOn, paneDragOver, paneDragLeave, paneDrop } = useSplitLayout({ machines, split, wideScreen, selectedPaneId, selectedPane, selectedMachineId, splitShownRef, health, machineRosterLoaded, endSplit, otherRecheck, otherRosterTick, setSplit, soloSlot, setConnected, setConnectedBefore, setSelectedMachineId, setSelectedPaneId, setAutoSelected, setOutputStopped, splitRef, selectPane, paneAreaRef, dropAtRef, clearDropPreview, tabDrag, showDropTarget, setPaneDragging, movingPanes, draggedPaneRef, markSwap, swapPanes, pickView, openNewBeside: () => { setDrawerOpen(false); setNewSessionMachineId(selectedMachineId); setNewTab(null); setNewSessionOpen(true); } });
+  const { toggleTerminal, terminalOpen, besideAsked, startedBeside, dropBeside, otherMachine, otherPane, splitOn, sameTabs, otherWorkspace, otherHerdr, otherAttach, activateSlot, closeSlot, selectInSlot, dockSide, splitDragOn, paneDragOver, paneDragLeave, paneDrop } = useSplitLayout({ machines, split, wideScreen, selectedPaneId, selectedPane, selectedMachineId, splitShownRef, health, machineRosterLoaded, endSplit, otherRecheck, otherRosterTick, setSplit, soloSlot, setConnected, setConnectedBefore, setSelectedMachineId, setSelectedPaneId, setAutoSelected, setOutputStopped, splitRef, selectPane, paneAreaRef, dropAtRef, clearDropPreview, tabDrag, showDropTarget, setPaneDragging, movingPanes, draggedPaneRef, markSwap, swapPanes, pickView, openNewBeside: () => { setDrawerOpen(false); setNewSessionMachineId(selectedMachineId); setNewTab(null); setNewSessionOpen(true); } });
 
   useAddressBar({ newSessionOpen, selectedPane, selectedPaneId, selectedWorkspace, viewing, selectedMachineId, releaseFile, locked, machines, snapshot, linkLanded, view, settingsOpen, settingsPage, settingsLinkPage, settingsLinkSection, wideScreen, sidebarCollapsed, newTab, newFields, autoSelected, pendingFile, selectedMachine, openFile, machinesRef, selectTargetRef, pendingLink, setLinkLanded, linkSince, rosterSeq, setNewSessionOpen, pendingCreate, setHeaderNote, selectionRef });
 
@@ -676,7 +676,8 @@ export function App() {
             <button type="button" aria-label={t("Chat")} aria-pressed={view === "chat"} onClick={() => { setView("chat"); setDrawerOpen(false); }} title={t("Chat transcript (⌘⇧J)")}>
               <List aria-hidden="true" />
             </button>
-            <button type="button" aria-label={t("Terminal")} aria-pressed={view === "terminal"} onClick={() => { setView("terminal"); setDrawerOpen(false); }} title={terminalAttach ? t("Live terminal (⌘⇧J)") : t("Live terminal: coming to Windows PCs once herdr can attach there")}>
+            {/* in chat from 769px, the terminal is a panel beside the chat (the tab's shell pane); elsewhere the lens */}
+            <button type="button" aria-label={t("Terminal")} aria-pressed={chatShown && wideScreen && terminalAttach ? terminalOpen() : view === "terminal"} onClick={() => { setDrawerOpen(false); if (chatShown && wideScreen && terminalAttach) void toggleTerminal(); else setView("terminal"); }} title={terminalAttach ? t("Live terminal (⌘⇧J)") : t("Live terminal: coming to Windows PCs once herdr can attach there")}>
               <SquareTerminal aria-hidden="true" />
               {!terminalAttach && <span className="pill pill-soon">{t("soon")}</span>}
             </button>
@@ -853,6 +854,12 @@ export function App() {
                 <RenderBoundary resetKey={`${machineId}:${paneId ?? ""}`} fallback={(retry) => <>{slotBar}<RegionCrash message={t("This pane can't be shown.")} retry={retry} onShown={active ? paneLost : undefined} /></>}>
                 <CrashProbe region="pane" />
                 {!(slotSnapshot && pane && workspace) && slotBar}
+                {/* a half drawn as a terminal beside a chat is the chat's Terminal panel: its own slim head */}
+                {splitOn && pane && !showsChat(pane, slotView) && <div className="pane-terminal-head">
+                  <span className="pane-terminal-head-title">{t("Terminal")}</span>
+                  <span className="pane-terminal-head-place" title={pane.cwd ?? undefined}>{(pane.foreground_cwd ?? pane.cwd ?? "").replace(/\/+$/, "").split("/").pop()}</span>
+                  <button type="button" className="icon-button" aria-label={t("Close terminal")} title={t("Close terminal")} onClick={() => closeSlot(slot)}><X /></button>
+                </div>}
                 {slotSnapshot && pane && workspace && (
                   <TabStrip snapshot={slotSnapshot} workspace={workspace} selectedPane={pane} panelId={slotPanelId} splitDrag={wideScreen} onSelectPane={onSelect} end={slotEnd}
                     renameRequest={active && renameRequest?.machineId === machineId && renameRequest.paneId === pane.pane_id ? renameRequest : null}
@@ -872,7 +879,7 @@ export function App() {
                     No tabIndex - the terminal (PaneTerminal) and the composer are the focusable things inside it. */}
                 <main className="terminal-host">
                   <div id={slotPanelId} className="terminal-tabpanel" role={slotPanelLabel === null ? undefined : "tabpanel"} aria-label={slotPanelLabel ?? undefined}>
-                  <PaneCanvas key={machineId} snapshot={slotSnapshot} pane={pane} selectedPaneId={paneId} onSelect={onSelect} onChanged={actions.refresh} actionsRef={active ? paneActionsRef : undefined} solo={showsChat(pane, slotView)}
+                  <PaneCanvas key={machineId} snapshot={slotSnapshot} pane={pane} selectedPaneId={paneId} onSelect={onSelect} onChanged={actions.refresh} actionsRef={active ? paneActionsRef : undefined} solo={showsChat(pane, slotView) || splitOn}
                     mirrored={herdr?.terminal_attach === false || herdr?.terminal_mirror === true}
                     onOpenInHalf={wideScreen ? (id, side) => dockSide({ machineId, paneId: id }, side) : undefined}
                     onRecoverUnsent={(target) => openUnsent({ machineId, pane: target })}
@@ -962,6 +969,8 @@ export function App() {
         onCreated={(paneId, agentStarted, messageWaits = false) => {
           closeNewSession();
           if (agentStarted) actions.agentStarted(newSessionMachineId, paneId);
+          // two panes per session: the agent's, and a shell in its folder for the Terminal panel
+          if (agentStarted) void splitPane(paneId, "right", false, newSessionMachineId).then(() => load()).catch(() => undefined);
           // the first message waits in the chat's box: the pane opens on it, whatever lens the page would pick
           if (messageWaits) pickView(newSessionMachineId, paneId, "chat");
           // Cmd+D's new session docks beside the one it was asked from
