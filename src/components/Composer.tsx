@@ -1388,10 +1388,11 @@ export function Composer({
           >
             <Plus aria-hidden="true" />
           </button>
-          {dictation.shown && <MicButton dictation={dictation} />}
           {/* only once this device turned it on (Settings → Chat → Composer; the composer's row stays minimal, and
               the tab menu opens the same dialog), and in a mouse-driven window only, like the usage glance: a phone's
               card has no row to spare beside the mic and the tasks chip, and its tab menu carries New tab with agent… already */}
+          {/* under the box on its left from 769px, across from the model (styles.css): the line itself is attach, text, mic, send */}
+          <span className="composer-under">
           {onOpenNewSession && settings.composerNewTabButton && role !== "observe" && !mobile && (
             <button
               type="button"
@@ -1404,6 +1405,7 @@ export function Composer({
             </button>
           )}
           <BackgroundTasks paneId={paneId} count={backgroundTasks} omo={agent === "omo"} subagents={agent === "claude" || agent === "opencode"} plan={plan} />
+          </span>
         </div>
         {/* between the two control groups of the card's last row. The agent's name, its separator and the
             state word are read, not drawn: the mark and the header name the agent, and Stop, the live row and
@@ -1454,6 +1456,7 @@ export function Composer({
           )}
         </div>
         <div className="composer-controls composer-controls-right">
+          {dictation.shown && <MicButton dictation={dictation} />}
           {!sendShown ? (
             <button
               type="button"

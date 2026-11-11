@@ -58,7 +58,7 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showEnded, setShowEnded] = useState(false);
   const [environmentOpen, setEnvironmentOpen] = useState(true);
-  const [contextOpen, setContextOpen] = useState(true);
+  const [contextOpen, setContextOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(true);
   const [tasksOpen, setTasksOpen] = useState(true);
   const [agentsOpen, setAgentsOpen] = useState(true);
