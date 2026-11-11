@@ -52,4 +52,5 @@ export const SIDEBAR_ZH: Record<string, string> = {
   "Collapse": "折叠",
   "Expand": "展开",
   "Shell": "Shell",
+  "Sessions in {name}": "{name} 中的会话",
 };

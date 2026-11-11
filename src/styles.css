@@ -3274,3 +3274,36 @@ button, a, [role="button"] {
   .composer .composer-pill .agent-mark { display: none; }
   .composer .composer-pill { gap: var(--space-1); padding-inline: 0; }
 }
+
+/* ── Claude desktop look: a workspace's other sessions (a fork) under its row ─────────────────
+   An L-shaped connector, the session's title, and its status; the same 32px row as the workspace. */
+.workspace-sessions { margin: 0; padding: 0 0 0 var(--space-2); list-style: none; }
+.workspace-session {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  text-align: start;
+  cursor: pointer;
+}
+.workspace-session:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.workspace-session.is-selected { background: color-mix(in srgb, var(--text) 11%, transparent); color: var(--text-strong); }
+.workspace-session-branch {
+  flex: none;
+  width: 10px;
+  height: 14px;
+  margin-top: -10px;
+  border-left: var(--hairline) solid var(--text-dim);
+  border-bottom: var(--hairline) solid var(--text-dim);
+  border-bottom-left-radius: 4px;
+  opacity: 0.6;
+}
+.workspace-session-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

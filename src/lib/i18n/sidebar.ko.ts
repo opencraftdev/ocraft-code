@@ -52,4 +52,5 @@ export const SIDEBAR_KO: Record<string, string> = {
   "Collapse": "접기",
   "Expand": "펼치기",
   "Shell": "셸",
+  "Sessions in {name}": "{name}의 세션",
 };

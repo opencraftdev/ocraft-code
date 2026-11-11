@@ -52,4 +52,5 @@ export const SIDEBAR_JA: Record<string, string> = {
   "Collapse": "折りたたむ",
   "Expand": "展開",
   "Shell": "シェル",
+  "Sessions in {name}": "{name} のセッション",
 };

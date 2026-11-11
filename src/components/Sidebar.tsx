@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Ellipsis, Folder, FolderOpen, GitBranch, His
 
 import "./Sidebar.css";
 
+import { workspaceSessions } from "../lib/workspaceSessions.ts";
 import type { AgentStatus, PaneInfo, PlanSummary, SessionSnapshot, WorkspaceInfo } from "../../shared/protocol.ts";
 import { paneTitle } from "../../shared/notify-policy.ts";
 import { MAX_LABEL_CHARS } from "../../shared/labels.ts";
@@ -637,8 +638,12 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
   const renderWorkspaceRow = (workspace: WorkspaceInfo, children: WorkspaceInfo[] = [], nested = false, drop?: "before" | "after") => {
     const panes = roster.filter((pane) => pane.workspace_id === workspace.workspace_id);
     if (panes.length === 0) return null;
-    const pane = currentPane(workspace, panes);
-    const selected = panes.some((candidate) => candidate.pane_id === selectedPaneId);
+    // the workspace's first tab is this row; its other agent sessions (a fork among them) nest under it
+    const sessions = workspaceSessions(snapshot?.tabs ?? [], panes, workspace.workspace_id).others;
+    const nestedTabs = new Set(sessions.map((session) => session.tab.tab_id));
+    const ownPanes = panes.filter((candidate) => !nestedTabs.has(candidate.tab_id));
+    const pane = currentPane(workspace, ownPanes.length > 0 ? ownPanes : panes);
+    const selected = (ownPanes.length > 0 ? ownPanes : panes).some((candidate) => candidate.pane_id === selectedPaneId);
     const repoKey = workspace.worktree?.repo_key;
     const linked = workspace.worktree?.is_linked_worktree === true;
     const branch = branches.get(workspace.workspace_id);
@@ -765,6 +770,16 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
           </button>
         </div>
       </div>
+      {sessions.length > 0 && <ul className="workspace-sessions" aria-label={t("Sessions in {name}", { name: rowTitle })}>
+        {sessions.map((session) => <li key={session.tab.tab_id}>
+          <button type="button" className={`workspace-session${session.pane.pane_id === selectedPaneId ? " is-selected" : ""}`} aria-current={session.pane.pane_id === selectedPaneId ? "true" : undefined}
+            title={session.title ?? displayPaneTitle(session.pane)} onClick={() => actions.selectPane(session.pane.pane_id)}>
+            <span className="workspace-session-branch" aria-hidden="true" />
+            <span className="workspace-session-title">{session.title ?? displayPaneTitle(session.pane)}</span>
+            {online && <StatusBadge compact status={activity.status(machineId, session.pane)} />}
+          </button>
+        </li>)}
+      </ul>}
       {inlineError?.workspaceId === workspace.workspace_id && <p className="sidebar-inline-error" role="alert">{inlineError.message}{inlineError.detail !== null && <><br /><code>{inlineError.detail}</code></>}</p>}
     </li>;
   };
