@@ -1,7 +1,7 @@
 import { apiFetch as fetch } from "./api-request-id.ts";
 import type { PreferencesChange, SharedPreferences } from "../../shared/preferences.ts";
 import type { SeenFinish } from "../../shared/seen.ts";
-import type { AddProjectRequest, AssistantFix, AssistantProject, AssistantState, ProjectChange } from "../../shared/assistant.ts";
+import type { AddProjectRequest, AssistantFix, AssistantProject, AssistantState, AssistantTranscript, ProjectChange } from "../../shared/assistant.ts";
 import { resumeConnectionTraces } from "./connectionTrace.ts";
 import { machinePath, type BridgeHealth, type HerdrIdentity, type Machine, type MachineRoster, type SetupAction, type SetupJob, type SetupRequest } from "../../shared/machines.ts";
 import type {
@@ -542,6 +542,16 @@ export async function setAssistantMaxRunning(machineId: string, maxRunning: numb
 /** Runs a fix on the machine: only ever from the user's click. */
 export async function fixAssistantMachine(machineId: string, fix: AssistantFix): Promise<AssistantState> {
   return (await sendJson(`/api/assistant/machines/${encodeURIComponent(machineId)}/fix`, "POST", { fix })).json() as Promise<AssistantState>;
+}
+
+/** New session: a fresh Assistant pane; the one before is archived. */
+export async function startAssistantSession(): Promise<AssistantState> {
+  return (await sendJson("/api/assistant/sessions", "POST", {})).json() as Promise<AssistantState>;
+}
+
+/** An archived Assistant session's saved conversation. */
+export function fetchAssistantTranscript(name: string): Promise<AssistantTranscript> {
+  return getJson<AssistantTranscript>(`/api/assistant/sessions/${encodeURIComponent(name)}`);
 }
 
 /** GET /api/plugins/actions: the PC's herdr plugins and the actions it can run. */

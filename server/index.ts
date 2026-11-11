@@ -10,7 +10,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { OrderSequence } from "./order-sequence.ts";
 import { readHerdrProfiles, type HerdrMachineProfile } from "./herdr-profiles.ts";
 import { accessSync, constants, readFileSync, rmSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 
 import type { DevicePairedEvent, HealthAuth, PendingMessage, SecuritySummary, SessionSnapshot } from "../shared/protocol.ts";
 import { DEFAULT_PORT } from "../shared/protocol.ts";
@@ -55,6 +55,9 @@ import { BRIDGE_PROTOCOL } from "../shared/machines.ts";
 import { bridgeIdentity, loopbackRelay, registerBridge, relayTarget } from "./bridge.ts";
 import { handleMachineRequest, nonCanonicalPath, slowMachinePath } from "./machine-api.ts";
 import { Assistant, handleAssistantRequest, type RunScript } from "./assistant.ts";
+import { AssistantSessions, OVIS_TASK_BIN, type AssistantPanes } from "./assistant-sessions.ts";
+import { cliToken, handleOvisTaskRequest } from "./ovis-task.ts";
+import type { AssistantAgent } from "../shared/assistant.ts";
 import { handleSessionHistoryRequest, handleSessionResumeRequest, SESSION_HISTORY_PATH, SESSION_RESUME_PATH } from "./session-history-routes.ts";
 import { HerdrSidebarConfig, herdrConfigPath, snapshotWithoutHiddenTokens } from "./herdr-sidebar.ts";
 import { readHerdrUi } from "./herdr-ui.ts";
@@ -211,6 +214,10 @@ export function createServer(
     assistant?: boolean;
     /** how the Assistant runs its checks on a machine (server/assistant.ts); unset, over Remote PCs' SSH. Tests run them in a local shell. */
     assistantRun?: RunScript;
+    /** the Assistant's own agent CLI; unset, OVIS_ASSISTANT_AGENT (the install script's answer), else Claude Code */
+    assistantAgent?: AssistantAgent;
+    /** how Assistant sessions open, read and close their pane (server/assistant-sessions.ts); unset, herdr's. Tests pass their own. */
+    assistantPanes?: AssistantPanes;
   } = {},
 ): ServerInstance {
   /**
@@ -263,7 +270,16 @@ export function createServer(
   const core = createCore({ options: { ...options, stateDir, openCodeState, orderSequence }, devices, preferences, usage, usageLogin, browserSnapshot, TYPED_SETTLE_MS, KEY_SETTLE_MS, SUBMIT_DEADLINE_MS, SUBMIT_DELAY_MS, DRAFT_CLEAR_WAIT_MS, DRAFT_CLEAR_POLL_MS });
   const { sidecar, serialize, push, logPushError, omo, claudeAgents, opencodeAgents, plans, clientSnapshot, machines, broadcastAll, collector, queueFirstMessage } = core;
   // the Assistant VM's machines and projects: only on the VM, and only beside a PC manager to watch
-  const assistantService = assistant && machines ? new Assistant(stateDir, machines, options.assistantRun ?? ((machine, script) => machines.runScript(machine.id, script))) : null;
+  // the Assistant's own pane reaches this server's ovis-task routes on loopback with a token only it is given
+  const ovisTaskToken = assistant && machines ? cliToken(stateDir) : null;
+  const assistantAgent = options.assistantAgent ?? (process.env["OVIS_ASSISTANT_AGENT"] === "codex" ? "codex" : "claude");
+  const assistantSessions = ovisTaskToken === null ? undefined : new AssistantSessions(stateDir, assistantAgent, () => ({
+    OVIS_TASK_URL: `http://127.0.0.1:${server.port}`,
+    OVIS_TASK_TOKEN: ovisTaskToken,
+    OVIS_BUN: process.execPath,
+    PATH: `${OVIS_TASK_BIN}${delimiter}${process.env["PATH"] ?? ""}`,
+  }), options.assistantPanes);
+  const assistantService = assistant && machines ? new Assistant(stateDir, machines, options.assistantRun ?? ((machine, script) => machines.runScript(machine.id, script)), { sessions: assistantSessions }) : null;
   // read finishes are kept for the herdr run each PC told this server it is in
   const seen = new SeenStore(stateDir, () => machines?.finishEpochs() ?? new Map());
   // started after createCore's Node probe (server/pty/sidecar.ts), which can hold the thread up to 3 s: that wait
@@ -315,6 +331,12 @@ export function createServer(
       const tailscaleLogin = request.headers.get("tailscale-user-login");
       const forwardedFor = request.headers.get("x-forwarded-for");
       const requestHost = request.headers.get("host");
+      // the Assistant's ovis-task CLI: its own token, and only from this VM's loopback through no proxy
+      // (`tailscale serve` forwards from loopback too) and from no browser page
+      if (pathname.startsWith("/api/ovis-task/")) {
+        const local = loopback && !forwarded && !funnel && tailscaleLogin === null && forwardedFor === null && !request.headers.has("origin");
+        return handleOvisTaskRequest(request, pathname, assistantService, ovisTaskToken, local);
+      }
       // the guessing budget of the address that asks (auth.ts): a token presented while it waits is not compared
       const client = authClient(ip?.address ?? null, request.headers);
       const presented = presentedToken(request, token, client);

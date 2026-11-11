@@ -48,7 +48,37 @@ export interface AssistantMachine {
 export interface AssistantState {
   machines: AssistantMachine[];
   projects: AssistantProject[];
+  /** newest first; the first one without `archived_at` is the current session */
+  sessions: AssistantSession[];
 }
+
+/**
+ * One Assistant session (stateDir/assistant/sessions/<name>/), named by its start in the VM's local
+ * time, `YYYYMMDD-HHMM`. The current one has a live agent pane; an archived one keeps only the
+ * transcript saved as it was archived.
+ */
+export interface AssistantSession {
+  name: string;
+  agent: AssistantAgent;
+  /** ms since the epoch */
+  started_at: number;
+  /** the agent pane on the VM's herdr; null once archived */
+  pane_id: string | null;
+  archived_at?: number;
+}
+
+/** GET /api/assistant/sessions/:name: an archived session's conversation, read only */
+export interface AssistantTranscript {
+  name: string;
+  /** the turns the chat read of the pane as it was archived (text parts only) */
+  turns: { role: "user" | "assistant"; text: string }[];
+  /** the pane's screen, when no transcript was recognized */
+  text?: string;
+}
+
+/** Why an `ovis-task` read was refused (the error code of /api/ovis-task/*). */
+export type OvisTaskRefusal = "unknown_project" | "unknown_machine" | "invalid_path" | "absolute_path" | "outside_project" | "not_found" | "not_a_file"
+  | "project_missing" | "invalid_pattern" | "invalid_git_command" | "invalid_git_argument";
 
 /** POST /api/assistant/projects */
 export interface AddProjectRequest { machine: string; path: string; defaultAgent?: AssistantAgent }

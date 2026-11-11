@@ -9,6 +9,7 @@
 import { join } from "node:path";
 import { ASSISTANT_AGENTS, type AddProjectRequest, type AssistantAgent, type AssistantMachine, type AssistantProblem, type AssistantProject, type AssistantState, type MachineHealth, type MergeMode, type ProjectRefusal } from "../shared/assistant.ts";
 import type { Machine, MachineEvent } from "../shared/machines.ts";
+import type { AssistantSessions } from "./assistant-sessions.ts";
 import { isJsonObject, jsonResponse, setRequestRoute } from "./http.ts";
 import { shellQuote } from "./machine-security.ts";
 import { MachineActionRequired } from "./machines.ts";
@@ -147,7 +148,10 @@ export class Assistant {
   private timer: Timer;
   private now: () => number;
 
-  constructor(stateDir: string, private machines: AssistantMachines, private run: RunScript, options: { intervalMs?: number; timer?: Timer; now?: () => number } = {}) {
+  readonly sessions: AssistantSessions | null;
+
+  constructor(stateDir: string, private machines: AssistantMachines, private run: RunScript, options: { intervalMs?: number; timer?: Timer; now?: () => number; sessions?: AssistantSessions } = {}) {
+    this.sessions = options.sessions ?? null;
     this.intervalMs = options.intervalMs ?? HEALTH_INTERVAL_MS;
     this.timer = options.timer ?? defaultTimer;
     this.now = options.now ?? Date.now;
@@ -174,7 +178,19 @@ export class Assistant {
       health: this.watched.get(machine.id)?.health ?? null,
       maxRunning: this.settings[machine.id]?.maxRunning ?? DEFAULT_MAX_RUNNING,
     }));
-    return { machines, projects: [...this.projects] };
+    return { machines, projects: [...this.projects], sessions: this.sessions?.list() ?? [] };
+  }
+
+  /**
+   * Runs an ovis-task read in a project's folder on its machine (server/ovis-task.ts). A removed
+   * project, or one whose machine left herdr's catalog, is refused before anything runs.
+   */
+  runInProject(id: string, script: (root: string) => string): Promise<string> {
+    const project = this.projects.find((candidate) => candidate.id === id);
+    if (!project) return Promise.reject(new AssistantError("unknown_project", "No project has that name; `ovis-task projects` lists them", 404));
+    const machine = this.watchable().find((candidate) => candidate.id === project.machine);
+    if (!machine) return Promise.reject(new AssistantError("unknown_machine", "That project's machine is not one of herdr's saved machines", 404));
+    return this.run(machine, script(project.path));
   }
 
   private sync(): void {
@@ -300,13 +316,18 @@ export async function handleAssistantRequest(request: Request, pathname: string,
   const parts = pathname.slice("/api/assistant".length).split("/").filter(Boolean);
   const [collection, id, action] = parts;
   const route = parts.length === 0 ? "" : collection === "projects" && parts.length <= 2 ? (id ? "/projects/:id" : "/projects")
-    : collection === "machines" && id && (parts.length === 2 || (parts.length === 3 && action === "fix")) ? (action ? "/machines/:id/fix" : "/machines/:id") : null;
+    : collection === "machines" && id && (parts.length === 2 || (parts.length === 3 && action === "fix")) ? (action ? "/machines/:id/fix" : "/machines/:id")
+    : collection === "sessions" && parts.length <= 2 ? (id ? "/sessions/:name" : "/sessions") : null;
   if (route === null) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
   setRequestRoute(`/api/assistant${route}`);
-  const allowed: Record<string, string[]> = { "": ["GET"], "/projects": ["POST"], "/projects/:id": ["PATCH", "DELETE"], "/machines/:id": ["PATCH"], "/machines/:id/fix": ["POST"] };
+  const allowed: Record<string, string[]> = { "": ["GET"], "/projects": ["POST"], "/projects/:id": ["PATCH", "DELETE"], "/machines/:id": ["PATCH"], "/machines/:id/fix": ["POST"], "/sessions": ["POST"], "/sessions/:name": ["GET"] };
   if (!allowed[route]!.includes(request.method)) return jsonResponse({ error: { code: "method_not_allowed", message: `use ${allowed[route]!.join(" or ")}` } }, 405, { allow: allowed[route]!.join(", ") });
   if (request.method !== "GET" && !request.headers.get("origin")) return jsonResponse({ error: { code: "browser_only", message: "Use Assistant controls from this app" } }, 403);
   const body = request.method === "GET" || request.method === "DELETE" ? null : await request.json().catch(() => null);
+  const sessions = () => {
+    if (!assistant.sessions) throw new AssistantError("not_found", "This server runs no Assistant sessions", 404);
+    return assistant.sessions;
+  };
   try {
     switch (`${request.method} ${route}`) {
       case "GET ": return jsonResponse(assistant.state());
@@ -314,6 +335,9 @@ export async function handleAssistantRequest(request: Request, pathname: string,
       case "PATCH /projects/:id": return jsonResponse(assistant.updateProject(id!, body));
       case "DELETE /projects/:id": assistant.removeProject(id!); return jsonResponse({ ok: true });
       case "PATCH /machines/:id": assistant.setMachine(id!, body); return jsonResponse({ ok: true });
+      // New session: only on the user's click, in this app
+      case "POST /sessions": await sessions().start(); return jsonResponse(assistant.state(), 201);
+      case "GET /sessions/:name": return jsonResponse(sessions().transcript(id!));
       default: await assistant.fix(id!, body); return jsonResponse(assistant.state());
     }
   } catch (error) {

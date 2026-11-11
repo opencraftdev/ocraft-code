@@ -152,7 +152,8 @@ describe("Assistant machines and projects", () => {
     } finally { first.app.stop(); }
     const directory = join(stateDir, "assistant");
     expect(statSync(join(directory, "projects.json")).mode & 0o777).toBe(0o600);
-    expect(readdirSync(directory).sort()).toEqual(["projects.json"]);
+    expect(readdirSync(directory).sort()).toEqual(["cli-token.json", "projects.json"]);
+    expect(statSync(join(directory, "cli-token.json")).mode & 0o777).toBe(0o600);
     const second = await assistantServer(stateDir, run);
     try {
       expect((await second.state()).projects.map((project) => project.id)).toEqual(["repo"]);

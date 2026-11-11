@@ -31,7 +31,7 @@ describe.skipIf(process.platform === "win32")("install-assistant.sh --dry-run", 
       "+ bash -c curl -fsSL https://bun.sh/install | bash",
       "+ claude auth login",
       "+ git clone --branch main https://github.com/opencraftdev/ocraft-code.git",
-      "Environment=HOST=127.0.0.1 PORT=7317 OVIS_ASSISTANT=1",
+      "Environment=HOST=127.0.0.1 PORT=7317 OVIS_ASSISTANT=1 OVIS_ASSISTANT_AGENT=claude",
       "+ systemctl --user enable herdr.service ovis-assistant.service",
       "+ tailscale serve --bg --https=443 http://127.0.0.1:7317",
     ]) expect(out).toContain(step);
@@ -42,6 +42,7 @@ describe.skipIf(process.platform === "win32")("install-assistant.sh --dry-run", 
     expect(code).toBe(0);
     expect(out).toContain("+ sudo tailscale up --hostname=my-vm --auth-key=<auth key>");
     expect(out).toContain("+ codex login --device-auth");
+    expect(out).toContain("OVIS_ASSISTANT_AGENT=codex");
     expect(out).not.toContain("tskey-auth-secret");
   });
 

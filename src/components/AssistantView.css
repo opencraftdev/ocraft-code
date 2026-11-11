@@ -47,10 +47,54 @@
 .assistant-sidebar { border-right: var(--hairline) solid var(--surface-edge); }
 .assistant-board { border-left: var(--hairline) solid var(--surface-edge); }
 
+/* the chat: a bar with New session over Code mode's chat lens of the Assistant's pane */
 .assistant-chat {
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
 }
+
+.assistant-chat > :last-child { flex: 1 1 auto; min-height: 0; }
+
+.assistant-chat-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--hairline) solid var(--surface-edge);
+}
+
+.assistant-chat-bar .btn { margin-left: auto; }
+.assistant-chat-note { margin: 0; padding: var(--space-4); color: var(--text-dim); }
+
+.assistant-session {
+  display: block;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.assistant-session:hover { background: var(--bg-hover); }
+.assistant-session[aria-current="true"] { background: var(--bg-hover); color: var(--text-strong); }
+
+/* an archived session, read only */
+.assistant-transcript {
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+}
+
+.assistant-turn { margin-bottom: var(--space-3); }
+.assistant-turn p { margin: var(--space-1) 0 0; color: var(--text); font-size: var(--fs-chat); white-space: pre-wrap; overflow-wrap: anywhere; }
+.assistant-screen { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .assistant-section { margin-bottom: var(--space-3); }
 
