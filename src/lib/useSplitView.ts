@@ -358,6 +358,12 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
     machines.find((machine) => machine.id === machineId)?.snapshot?.panes.find((pane) => pane.tab_id === tabId && pane.pane_id !== agentPaneId && !pane.agent)?.pane_id ?? null;
   const terminalOpen = (): boolean => splitOn && selectedPane !== null && split.other.machineId === selectedMachineId
     && split.other.paneId === shellOf(selectedMachineId, selectedPane.tab_id, selectedPane.pane_id);
+  // a Terminal panel belongs to its session: going to another session closes it (a chat beside a chat stays)
+  useEffect(() => {
+    if (!splitOn || selectedPane === null) return;
+    const beside = machines.find((machine) => machine.id === split.other.machineId)?.snapshot?.panes.find((pane) => pane.pane_id === split.other.paneId);
+    if (beside && !beside.agent && !(split.other.machineId === selectedMachineId && beside.tab_id === selectedPane.tab_id)) closeSlot(otherSlot(split.active));
+  }, [selectedMachineId, selectedPaneId, machineRosterLoaded]);
   const opening = useRef(false);
   const toggleTerminal = async (): Promise<void> => {
     if (!wideScreen || selectedPane === null || selectedPaneId === null || opening.current) return;
