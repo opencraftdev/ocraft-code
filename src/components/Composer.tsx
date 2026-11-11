@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { flushSync } from "react-dom";
-import { ArrowUp, FileText, Folder, FolderGit2, GitBranch, LoaderCircle, MessageSquarePlus, Minimize2, Package, Plus, Puzzle, Square, TriangleAlert, UserRound, X, type LucideIcon } from "lucide-react";
+import { CornerDownLeft, FileText, Folder, FolderGit2, GitBranch, LoaderCircle, MessageSquarePlus, Minimize2, Package, Plus, Puzzle, Square, TriangleAlert, UserRound, X, type LucideIcon } from "lucide-react";
 
 import "./Composer.css";
 
@@ -1378,6 +1378,8 @@ export function Composer({
               void uploadImages(picked);
             }}
           />
+          {/* under the box on its left from 769px, across from the model (styles.css): the box itself is the text and send */}
+          <span className="composer-under">
           <button
             type="button"
             className="icon-button composer-attach"
@@ -1388,11 +1390,10 @@ export function Composer({
           >
             <Plus aria-hidden="true" />
           </button>
+          {dictation.shown && <MicButton dictation={dictation} />}
           {/* only once this device turned it on (Settings → Chat → Composer; the composer's row stays minimal, and
               the tab menu opens the same dialog), and in a mouse-driven window only, like the usage glance: a phone's
               card has no row to spare beside the mic and the tasks chip, and its tab menu carries New tab with agent… already */}
-          {/* under the box on its left from 769px, across from the model (styles.css): the line itself is attach, text, mic, send */}
-          <span className="composer-under">
           {onOpenNewSession && settings.composerNewTabButton && role !== "observe" && !mobile && (
             <button
               type="button"
@@ -1456,7 +1457,6 @@ export function Composer({
           )}
         </div>
         <div className="composer-controls composer-controls-right">
-          {dictation.shown && <MicButton dictation={dictation} />}
           {!sendShown ? (
             <button
               type="button"
@@ -1481,7 +1481,7 @@ export function Composer({
               onPointerDown={(event) => event.preventDefault()}
               onClick={sendTapped}
             >
-              {sending ? <LoaderCircle className="composer-send-progress" aria-hidden="true" /> : <ArrowUp aria-hidden="true" />}
+              {sending ? <LoaderCircle className="composer-send-progress" aria-hidden="true" /> : <CornerDownLeft aria-hidden="true" />}
             </button>
           )}
         </div>

@@ -3117,22 +3117,26 @@ button, a, [role="button"] {
   .composer .composer-status .composer-pill { background: transparent; border-color: transparent; color: var(--text); }
   .composer > .composer-strip,
   .composer > .composer-keyhint { display: none; }
-  /* the tasks chip (and the new-tab button) sit under the box on the left, across from the model.
-     Only the buttons move: the chip's list stays anchored to the box and opens above it */
-  .composer .composer-under .bg-tasks { position: static; }
-  .composer .composer-under .bg-tasks-toggle,
-  .composer .composer-under .composer-new-session {
+  /* attach, the mic and the tasks chip sit in one row under the box on the left, across from the
+     model; the box holds the text and send alone. The chip's list opens above the box */
+  .composer .composer-under {
     position: absolute;
     top: calc(100% + var(--space-1));
-    left: var(--space-1);
+    left: 0;
     z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
   }
-  .composer .composer-under:has(.composer-new-session) .bg-tasks-toggle { left: calc(var(--space-2) + var(--chip-h)); }
+  .composer .composer-under > .icon-button,
+  .composer .composer-under .composer-mic,
+  .composer .composer-under .composer-new-session { width: 28px; height: 28px; min-width: 28px; color: var(--text-dim); }
+  .composer .composer-under .bg-tasks { position: relative; }
   .composer .composer-under .bg-tasks-toggle { background: transparent; color: var(--text-dim); }
   .composer .composer-under .bg-tasks-toggle:hover { color: var(--text); background: var(--bg-hover); }
   .composer .composer-under .bg-tasks-toggle:not(.is-idle) { color: var(--status-working); }
-  .composer .composer-under .bg-tasks-menu { left: 0; right: auto; width: min(26rem, 100%); }
-  .composer .composer-under .composer-new-session { width: var(--chip-h); height: var(--chip-h); color: var(--text-dim); }
+  .composer .composer-under .bg-tasks-menu { left: 0; right: auto; bottom: calc(100% + 52px); width: min(26rem, 80vw); }
+  .composer .composer-controls-left { padding: 0; min-height: 0; width: var(--space-2); }
 }
 .composer-under { display: contents; }
 
@@ -3141,7 +3145,8 @@ button, a, [role="button"] {
 /* ── Claude desktop look: right panel ─────────────────────────────────────────────────────────
    One flat column parted from the chat by a hairline: sections are titled groups, not cards. */
 @media (min-width: 769px) {
-  .agent-panel { padding: 0; border-left: var(--hairline) solid var(--border); background: var(--chat-canvas, transparent); }
+  .agent-panel,
+  .app-body .workspace-details-rail > .agent-panel { flex: 1 1 auto; align-self: stretch; height: auto; padding: 0; border-left: var(--hairline) solid var(--border); background: var(--chat-canvas, transparent); }
   .agent-panel .agent-panel-card { gap: 0; padding: var(--space-3) var(--space-4); }
   .agent-panel .agent-panel-section {
     border: 0;
@@ -3228,8 +3233,13 @@ button, a, [role="button"] {
   .app-header .header-meta > .icon-button,
   .app-header .header-more-button { border-radius: 8px; }
 
-  .composer .composer-surface { min-height: 44px; border: 0; border-radius: 14px; background: var(--composer-surface-bg); }
-  .composer .composer-surface:focus-within { border: 0; box-shadow: 0 0 0 var(--hairline) var(--border-strong); }
+  .composer .composer-surface { min-height: 44px; border: var(--hairline) solid var(--border-strong); border-radius: 14px; background: var(--bg-elevated); }
+  .composer .composer-surface:focus-within { border-color: color-mix(in srgb, var(--text) 28%, transparent); box-shadow: none; }
+  /* send is the return key's glyph, quiet until there is something to send */
+  .composer .composer-send { background: transparent; color: var(--text-dim); opacity: 1; }
+  .composer .composer-send::before { display: none; }
+  .composer .composer-send:not(:disabled) { color: var(--text-strong); }
+  .composer .composer-send:not(:disabled):hover { background: var(--bg-hover); }
   .composer .composer-text { font-size: 15px; padding-block: 11px; }
   /* the field scrolls by wheel and caret; a track beside the send button reads as a stray bar */
   .composer .composer-text { scrollbar-width: none; }
