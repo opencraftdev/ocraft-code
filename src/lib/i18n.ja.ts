@@ -172,6 +172,7 @@ const BASE: Record<string, string> = {
   "Assistant VM address": "アシスタント VM のアドレス",
   "Remove": "削除",
   "Checking…": "確認中…",
+  "The Assistant uses herdr's saved machines. Add one on this VM with herdr machine add <alias> ssh://user@host, then Connect it in Settings > Remote PCs.": "アシスタントは herdr に保存されたマシンを使います。この VM で herdr machine add <alias> ssh://user@host を実行して追加し、設定 > リモート PC で「接続」してください。",
   "Not connected yet: choose Connect on it in Settings > Remote PCs": "まだ接続されていません: 設定 > リモート PC で「接続」を選んでください",
   "SSH cannot reach it": "SSH で接続できません",
   "Windows isn't supported by the Assistant yet": "アシスタントはまだ Windows に対応していません",
