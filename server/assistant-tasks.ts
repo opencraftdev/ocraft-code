@@ -63,6 +63,7 @@ const LIVE: readonly TaskStatus[] = ["working", "needs_you", "ready"];
 /** a pane gone or an agent stopped in these is a failed task; a Ready one already did its work */
 const RUNNING: readonly TaskStatus[] = ["working", "needs_you"];
 const FINISHED: readonly TaskStatus[] = ["done", "cancelled"];
+const AT_REST: readonly AgentStatus[] = ["done", "idle"];
 /** herdr's agent state moves the task: not one the server moved to Needs you itself (a merge or review that needs the user) */
 const agentLed = (task: AssistantTask): boolean => LIVE.includes(task.status) && task.reason === undefined;
 
@@ -76,10 +77,22 @@ export function statusAfter(task: Pick<AssistantTask, "status" | "worked">, agen
 
 /**
  * The brief as one command-line argument (the agent's first prompt, after `--`). An argument holds no
- * line break, so lines are joined with spaces.
- * ponytail: a multi-line brief loses its line breaks; send it through the bridge's pending path once it takes an unattended first message.
+ * line break, so lines are joined with spaces. A brief of several lines goes as a paste instead (pastedBrief).
  */
 export const launchPrompt = (text: string): string => text.replace(/\s*[\r\n\t]+\s*/g, " ").trim();
+
+/** a brief whose line breaks would be lost on the command line */
+export const multiLine = (text: string): boolean => /[\r\n]/.test(text.trim());
+
+/**
+ * The brief as the chat's composer types a multi-line message (src/lib/compose.ts composerPayload): each
+ * line break a CR, inside one bracketed-paste pair, so Claude Code and Codex take it as one message and
+ * the Enter after it sends it. A brief holds no control character (firstMessageFault), so no paste marker.
+ */
+export const pastedBrief = (text: string): string => `\u001b[200~${text.trim().replace(/\r\n?/g, "\n").replace(/\n/g, "\r")}\u001b[201~`;
+
+/** the reviewer's last reply ended without a verdict line: it is asked once more */
+export const VERDICT_NUDGE = "End your reply with one line: REVIEW: PASS when the work is ready to merge, or REVIEW: FINDINGS followed by the findings, one per line.";
 
 /** the title as a branch name's tail: lowercase ASCII words joined by hyphens */
 export function taskSlug(title: string): string {
@@ -237,6 +250,11 @@ export class AssistantTasks {
     return this.tasks.filter((task) => !task.dismissed && (status === undefined || task.status === status)).sort((a, b) => b.createdAt - a.createdAt || Number(b.id) - Number(a.id));
   }
 
+  /** the live task whose own agent runs in that pane (not its reviewer): its alerts carry the task's title */
+  paneTask(machineId: string, paneId: string): AssistantTask | undefined {
+    return this.tasks.find((task) => task.machine === machineId && task.paneId === paneId && !FINISHED.includes(task.status) && task.status !== "failed");
+  }
+
   get(id: unknown): AssistantTask {
     const task = this.tasks.find((candidate) => candidate.id === id);
     if (!task) throw new AssistantError("unknown_task", "No task has that id; `ovis-task list` lists them", 404);
@@ -378,15 +396,17 @@ export class AssistantTasks {
       const open = machine.snapshot?.workspaces.find((workspace) => workspace.worktree && !workspace.worktree.is_linked_worktree && workspace.worktree.checkout_path === project.path);
       const source = open?.workspace_id ?? (await this.deps.bridge(machine.id, "workspace/create", { method: "POST", body: { cwd: project.path, label: project.id } }) as { workspace_id: string }).workspace_id;
       // focus: false (workspace-routes.ts); the bridge adds the full-auto flag (agent-launch.ts SKIP_PERMISSIONS)
+      // a brief of several lines waits for the agent to be up and goes as a paste (sendBrief): an argument is one line
+      const pasted = multiLine(task.brief);
       const opened = await this.deps.bridge(machine.id, "worktree/create", { method: "POST", body: {
-        workspace_id: source, branch: task.branch, label: task.title, agent: { kind: task.agent, args: ["--", launchPrompt(task.brief)] },
+        workspace_id: source, branch: task.branch, label: task.title, agent: { kind: task.agent, ...(pasted ? {} : { args: ["--", launchPrompt(task.brief)] }) },
       } }) as { workspace_id: string; pane_id: string; path: string; agent_started?: boolean; error?: { message?: string } };
       const started = { paneId: opened.pane_id, workspaceId: opened.workspace_id, worktree: opened.path, startedAt: this.deps.now() };
       if (opened.agent_started === false) {
         this.update(task.id, { ...started, status: "failed", error: opened.error?.message ?? "The agent did not start" });
         throw new AssistantError("agent_not_started", `The worktree is there, but the agent did not start: ${opened.error?.message ?? "no reason given"}`, 502);
       }
-      return this.update(task.id, { ...started, status: "working" });
+      return this.update(task.id, { ...started, status: "working", ...(pasted ? { briefPending: true as const } : {}) });
     } catch (error) {
       if (!(error instanceof AssistantError && error.code === "agent_not_started")) this.update(task.id, { status: "failed", error: message(error) });
       throw error;
@@ -398,8 +418,8 @@ export class AssistantTasks {
     if (frame.type !== "pane-status" && frame.type !== "pane-exited") return;
     const reviewing = this.tasks.find((candidate) => candidate.machine === machineId && candidate.status === "reviewing" && candidate.reviewPaneId === frame.pane_id);
     if (reviewing) {
-      if (frame.type === "pane-exited") this.update(reviewing.id, { status: "needs_you", reason: "The reviewer's pane closed before it gave a verdict" }, ["reviewPaneId"]);
-      else if (["done", "idle"].includes(alertStatus(frame.agent_status, frame.background_wait))) this.track(this.readReview(reviewing.id));
+      if (frame.type === "pane-exited") this.needsYou(reviewing.id, "The reviewer's pane closed before it gave a verdict");
+      else this.reviewerAt(reviewing, alertStatus(frame.agent_status, frame.background_wait));
       return;
     }
     const task = this.tasks.find((candidate) => candidate.machine === machineId && candidate.paneId === frame.pane_id && agentLed(candidate));
@@ -408,6 +428,8 @@ export class AssistantTasks {
       if (RUNNING.includes(task.status)) this.update(task.id, { status: "failed", error: "The agent's pane closed" });
       return;
     }
+    // at rest before its brief went, the agent is up and waits for it: that rest is not Ready
+    if (task.briefPending && AT_REST.includes(alertStatus(frame.agent_status, frame.background_wait))) { this.track(this.sendBrief(task.id)); return; }
     const next = statusAfter(task, alertStatus(frame.agent_status, frame.background_wait));
     if (next) this.update(task.id, next);
   }
@@ -425,7 +447,7 @@ export class AssistantTasks {
       if (task.status === "reviewing" && task.reviewPaneId !== undefined) {
         // a verdict a lost frame missed; a reviewer's pane gone is caught by its pane-exited frame
         const reviewer = machine.snapshot.panes.find((candidate) => candidate.pane_id === task.reviewPaneId);
-        if (reviewer && ["done", "idle"].includes(alertStatus(reviewer.agent_status, reviewer.background_wait))) this.track(this.readReview(task.id));
+        if (reviewer) this.reviewerAt(task, alertStatus(reviewer.agent_status, reviewer.background_wait));
         continue;
       }
       if (task.paneId === null || !agentLed(task)) continue;
@@ -435,10 +457,38 @@ export class AssistantTasks {
         if (old && RUNNING.includes(task.status)) this.update(task.id, { status: "failed", error: "The agent's pane is gone" });
         continue;
       }
+      if (task.briefPending && AT_REST.includes(alertStatus(pane.agent_status, pane.background_wait))) {
+        if (pane.agent) this.track(this.sendBrief(task.id));
+        else if (old) this.update(task.id, { status: "failed", error: "The agent stopped before its brief was sent" }, ["briefPending"]);
+        continue;
+      }
       const next = statusAfter(task, alertStatus(pane.agent_status, pane.background_wait));
       const now = next ? this.update(task.id, next) : task;
       if (old && now.worked && !pane.agent && RUNNING.includes(now.status)) this.update(task.id, { status: "failed", error: "The agent stopped" });
     }
+  }
+
+  /**
+   * A brief of several lines, into the task's own agent once herdr shows it up and at rest: pasted as the
+   * composer frames a multi-line message, then Enter as its own key. This is not held user input sent
+   * after a disconnect (AGENTS.md): the server wrote this input for the task it started, and sends it
+   * once, to that task's fresh pane, as it would have gone on the command line.
+   */
+  private async sendBrief(id: string): Promise<void> {
+    if (this.busy.has(id)) return;
+    this.busy.add(id);
+    try {
+      const task = this.get(id);
+      if (!task.briefPending || task.paneId === null) return;
+      // up: the agent is in front of its pane (a frame can come before the snapshot knows it; the next one tries again)
+      if (!this.deps.machine(task.machine)?.snapshot?.panes.some((pane) => pane.pane_id === task.paneId && pane.agent)) return;
+      // marked sent first, so the work it starts is heard as work; a rest seen before it (a question at start) is not
+      this.update(id, { status: "working" }, ["briefPending", "worked"]);
+      await this.deps.bridge(task.machine, "pane/input", { method: "POST", body: { pane_id: task.paneId, text: pastedBrief(task.brief) } });
+      await this.deps.bridge(task.machine, "pane/keys", { method: "POST", body: { pane_id: task.paneId, keys: ["Enter"] } });
+    } catch (error) {
+      this.update(id, { status: "failed", error: `The brief could not be sent: ${message(error)}` });
+    } finally { this.busy.delete(id); }
   }
 
   /** `ovis-task show`: the task and the end of what its pane shows */
@@ -508,7 +558,13 @@ export class AssistantTasks {
 
   /** the server moves a task to Needs you itself: herdr's agent state leaves it there until the user acts */
   private needsYou(id: string, reason: string, drop: (keyof AssistantTask)[] = []): AssistantTask {
-    return this.update(id, { status: "needs_you", reason: reason.slice(0, 2000) }, ["reviewPaneId", ...drop]);
+    return this.update(id, { status: "needs_you", reason: reason.slice(0, 2000) }, ["reviewPaneId", "reviewWorked", "reviewNudged", ...drop]);
+  }
+
+  /** the reviewer's agent state: at work is noted, at rest after work is read for its verdict */
+  private reviewerAt(task: AssistantTask, agent: AgentStatus): void {
+    if (agent === "working" || agent === "blocked") { if (!task.reviewWorked) this.update(task.id, { reviewWorked: true }); return; }
+    if (AT_REST.includes(agent)) this.track(this.readReview(task.id));
   }
 
   private where(task: AssistantTask): { machine: Machine; project: AssistantProject } {
@@ -558,13 +614,14 @@ export class AssistantTasks {
       await this.deps.bridge(task.machine, "pane/close", { method: "POST", body: { pane_id: opened.pane_id } }).catch(() => undefined);
       throw new AssistantError("agent_not_started", `The reviewer did not start: ${opened.error?.message ?? "no reason given"}`, 502);
     }
-    this.update(task.id, { status: "reviewing", reviewPaneId: opened.pane_id, reviewRounds: (task.reviewRounds ?? 0) + 1 });
+    this.update(task.id, { status: "reviewing", reviewPaneId: opened.pane_id, reviewRounds: (task.reviewRounds ?? 0) + 1 }, ["reviewWorked", "reviewNudged"]);
   }
 
   /**
    * The reviewer at rest: its last reply's verdict line. PASS closes it and makes the task Ready
    * (reviewed); FINDINGS go to the task's agent, which works again, until REVIEW_ROUNDS rounds found
-   * some: then they go to the user. No verdict yet (it has not answered) waits.
+   * some: then they go to the user. No verdict before it worked waits; at rest after work without one,
+   * it is asked once for its verdict line, and at rest again without one the task goes to the user.
    */
   private async readReview(id: string): Promise<void> {
     if (this.busy.has(id)) return;
@@ -575,11 +632,19 @@ export class AssistantTasks {
       const conversation = await this.deps.bridge(task.machine, "pane/conversation", { query: { pane_id: task.reviewPaneId } }) as ConversationResponse;
       const reply = [...conversation.turns].reverse().find((turn) => turn.role === "assistant");
       const verdict = reply ? parseVerdict(reply.parts.flatMap((part) => part.kind === "text" ? [part.text] : []).join("\n")) : null;
-      if (verdict === null) return;
+      if (verdict === null && !task.reviewWorked) return;
+      if (verdict === null && !task.reviewNudged) {
+        // first, so its work on the nudge is heard as such; its rest before it takes the nudge is not its answer
+        this.update(id, { reviewNudged: true }, ["reviewWorked"]);
+        await this.deps.bridge(task.machine, "pane/input", { method: "POST", body: { pane_id: task.reviewPaneId, text: VERDICT_NUDGE } });
+        await this.deps.bridge(task.machine, "pane/keys", { method: "POST", body: { pane_id: task.reviewPaneId, keys: ["Enter"] } });
+        return;
+      }
       await this.deps.bridge(task.machine, "pane/close", { method: "POST", body: { pane_id: task.reviewPaneId } }).catch(() => undefined);
-      if (verdict.pass) { this.update(id, { status: "ready", reviewed: true }, ["reviewPaneId", "findings"]); return; }
+      if (verdict === null) { this.needsYou(id, "Reviewer gave no verdict"); return; }
+      if (verdict.pass) { this.update(id, { status: "ready", reviewed: true }, ["reviewPaneId", "findings", "reviewWorked", "reviewNudged"]); return; }
       const rounds = task.reviewRounds ?? 1;
-      this.update(id, { findings: verdict.findings }, ["reviewPaneId"]);
+      this.update(id, { findings: verdict.findings }, ["reviewPaneId", "reviewWorked", "reviewNudged"]);
       if (rounds >= REVIEW_ROUNDS) { this.needsYou(id, `The review still found problems after ${rounds} rounds`); return; }
       if (task.paneId === null) { this.needsYou(id, "The review found problems, and the task's agent is gone"); return; }
       // typed, then Enter as its own key: an agent's input box takes a pasted line and its Enter apart

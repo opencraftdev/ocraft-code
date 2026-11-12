@@ -283,6 +283,8 @@ export function createServer(
     PATH: `${OVIS_TASK_BIN}${delimiter}${process.env["PATH"] ?? ""}`,
   }), options.assistantPanes);
   const assistantService = assistant && machines ? new Assistant(stateDir, machines, options.assistantRun ?? ((machine, script, timeoutMs) => machines.runScript(machine.id, script, timeoutMs)), { sessions: assistantSessions, bridge: options.assistantBridge ?? machineBridge(machines) }) : null;
+  // a task's pane alerts under the task's title, in place of the pane's (same tag, same policy)
+  if (assistantService) push.describeTasks((machineId, paneId) => assistantService.tasks.paneTask(machineId, paneId));
   // read finishes are kept for the herdr run each PC told this server it is in
   const seen = new SeenStore(stateDir, () => machines?.finishEpochs() ?? new Map());
   // started after createCore's Node probe (server/pty/sidecar.ts), which can hold the thread up to 3 s: that wait
