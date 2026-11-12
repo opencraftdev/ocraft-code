@@ -9,9 +9,11 @@
  * - the current chat has a pane, and that pane's conversation reads
  * - every archived chat's transcript reads
  * - with --ssh: `ovis-task machines` answers on the VM itself, as the Assistant's own pane runs it
- * - with --browser: the Assistant's page draws the chat without "Couldn't load the conversation",
- *   and an archived chat's answer is drawn as Markdown, not as raw `**`
- * - with --new-chat (it archives the current chat): a new chat comes up without an error
+ * - with --browser: the VM's Code mode on the Assistant's chat shows the Assistant panel (New chat,
+ *   tasks) beside it, the chat without "Couldn't load the conversation", and an earlier chat's answer
+ *   drawn as Markdown, not as raw `**`
+ * - with --new-chat (it archives the current chat): New chat in the panel opens the new chat, without
+ *   an error
  *
  * Exits 1 when any check fails. Screenshots go to --out (default: a temp folder).
  */
@@ -99,22 +101,31 @@ async function main(): Promise<number> {
     const browser = await chromium.launch({ executablePath: chromePath() });
     try {
       const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-      await page.goto(`${base}/?assistant-embed=1`, { waitUntil: "load" });
-      await page.getByRole("button", { name: "New chat" }).waitFor({ timeout: 30_000 });
+      // the VM's own Code mode on the Assistant's chat: its panel takes the agent panel's place
+      await page.goto(`${base}/?pane=${encodeURIComponent(current?.pane_id ?? "")}&view=chat`, { waitUntil: "load" });
+      const panel = page.locator("#agent-details-panel.assistant-agent-panel");
+      const newChat = panel.getByRole("button", { name: "New chat" });
+      if (!(await newChat.waitFor({ timeout: 15_000 }).then(() => true, () => false))) {
+        await page.getByRole("button", { name: /Show agent panel|Workspace and agents/ }).click().catch(() => {});
+      }
+      const shown = await newChat.waitFor({ timeout: 15_000 }).then(() => true, () => false);
+      check("assistant panel", shown, shown ? "New chat and the tasks beside the Assistant's chat" : "no Assistant panel beside the Assistant's chat");
       // true when the error shows within `seconds`: waits on the text itself, no fixed sleep
       const errorShown = (seconds: number) => page.getByText("Couldn't load the conversation").waitFor({ state: "visible", timeout: seconds * 1000 }).then(() => true, () => false);
       if (values["new-chat"]) {
-        await page.getByRole("button", { name: "New chat" }).click();
+        const before = new URL(page.url()).searchParams.get("pane");
+        await newChat.click();
+        const moved = await page.waitForURL((url) => { const pane = url.searchParams.get("pane"); return pane !== null && pane !== before; }, { timeout: 30_000 }).then(() => true, () => false);
         const failed = await errorShown(30);
         await page.screenshot({ path: join(out, "new-chat.png") });
-        check("new chat", !failed, failed ? "Couldn't load the conversation within 30 s" : "came up without an error in 30 s");
+        check("new chat", moved && !failed, !moved ? "the view stayed on the old chat" : failed ? "Couldn't load the conversation within 30 s" : `opened ${new URL(page.url()).searchParams.get("pane")} without an error in 30 s`);
       } else {
         const failed = await errorShown(15);
         await page.screenshot({ path: join(out, "chat.png") });
         check("chat page", !failed, failed ? "Couldn't load the conversation" : "drawn without an error in 15 s");
       }
       if (withBold !== null) {
-        await page.locator(`.assistant-item[title="${withBold}"]`).click();
+        await panel.locator(`.assistant-item[title="${withBold}"]`).click();
         await page.locator(".assistant-transcript").waitFor({ timeout: 15_000 });
         const raw = await page.locator(".assistant-transcript .assistant-turn").evaluateAll((turns) => turns.some((turn) => /\*\*[^*\n]+\*\*/.test(turn.textContent ?? "")));
         await page.screenshot({ path: join(out, "archived.png") });

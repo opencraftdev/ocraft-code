@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Bot, ChevronDown, Ellipsis, ExternalLink, FileDiff, FolderOpen, Link, List, Menu, MessageSquare, PanelLeft, PanelRight, Pencil, Search, SquareTerminal, X } from "lucide-react";
+import { Bell, Bot, ChevronDown, Ellipsis, FileDiff, FolderOpen, Link, List, Menu, MessageSquare, PanelLeft, PanelRight, Pencil, Search, SquareTerminal, X } from "lucide-react";
 
 import type { HerdrPane } from "../shared/protocol.ts";
 import { authenticate, createTab, moveTabToWorkspace, pairDevice, shareSeen, signOut, splitPane, swapPaneWith, zoomPane } from "./lib/api.ts";
@@ -28,7 +28,7 @@ import { loadedOnSettingsEntry } from "./lib/settingsHistory.ts";
 import { useSettingsDialog } from "./lib/useSettingsDialog.ts";
 import { usePhoneSheetBack } from "./lib/sheetHistory.ts";
 import { peekFor, type PeekRequest } from "./lib/terminalPeek.ts";
-import { linkSearch, linksSomewhere, readLink } from "./lib/deepLink.ts";
+import { linksSomewhere, readLink } from "./lib/deepLink.ts";
 import { copyText } from "./lib/clipboard.ts";
 import { CommandPalette } from "./components/CommandPalette.tsx";
 import { MachineContext } from "./lib/machineContext.tsx";
@@ -69,8 +69,8 @@ import { RepoDiffViewer } from "./components/RepoDiffViewer.tsx";
 import { OpenFileContext } from "./lib/filePaths.ts";
 import { useAccessState, useLockedRef } from "./lib/useAccess.ts";
 import { useLocalHealth } from "./lib/useLocalHealth.ts";
-import { assistantEmbed, storedAssistantAddress, useAppMode } from "./lib/assistantMode.ts";
-import { AssistantView } from "./components/AssistantView.tsx";
+import { assistantPanelFrame, assistantPanelOnly, isAssistantMachine, isAssistantPane, useAppMode } from "./lib/assistantMode.ts";
+import { AssistantPanel, AssistantPanelFrame, AssistantSetup } from "./components/AssistantView.tsx";
 import { useMachinesRef, useRecentFolderMemory, useRefetchTimer, useRosterError, useRosterEvents, useRosterLoader, useRosterState } from "./lib/useMachineRoster.ts";
 import { useMachineDialog } from "./lib/useMachineDialog.ts";
 import { useNewSessionMachine, useNewSessionState, useSessionHistoryList } from "./lib/useNewSessionDialog.ts";
@@ -180,8 +180,8 @@ export function App() {
   const { newSessionMachineId, setNewSessionMachineId } = useNewSessionMachine();
   const { health, localFreshness, shownHealth, readLocalHealth } = useLocalHealth();
   // the header's Assistant | Code switch, per device; Code mode is the app as it always was
-  // embedded: in the setup page's frame (another Ovis's Assistant mode), the Assistant alone, no header
-  const [appMode, chooseMode, embedded, assistantEditing, setAssistantEditing] = useAppMode();
+  // Assistant mode: only the Assistant setup page, from the ⋯ menu (the Assistant itself lives in Code mode)
+  const [appMode, chooseMode] = useAppMode();
   const codeMode = appMode === "code";
   const { error, setError } = useRosterError();
   const { layoutNotice, setLayoutNotice } = useLayoutNotice();
@@ -554,14 +554,8 @@ export function App() {
   // the palette's shortcut, said beside its item where a hardware keyboard is likely (a fine pointer)
   const keyboardLikely = useMediaQuery("(hover: hover) and (pointer: fine)");
   const paletteKeys = keyboardLikely ? formatKeys(shortcutDisplayKeys("palette", settings.shortcutOverrides)).join("+") : "";
-  // Assistant mode on an Ovis that is not the VM shows the VM's page; its two actions live in ⋯
   const assistantVm = health?.web_ui?.assistant === true;
-  const assistantPage = codeMode || assistantVm ? null : assistantEmbed(storedAssistantAddress());
   const moreItems: RowMenuItem[] = [
-    ...(assistantPage !== null && !assistantEditing ? [
-      { id: "assistant-open", label: t("Open in new tab"), icon: ExternalLink, run: () => void window.open(assistantPage, "_blank", "noreferrer") },
-      { id: "assistant-address", label: t("Change address"), icon: Pencil, run: () => setAssistantEditing(true) },
-    ] : []),
     // the title's menu (the header has no tab strip): the pane's tab is renamed in the strip, drawn only while it edits
     ...(selectedPane && !selectedPane.restore_error ? [
       { id: "rename", label: t("Rename"), icon: Pencil, run: actions.renameTab },
@@ -575,6 +569,8 @@ export function App() {
     // the address says where the app is (lib/deepLink.ts); a phone has no address bar to copy it from
     { id: "copy-link", label: t("Copy link"), icon: Link, run: () => void copyText(window.location.href).then((ok) => { if (ok) setHeaderNote("copied"); }) },
     ...(bellVisible ? [{ id: "alerts", label: t("Alerts"), hint: bell.state, checked: bell.on, title: bell.title, icon: Bell, run: () => void bell.run() }] : []),
+    // the VM is the Assistant already: only another Ovis sets one up
+    ...(assistantVm ? [] : [{ id: "assistant-setup", label: t("Assistant VM…"), icon: Bot, run: () => chooseMode("assistant") }]),
   ];
 
   // the chat's surface is what the pane column shows: the header's pane zone and the tab strip
@@ -605,6 +601,11 @@ export function App() {
       </div>
     );
   }
+
+  // the Assistant VM's tasks panel, alone, for another Ovis's right panel beside the Assistant's chat
+  if (assistantPanelOnly(window.location.search)) {
+    return <div className="assistant-panel-page"><AssistantPanel onSession={(paneId) => window.parent.postMessage({ type: "ovis-assistant-session", paneId }, "*")} /></div>;
+  }
   if (locked) return <AccessGate reason={lockReason} initialCode={pairCode} onUnlocked={unlock} />;
 
   // the right side holds one surface at a time, as Claude's does: the Terminal panel, Files or Changes
@@ -634,7 +635,17 @@ export function App() {
   // two chats side by side are screens 1 (left) and 2 (right): the panel and the sidebar number them alike
   const screenOf = (slot: SplitSlot): number => split && slotSide(split, slot) === "right" ? 2 : 1;
   const screens = new Map<string, number>(splitOn && split && selectedPaneId && selectedPane?.agent && otherPane?.agent ? [[`${selectedMachineId}:${selectedPaneId}`, screenOf(split.active)], [`${split.other.machineId}:${split.other.paneId}`, screenOf(besideSlot)]] : []);
-  const agentDetails = agentPanelShown && selectedPane?.agent && <MachineContext.Provider value={selectedMachineId}>
+  // the Assistant's own chat: its tasks and controls take the agent panel's place (on the VM itself
+  // drawn here, on another Ovis the VM's panel page in a frame), and nothing else changes
+  const assistantPanelSrc = selectedMachineId !== "local" && selectedPane && isAssistantPane(selectedPane.cwd) && isAssistantMachine(selectedMachine?.target?.destination) ? assistantPanelFrame() : null;
+  const assistantHere = selectedMachineId === "local" && assistantVm && isAssistantPane(selectedPane?.cwd);
+  const agentDetails = agentPanelShown && selectedPane?.agent && (assistantHere || assistantPanelSrc !== null) ? (
+    <aside className="agent-panel assistant-agent-panel" id="agent-details-panel" tabIndex={-1} aria-label={t("Assistant")}>
+      {assistantPanelSrc !== null
+        ? <AssistantPanelFrame src={assistantPanelSrc} onSession={(paneId) => selectTarget(selectedMachineId, paneId, "chat")} />
+        : <AssistantPanel onOpenTask={selectTarget} onSession={(paneId) => selectTarget("local", paneId, "chat")} />}
+    </aside>
+  ) : agentPanelShown && selectedPane?.agent && <MachineContext.Provider value={selectedMachineId}>
     <AgentPanel key={besideChat && split ? JSON.stringify(["pair", ...[`${selectedMachineId}:${selectedPane.pane_id}`, `${split.other.machineId}:${split.other.paneId}`].sort()]) : JSON.stringify([selectedMachineId, selectedPane.pane_id, selectedPane.terminal_id, selectedPane.agent_session?.value, selectedMachine?.snapshot?.finish_epoch])} pane={selectedPane} panes={snapshot?.panes ?? []} title={selectedTitle ?? selectedPane.agent} machineName={selectedMachine?.name ?? selectedMachineId} workspaceName={selectedWorkspace?.label ?? selectedPane.workspace_id}
       online={selectedMachine?.state === "connected"} watching={auth?.role === "watch"} tab={agentPanelTab} drawerOpen={agentDrawerOpen} onOpenView={openAgentView} onCloseView={closeAgentView} onClose={closeAgentPanel} pinned={pinnedAgentPanel} focusAgent={focusAgent} onFocusedAgent={clearFocusAgent}
       contextKey={conversationContextKey(selectedMachineId, selectedPane, selectedMachine?.snapshot?.finish_epoch)}
@@ -654,7 +665,7 @@ export function App() {
       ...(sidebarWidth === null ? {} : { "--sidebar-user-w": `${sidebarWidth}px` }),
       ...(filePanelWidth === null ? {} : { "--file-panel-user-w": `${filePanelWidth}px` }),
     } as CSSProperties}>
-      {!embedded && <header className={`app-header is-zoned${chatShown ? " is-chat" : ""}${assistantPage !== null && !assistantEditing ? " is-assistant-page" : ""}`}>
+      <header className={`app-header is-zoned${chatShown ? " is-chat" : ""}`}>
         {/* is-zoned tells this header from the connecting shell's, which has no zones to draw.
             .header-side is the sidebar's own top row from 769px (styles.css); below that its
             buttons sit in the bar */}
@@ -732,10 +743,6 @@ export function App() {
           </>
         )}
         <div className="header-meta">
-          <div className="segmented app-mode-switch" role="group" aria-label={t("App mode")}>
-            <button type="button" aria-pressed={!codeMode} onClick={() => chooseMode("assistant")}>{t("Assistant")}</button>
-            <button type="button" aria-pressed={codeMode} onClick={() => chooseMode("code")}>{t("Code")}</button>
-          </div>
           {codeMode && selectedPane?.agent && <button ref={agentPanelToggle} type="button" className="icon-button" aria-label={t(pinnedAgentPanel ? "Workspace and agents" : agentPanelShown ? "Hide agent panel" : "Show agent panel")} title={t("Workspace and agents")} aria-expanded={agentPanelShown} aria-controls="agent-details-panel" onClick={() => {
             if (pinnedAgentPanel) document.getElementById("agent-details-panel")?.focus({ preventScroll: true });
             else if (agentPanelShown) { setAgentPanelOpen(false); closeAgentView(); }
@@ -793,30 +800,9 @@ export function App() {
             onClose={closeMore}
           />
         )}
-      </header>}
+      </header>
 
-      {!codeMode ? <div className="app-body"><AssistantView vm={assistantVm} embedded={embedded} editing={assistantEditing} onEditing={setAssistantEditing} onOpenSettings={actions.openSettings} renderChat={(paneId, { greeting, startedAt }) => {
-        // the Assistant's pane is on this VM's own herdr: Code mode's chat lens over it, composer and all
-        const local = machines.find((machine) => machine.id === "local");
-        const item = local?.snapshot?.panes.find((candidate) => candidate.pane_id === paneId);
-        if (!item) return null;
-        return (
-          <MachineContext.Provider value="local">
-            <PaneTerminal paneId={item.restore_error ? null : item.pane_id} terminalId={item.terminal_id ?? null} restoreError={item.restore_error ?? null}
-              mirrored={health?.herdr ? health.herdr.terminal_attach === false || health.herdr.terminal_mirror === true : null}
-              title={displayPaneTitle(item)} agent={item.agent ?? null} agentStatus={item.agent_status} cwd={item.cwd ?? null} workspaceId={item.workspace_id}
-              machineName={local?.name ?? "local"} view="chat" active greeting={greeting} startedAt={startedAt}
-              terminalFontSize={settings.terminalFontSize} terminalWheelSpeed={settings.terminalWheelSpeed} terminalFontFamily={settings.terminalFontFamily}
-              theme={resolvedEntry.mode} palette={resolvedEntry.id} />
-          </MachineContext.Provider>
-        );
-      }} onOpenTask={(machineId, paneId) => {
-        // in the frame, the pane opens in a tab of this Ovis of its own, in Code mode there
-        if (embedded) { window.open(`/${linkSearch({ machine: machineId, workspace: null, pane: paneId, view: null, settings: null })}`, "_blank", "noopener"); return; }
-        // a task's pane opens in Code mode's own pane view, as a sidebar pick does: herdr's focus stays where it is
-        chooseMode("code");
-        selectTarget(machineId, paneId);
-      }} /></div> : (
+      {!codeMode ? <div className="app-body"><AssistantSetup onBack={() => chooseMode("code")} /></div> : (
       <div className="app-body" id="ovis-workspace">
         <aside id="workspace-drawer" className={`sidebar${drawerOpen ? " is-open" : ""}`}>
           {error && <div className="error-state" role="alert"><p>{error}</p><button className="btn" onClick={() => void load()}>{t("Retry")}</button></div>}
@@ -972,6 +958,8 @@ export function App() {
                         // the agent strip opens details in the panel, which shows the selected pane alone
                         onOpenAgent={active && item?.pane_id === selectedPaneId && machineId === selectedMachineId ? openAgentDetails : undefined}
                         cwd={item?.cwd ?? null}
+                        // the Assistant's own chat greets as the Assistant, not as an agent in its folder
+                        greeting={isAssistantPane(item?.cwd) ? { title: t("What should the Assistant do?"), where: machine?.name ?? machineId } : undefined}
                         workspaceId={item?.workspace_id ?? null}
                         worktreeRepo={worktreeRepoName(item === null ? undefined : slotSnapshot?.workspaces.find((workspace) => workspace.workspace_id === item.workspace_id))}
                         machineName={machine?.name ?? machineId}

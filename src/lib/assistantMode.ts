@@ -1,21 +1,15 @@
 /**
- * The header's Assistant | Code switch and the Assistant VM's address, both per device, in keys of
- * their own like the sidebar width (never in ovis:settings, which an older tab rewrites whole).
+ * The Assistant VM's address, per device, in a key of its own like the sidebar width (never in
+ * ovis:settings, which an older tab rewrites whole), and how Code mode tells the Assistant apart.
  */
 import { useState } from "react";
 
 export type AppMode = "assistant" | "code";
 
-const MODE_KEY = "ovis:app-mode";
 const ADDRESS_KEY = "ovis:assistant-address";
 
 /** The install command the setup page shows; the script is the repository's own. */
 export const ASSISTANT_INSTALL_COMMAND = "curl -fsSL https://raw.githubusercontent.com/opencraftdev/ocraft-code/main/scripts/install-assistant.sh | bash";
-
-/** Anything but "assistant" is Code mode: today's app is the default. */
-export function parseAppMode(stored: string | null): AppMode {
-  return stored === "assistant" ? "assistant" : "code";
-}
 
 function read(key: string): string | null {
   try { return window.localStorage.getItem(key); } catch { return null; }
@@ -25,8 +19,6 @@ function write(key: string, value: string): void {
   try { window.localStorage.setItem(key, value); } catch { /* private mode: not remembered */ }
 }
 
-export function storedAppMode(): AppMode { return parseAppMode(read(MODE_KEY)); }
-export function storeAppMode(mode: AppMode): void { write(MODE_KEY, mode); }
 export function storedAssistantAddress(): string { return read(ADDRESS_KEY) ?? ""; }
 export function storeAssistantAddress(address: string): void { write(ADDRESS_KEY, address); }
 
@@ -68,35 +60,38 @@ export function isAssistantMachine(destination: string | undefined, address = st
 }
 
 /**
- * The query flag the setup page's frame loads the VM with: that page shows its Assistant alone, with
- * no header, mode switch or Code sidebar. It changes only the layout, and only for that load.
+ * The query flag of the VM's tasks panel page: the Assistant's tasks, projects, machines and New
+ * chat, drawn alone, for Code mode's right panel beside the Assistant's chat on another Ovis.
  */
-export const ASSISTANT_EMBED_PARAM = "assistant-embed";
+export const ASSISTANT_PANEL_PARAM = "assistant-panel";
 
-export function embeddedAssistant(search: string): boolean {
-  return new URLSearchParams(search).get(ASSISTANT_EMBED_PARAM) === "1";
+export function assistantPanelOnly(search: string): boolean {
+  return new URLSearchParams(search).get(ASSISTANT_PANEL_PARAM) === "1";
 }
 
-/** The address the frame loads: the VM's page with the embed flag. */
-export function assistantFrame(embed: string): string {
+/** The VM's tasks panel page, for a frame: null without a saved https tailnet address. */
+export function assistantPanelFrame(address = storedAssistantAddress()): string | null {
+  const embed = assistantEmbed(address);
+  if (embed === null) return null;
   const url = new URL(embed);
-  url.searchParams.set(ASSISTANT_EMBED_PARAM, "1");
+  url.searchParams.set(ASSISTANT_PANEL_PARAM, "1");
   return url.href;
 }
 
-/**
- * The mode a page load starts in, without storing it: Assistant in the frame, Code for a link to a
- * pane (a task opened from the frame's board), else the one this device last chose.
- */
-export function initialAppMode(search: string): AppMode {
-  if (embeddedAssistant(search)) return "assistant";
-  return new URLSearchParams(search).has("pane") ? "code" : storedAppMode();
+/** The Assistant's own pane: its agent runs in the Assistant's folder on the VM (server/assistant-sessions.ts). */
+export function isAssistantPane(cwd: string | null | undefined): boolean {
+  return typeof cwd === "string" && /\/ovis\/assistant\/agent\/?$/.test(cwd);
 }
 
-/** The header's switch: the mode this load starts in, the way to choose another, and whether this load is the frame. */
-export function useAppMode(): [AppMode, (mode: AppMode) => void, boolean, boolean, (editing: boolean) => void] {
-  const [mode, setMode] = useState<AppMode>(() => initialAppMode(window.location.search));
-  // the setup page shown over a saved VM address (the header's ⋯ menu, Change address)
-  const [editing, setEditing] = useState(false);
-  return [mode, (next) => { setMode(next); storeAppMode(next); }, embeddedAssistant(window.location.search), editing, setEditing];
+/** what the tasks panel frame tells the Ovis that shows it: a New chat's pane, to select */
+export interface AssistantPanelMessage { type: "ovis-assistant-session"; paneId: string }
+
+export function isAssistantPanelMessage(data: unknown): data is AssistantPanelMessage {
+  return typeof data === "object" && data !== null && (data as { type?: unknown }).type === "ovis-assistant-session"
+    && typeof (data as { paneId?: unknown }).paneId === "string" && /^[\w:-]{1,64}$/.test((data as { paneId: string }).paneId);
+}
+
+/** Assistant mode (the setup page, from the ⋯ menu) or Code mode: every visit starts in Code. */
+export function useAppMode(): [AppMode, (mode: AppMode) => void] {
+  return useState<AppMode>("code");
 }

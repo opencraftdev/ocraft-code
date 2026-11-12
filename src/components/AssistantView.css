@@ -1,22 +1,9 @@
-/* Assistant mode: the setup page, or the VM's layout (sidebar, chat, task panel) */
+/* The Assistant: the setup page (Assistant mode), and its panel beside its chat in Code mode */
 .assistant-setup {
   flex: 1 1 auto;
   min-width: 0;
   overflow-y: auto;
   padding: var(--space-6) var(--space-4);
-}
-
-.assistant-embed {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.assistant-embed-frame {
-  flex: 1 1 auto;
-  width: 100%;
-  border: 0;
 }
 
 .assistant-setup-inner {
@@ -42,26 +29,6 @@
 .assistant-address {
   margin: var(--space-2) 0 0;
 }
-
-/* The VM's layout, as Code mode's (the Claude app's): sidebar, chat, and the tasks as a right panel */
-.assistant-layout {
-  position: relative;
-  display: flex;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-/* the sidebar: Code mode's shell and rows (Sidebar.css, styles.css "Claude desktop look") */
-.assistant-sidebar {
-  flex: 0 0 var(--sidebar-shown-w);
-  width: var(--sidebar-shown-w);
-  min-width: 0;
-  border-right: var(--hairline) solid var(--surface-edge);
-}
-
-.assistant-lists { padding: 0 var(--space-2) var(--space-3); }
-.assistant-section { margin-top: var(--space-3); }
-.assistant-section .sidebar-section-label { min-height: var(--control-h); padding: 0 var(--space-2); font-size: var(--fs-xs); }
 
 .assistant-section-head {
   display: flex;
@@ -146,69 +113,14 @@
   padding: var(--space-2);
 }
 
-/* the chat: a quiet bar (the place, the task panel's toggle) over Code mode's chat lens */
-.assistant-chat {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-}
-
-.assistant-chat > :last-child { flex: 1 1 auto; min-height: 0; }
-
-.assistant-chat-bar {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--header-h);
-  padding: 0 var(--space-3);
-}
-
-.assistant-crumb {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: var(--space-1);
-  min-width: 0;
-  color: var(--text-dim);
-  font-size: var(--fs-sm);
-}
-
-.assistant-crumb svg { flex: none; width: var(--space-3); height: var(--space-3); }
-
-.assistant-crumb-current {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-strong);
-}
-
-.assistant-chat-bar .icon-button { color: var(--text-dim); }
-.assistant-drawer-toggle { display: none; }
-.assistant-chat-note { margin: 0; padding: var(--space-6) var(--space-4); color: var(--text-dim); text-align: center; }
-
-/* no chat yet: the empty chat's greeting (Composer.css) over New chat, in the middle */
-.assistant-start {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-6) var(--space-4);
-  text-align: center;
-}
-
-.assistant-start .composer-greeting-where { margin-bottom: var(--space-5); }
-
 /* an archived session, read only */
 .assistant-transcript {
   overflow-y: auto;
   padding: var(--space-3) var(--space-4);
 }
 
-.assistant-turn { max-width: var(--content-w); margin: 0 auto var(--space-3); }
-.assistant-turn p { margin: var(--space-1) 0 0; color: var(--text); font-size: var(--fs-chat); white-space: pre-wrap; overflow-wrap: anywhere; }
+.assistant-turn { margin: 0 0 var(--space-3); }
+.assistant-turn-text { margin-top: var(--space-1); color: var(--text); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .assistant-screen { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
 .assistant-findings { margin: 0; max-height: 12em; overflow: auto; font-family: var(--font-mono); font-size: var(--fs-xs); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-dim); }
 
@@ -234,25 +146,52 @@
 .assistant-problem { color: var(--status-blocked); }
 .assistant-inline .input[type="number"] { width: 5em; }
 
-/* the tasks: Code mode's right panel width, a quiet head per status with its count (AgentPanel.css) */
-.assistant-board {
-  flex: 0 0 var(--agent-panel-w);
-  width: var(--agent-panel-w);
+/* Code mode's right panel beside the Assistant's chat (App.tsx agentDetails): the panel itself on
+   the VM, the VM's panel page in a frame elsewhere; Code mode's panel width (AgentPanel.css) */
+.assistant-agent-panel { display: flex; flex-direction: column; }
+
+.assistant-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 0 var(--space-3) var(--space-4);
-  border-left: var(--hairline) solid var(--surface-edge);
-  background: var(--chat-canvas);
   scrollbar-width: thin;
 }
 
-.assistant-board[hidden] { display: none; }
+.assistant-panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--header-h);
+}
+
+.assistant-panel-head h2 { flex: 1 1 auto; margin: 0; color: var(--text-strong); font-size: var(--fs-md); font-weight: var(--fw-medium); }
+.assistant-panel-head .sidebar-nav-item { width: auto; }
+.assistant-panel .assistant-lists { padding: 0; }
+.assistant-panel .assistant-section { margin-top: var(--space-4); }
+.assistant-panel .assistant-board { margin-bottom: var(--space-1); }
+.assistant-panel .assistant-transcript { padding: 0; overflow: visible; }
+
+.assistant-panel-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--chat-canvas);
+}
+
+/* the VM's panel page, alone in another Ovis's frame */
+.assistant-panel-page {
+  display: flex;
+  height: 100dvh;
+  background: var(--chat-canvas);
+}
 
 .assistant-board-head {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -333,52 +272,6 @@
 .assistant-pill.is-done { --tone: var(--status-done); }
 
 /* a phone: the sidebar is Code mode's drawer and the tasks a sheet over the chat, each over a scrim */
-.assistant-scrim { display: none; }
-
-@media (max-width: 768px) {
-  .assistant-drawer-toggle { display: inline-flex; }
-  /* Code mode's own drawer toggle has nothing to open here: the chat's bar holds this one */
-  .app:has(.assistant-layout) .drawer-toggle { display: none; }
-
-  .assistant-sidebar,
-  .assistant-board {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    z-index: var(--z-drawer);
-    width: min(88vw, var(--sidebar-w));
-    box-shadow: var(--shadow-drawer);
-  }
-
-  .assistant-sidebar {
-    left: 0;
-    transform: translateX(-100%);
-    visibility: hidden;
-    transition: transform var(--dur-base) var(--ease-out), visibility 0s linear var(--dur-base);
-  }
-
-  .assistant-sidebar.is-open { transform: translateX(0); visibility: visible; transition-delay: 0s; }
-  .assistant-board { right: 0; width: min(92vw, var(--agent-panel-w)); border-left: 0; }
-
-  .assistant-scrim {
-    display: block;
-    position: absolute;
-    inset: 0;
-    z-index: var(--z-scrim);
-    background: var(--scrim);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--dur-base) var(--ease-out);
-  }
-
-  .assistant-scrim.is-open { opacity: 1; pointer-events: auto; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .assistant-sidebar,
-  .assistant-scrim { transition: none; }
-}
-
 /* Set up a VM: Add PC's dialog, wider for the install's terminal */
 .machine-dialog.assistant-setup-dialog { width: min(760px, calc(100vw - 24px)); }
 
