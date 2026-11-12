@@ -118,7 +118,7 @@ the folder on each machine. Use it to go from a file to its session and project.
 export const claudeSettings = (profile: string) => ({
   permissions: {
     defaultMode: "dontAsk",
-    allow: ["Bash(ovis-task:*)", "Bash(ovis-task)", "Read(./**)", `Edit(./profiles/${profile}/**)`, `Write(./profiles/${profile}/**)`],
+    allow: ["Bash(ovis-task:*)", "Bash(ovis-task)", "Read(./**)", /* Edit rules cover Write too; Claude Code warns on a Write(path) rule */ `Edit(./profiles/${profile}/**)`],
     deny: [
       "Bash(ssh:*)", "Bash(scp:*)", "Bash(sftp:*)", "Bash(rsync:*)", "Bash(herdr:*)", "Bash(curl:*)", "Bash(wget:*)",
       // its own instructions and settings stay as this server writes them; the graph is the server's
