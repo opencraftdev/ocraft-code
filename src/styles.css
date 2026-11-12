@@ -3090,6 +3090,17 @@ button, a, [role="button"] {
 
 .sidebar-shell .machine-header .machine-title { color: var(--text-dim); font-size: var(--fs-xs); font-weight: var(--fw-regular); }
 .sidebar-shell .machine-header .machine-kind { display: none; }
+/* the Assistant VM keeps its tag: it is no PC to code on like the others */
+.sidebar-shell .machine-header .machine-kind.is-assistant {
+  display: inline-flex;
+  align-items: center;
+  height: var(--chip-h);
+  padding: 0 var(--space-2);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-2xs);
+  color: var(--text);
+}
 .sidebar-shell .machine-header .machine-title .sidebar-mark { order: 2; }
 .sidebar-shell .machine-header .machine-title .sidebar-mark svg { width: var(--fs-sm); height: var(--fs-sm); }
 

@@ -54,6 +54,20 @@ export function assistantEmbed(address: string): string | null {
 }
 
 /**
+ * Whether a remote PC's SSH destination (`user@host`, `host:port`, or a short tailnet name) is the
+ * Assistant VM saved on this device: its host is the saved address's host, or that host's first label.
+ * ponytail: matched by name on this device only; the VM could say so itself over its bridge if
+ * another device needs the tag without the address saved.
+ */
+export function isAssistantMachine(destination: string | undefined, address = storedAssistantAddress()): boolean {
+  const link = assistantLink(address);
+  if (!destination || link === null) return false;
+  const host = destination.replace(/^.*@/, "").replace(/:\d+$/, "").toLowerCase();
+  const vm = new URL(link).hostname.toLowerCase();
+  return host === vm || host === vm.split(".")[0];
+}
+
+/**
  * The query flag the setup page's frame loads the VM with: that page shows its Assistant alone, with
  * no header, mode switch or Code sidebar. It changes only the layout, and only for that load.
  */
