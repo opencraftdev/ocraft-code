@@ -310,6 +310,8 @@ export class AssistantSession {
       if (stored.workspace_id !== null) await this.panes.close(stored.workspace_id).catch(() => undefined);
       this.launched = resume ? "resume" : "fresh";
       await this.openPane(resume, resume ? stored.started_at : this.now());
+      // started: the next check says whether it stayed up
+      this.state = "running";
       return;
     }
     if (!pane.agent) {
@@ -319,6 +321,7 @@ export class AssistantSession {
       this.launched = resume ? "resume" : "fresh";
       await this.panes.start(stored.pane_id, this.agent, agentArgs(this.agent, resume));
       if (!resume) this.save({ ...stored, started_at: this.now(), last_compaction: null });
+      this.state = "running";
       return;
     }
     this.launched = null;
