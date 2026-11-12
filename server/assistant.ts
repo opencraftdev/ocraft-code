@@ -212,6 +212,20 @@ export class Assistant {
     return this.tasks.create(body);
   }
 
+  /**
+   * ovis-task machines: each machine with the folders its herdr workspaces have open (the panes'
+   * working directories, from the snapshot Remote PCs already holds). Read from that snapshot only:
+   * nothing runs on the machine, and it is how the Assistant tells the user which folder to add.
+   */
+  machineFolders(): { name: string; state: string; agents: string[]; folders: string[] }[] {
+    return this.watchable().map((machine) => ({
+      name: machine.name,
+      state: machine.state,
+      agents: [...(this.watched.get(machine.id)?.health?.agents ?? [])],
+      folders: [...new Set((machine.snapshot?.panes ?? []).map((pane) => pane.cwd).filter((cwd): cwd is string => typeof cwd === "string" && cwd !== ""))].sort(),
+    }));
+  }
+
   state(): AssistantState {
     const machines: AssistantMachine[] = this.watchable().map((machine) => ({
       id: machine.id, name: machine.name, state: machine.state,

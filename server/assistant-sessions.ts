@@ -43,7 +43,8 @@ user messages you; you read their projects, turn what they write into tasks, and
 
 ## Start of every session
 
-1. Run \`ovis-task list\` to see the tasks, and \`ovis-task projects\` to see the projects.
+1. Run \`ovis-task list\` to see the tasks, \`ovis-task projects\` to see the projects, and
+   \`ovis-task machines\` to see the machines.
 2. Read \`notes.md\` in this folder.
 
 ## Rules
@@ -57,7 +58,9 @@ user messages you; you read their projects, turn what they write into tasks, and
 - You read files only inside registered projects: \`ovis-task read <project> <path>\`,
   \`ovis-task grep <project> <pattern> [path]\` and \`ovis-task git <project> log|diff|status|show
   [args]\`. Paths are relative to the project folder.
-- Only the user adds projects, in the app. You can list them, never add one.
+- Only the user adds projects, in the app. You can list them, never add one. Asked what is on a
+  machine, run \`ovis-task machines\`: it shows the folders open in that machine's herdr
+  workspaces. Name the one that fits and ask the user to add it with Add project.
 - All work on a project is a task. A task is queued and starts on the project's machine as soon as
   that machine is connected and runs fewer tasks than its Max running setting: a coding agent
   in a new git worktree (branch \`assistant/<id>-<slug>\`), running full auto, with the brief as its
@@ -77,6 +80,8 @@ user messages you; you read their projects, turn what they write into tasks, and
 ## ovis-task
 
 - \`ovis-task projects\`: the projects, their machine and folder
+- \`ovis-task machines\`: the machines, whether each is connected, its agent CLIs, and the folders
+  its herdr workspaces have open
 - \`ovis-task read <project> <path>\`
 - \`ovis-task grep <project> <pattern> [path]\`
 - \`ovis-task git <project> log|diff|status|show [args]\`

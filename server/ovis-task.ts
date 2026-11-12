@@ -138,7 +138,7 @@ export function readOutput(printed: string): { output: string; truncated: boolea
   return output.length > OUTPUT_CAP ? { output: output.slice(0, OUTPUT_CAP), truncated: true } : { output, truncated: false };
 }
 
-const ROUTES: Record<string, "GET" | "POST"> = { projects: "GET", list: "GET", read: "POST", grep: "POST", git: "POST", create: "POST", show: "POST", answer: "POST", cancel: "POST" };
+const ROUTES: Record<string, "GET" | "POST"> = { projects: "GET", machines: "GET", list: "GET", read: "POST", grep: "POST", git: "POST", create: "POST", show: "POST", answer: "POST", cancel: "POST" };
 
 /**
  * /api/ovis-task/*. `local`: the request came from this VM's loopback and through no proxy, which
@@ -160,6 +160,7 @@ export async function handleOvisTaskRequest(request: Request, pathname: string, 
       const { projects, machines } = assistant.state();
       return jsonResponse(projects.map(({ id, path, mergeMode, defaultAgent, machine }) => ({ id, path, mergeMode, defaultAgent, machine: machines.find((item) => item.id === machine)?.name ?? machine })));
     }
+    if (name === "machines") return jsonResponse(assistant.machineFolders());
     if (name === "list") return jsonResponse(assistant.tasks.list(new URL(request.url).searchParams.get("status") ?? undefined));
     const body = await request.json().catch(() => null);
     if (name === "create") return jsonResponse(await assistant.createTask(body), 201);

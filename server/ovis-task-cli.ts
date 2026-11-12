@@ -13,7 +13,8 @@ ovis-task create <project> --title <title> --brief <brief> [--agent claude|codex
 ovis-task list [--status <status>]
 ovis-task show <id>
 ovis-task answer <id> <choice>
-ovis-task cancel <id>`;
+ovis-task cancel <id>
+ovis-task machines`;
 const CREATE_USAGE = USAGE.split("\n")[4]!;
 
 /** `--flag value` options, or null when one is unknown or lacks its value */
@@ -26,6 +27,7 @@ export function cliRequest(argv: readonly string[]): { path: string; body?: unkn
   const [command, project, ...rest] = argv;
   switch (command) {
     case "projects": return argv.length === 1 ? { path: command } : { usage: "ovis-task projects" };
+    case "machines": return argv.length === 1 ? { path: command } : { usage: "ovis-task machines" };
     case "list": {
       const read = options(argv.slice(1), { status: { type: "string" } });
       if (!read || read.positionals.length > 0) return { usage: "ovis-task list [--status <status>]" };
