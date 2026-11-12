@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { ASSISTANT_EMBED_PARAM, assistantEmbed, assistantFrame, assistantLink, embeddedAssistant, initialAppMode, parseAppMode, storeAppMode, storeAssistantAddress, storedAppMode, storedAssistantAddress } from "./assistantMode.ts";
+import { ASSISTANT_EMBED_PARAM, assistantEmbed, assistantFrame, assistantLink, embeddedAssistant, initialAppMode, isAssistantMachine, parseAppMode, storeAppMode, storeAssistantAddress, storedAppMode, storedAssistantAddress } from "./assistantMode.ts";
 
 describe("the app mode", () => {
   it("is Code unless Assistant was chosen", () => {
@@ -89,5 +89,20 @@ describe("the embedded Assistant", () => {
     expect(embeddedAssistant(new URL(frame).search)).toBe(true);
     expect(embeddedAssistant("")).toBe(false);
     expect(embeddedAssistant("?pane=p_1")).toBe(false);
+  });
+});
+
+describe("isAssistantMachine", () => {
+  const address = "raka-devs.tail38376d.ts.net";
+  it("matches the saved VM by its host, with or without a user, port or tailnet suffix", () => {
+    expect(isAssistantMachine("opencraft@raka-devs.tail38376d.ts.net", address)).toBe(true);
+    expect(isAssistantMachine("raka-devs:2222", address)).toBe(true);
+    expect(isAssistantMachine("opencraft@RAKA-DEVS", "https://raka-devs.tail38376d.ts.net")).toBe(true);
+  });
+  it("matches nothing else, and nothing with no address saved", () => {
+    expect(isAssistantMachine("potenlab-macbookpro", address)).toBe(false);
+    expect(isAssistantMachine("raka-devs-2.tail38376d.ts.net", address)).toBe(false);
+    expect(isAssistantMachine(undefined, address)).toBe(false);
+    expect(isAssistantMachine("raka-devs", "")).toBe(false);
   });
 });

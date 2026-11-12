@@ -25,6 +25,7 @@ export const MACHINES_ZH: Record<string, string> = {
   "Loading PCs…": "正在加载 PC…",
   "PC {name}": "PC {name}",
   "Manage {name}": "管理 {name}",
+  "The Assistant VM": "助手 VM",
   "Manage PC": "管理 PC",
   "PC name": "PC 名称",
   "Disconnect": "断开连接",

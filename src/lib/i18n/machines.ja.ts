@@ -25,6 +25,7 @@ export const MACHINES_JA: Record<string, string> = {
   "Loading PCs…": "PC を読み込んでいます…",
   "PC {name}": "PC {name}",
   "Manage {name}": "{name} を管理",
+  "The Assistant VM": "アシスタント VM",
   "Manage PC": "PC を管理",
   "PC name": "PC 名",
   "Disconnect": "切断",

@@ -25,6 +25,7 @@ export const MACHINES_KO: Record<string, string> = {
   "Loading PCs…": "PC 불러오는 중…",
   "PC {name}": "PC {name}",
   "Manage {name}": "{name} 관리",
+  "The Assistant VM": "어시스턴트 VM",
   "Manage PC": "PC 관리",
   "PC name": "PC 이름",
   "Disconnect": "연결 끊기",
