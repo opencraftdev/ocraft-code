@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import type { AssistantState } from "../shared/assistant.ts";
 import type { AgentStatus } from "../shared/protocol.ts";
-import { AssistantSession, CLAUDE_SETTINGS, CODEX_ARGS, COMPACT_COOLDOWN_MS, compactCommand, KEEP_ALIVE_MS, NOTES_REQUEST, userCodexAuth, type AssistantPanes } from "./assistant-sessions.ts";
+import { AssistantSession, CLAUDE_SETTINGS, CODEX_ARGS, COMPACT_COOLDOWN_MS, compactCommand, KEEP_ALIVE_MS, NOTES_REQUEST, userCodexAuth, writeAgentFolder, type AssistantPanes } from "./assistant-sessions.ts";
 import type { HerdrMachineProfile } from "./herdr-profiles.ts";
 import { createServer } from "./index.ts";
 
@@ -166,18 +166,6 @@ describe("the long-lived Assistant session", () => {
     } finally { s.done(); }
   });
 
-  it("restarts with a fresh conversation on the user's Restart", async () => {
-    const s = session();
-    try {
-      await s.assistant.check();
-      s.advance(60_000);
-      await s.assistant.restart();
-      expect(s.closed).toEqual(["ws-1"]);
-      expect(s.opened[1]!.args).toEqual([]);
-      expect(s.assistant.info()).toMatchObject({ pane_id: "pane-2", started_at: s.now(), last_compaction: null, state: "running" });
-    } finally { s.done(); }
-  });
-
   it("takes over the current session an earlier build kept under sessions/", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "ovis-assistant-earlier-"));
     mkdirSync(join(stateDir, "assistant", "sessions", "20261111-2112"), { recursive: true });
@@ -214,15 +202,15 @@ describe("the long-lived Assistant session", () => {
       if (process.platform !== "win32") expect(readlinkSync(join(folder, ".codex", "auth.json"))).toBe(userCodexAuth());
       const rules = readFileSync(join(folder, ".codex", "rules", "ovis-task.rules"), "utf8");
       expect(rules).toContain('prefix_rule(pattern=["ovis-task"], decision="allow")');
-      // the Assistant's own notes survive a restart
+      // the Assistant's own notes survive the folder being written again (every pane it opens)
       writeFileSync(join(folder, "notes.md"), "kept");
-      await s.assistant.restart();
+      writeAgentFolder(folder);
       expect(readFileSync(join(folder, "notes.md"), "utf8")).toBe("kept");
       expect(compactCommand("codex")).toBe("/compact");
     } finally { s.done(); }
   });
 
-  it("opens with the ovis-task token and bin on the pane's environment, and restarts only from this app's page", async () => {
+  it("opens with the ovis-task token and bin on the pane's environment, and has no restart route", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "ovis-assistant-server-"));
     const { panes, opened } = fakePanes();
     const profile: HerdrMachineProfile = { id: "sessions-test", label: "Test PC", enabled: true, target: { destination: "sessions-test.invalid" } };
@@ -236,13 +224,8 @@ describe("the long-lived Assistant session", () => {
       const token = (JSON.parse(readFileSync(join(stateDir, "assistant", "cli-token.json"), "utf8")) as { token: string }).token;
       expect(opened[0]!.env).toMatchObject({ OVIS_TASK_URL: `http://127.0.0.1:${app.port}`, OVIS_TASK_TOKEN: token, OVIS_BUN: process.execPath });
       expect(opened[0]!.env["PATH"]!.split(process.platform === "win32" ? ";" : ":")[0]).toBe(join(import.meta.dir, "..", "bin"));
-      // a client with no browser Origin is refused, as every Assistant write is
-      expect((await fetch(`${base}/api/assistant/restart`, { method: "POST" })).status).toBe(403);
-      const restarted = await fetch(`${base}/api/assistant/restart`, { method: "POST", headers: { origin: base, "content-type": "application/json" }, body: "{}" });
-      expect(restarted.status).toBe(200);
-      expect(((await restarted.json()) as AssistantState).session!.pane_id).toBe("pane-2");
-      // no New chat and no archive any more
-      for (const [path, method] of [["/sessions", "POST"], ["/sessions/20261111-2112", "GET"], ["/projects", "POST"], ["/tasks/1/approve", "POST"]] as const) {
+      // no New chat, no archive and no restart route (Restart Assistant sends /clear to the pane, in the app)
+      for (const [path, method] of [["/restart", "POST"], ["/sessions", "POST"], ["/sessions/20261111-2112", "GET"], ["/projects", "POST"], ["/tasks/1/approve", "POST"]] as const) {
         expect((await fetch(`${base}/api/assistant${path}`, { method, headers: { origin: base, "content-type": "application/json" }, ...(method === "POST" ? { body: "{}" } : {}) })).status).toBe(404);
       }
     } finally { app.stop(); rmSync(stateDir, { recursive: true, force: true }); }

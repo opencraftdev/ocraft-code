@@ -83,8 +83,7 @@ function cacheControlFor(pathname: string): string {
  *   an explicit `new WebSocket("ws://<same host>/ws")` and the machines event stream both
  *   connect under the enforcing header).
  * - `media-src 'self'`: the file viewer's <video>/<audio>, same-origin.
- * - `frame-src 'self' https://*.ts.net`: the PDF viewer frames /api/fs/file, same-origin; Assistant
- *   mode frames the Assistant VM's tailnet page (withAssistantFraming). With the request's
+ * - `frame-src 'self'`: the PDF viewer frames /api/fs/file, same-origin. With the request's
  *   origin known, also any port of the host the browser used for the app: the web panel
  *   (src/lib/webPanel.ts) frames a page served by this PC, a dev server's localhost:5173 named
  *   under that host. No other host is framed.
@@ -94,8 +93,7 @@ function cacheControlFor(pathname: string): string {
  *   in the page means.
  * - `form-action 'self'`: every form is submitted by script, but a form that ever grows
  *   an action must not post this PC's credentials somewhere else.
- * - `frame-ancestors 'none'`: nothing frames the app itself, except the Assistant VM's page from
- *   loopback or its own tailnet (withAssistantFraming).
+ * - `frame-ancestors 'none'`: nothing frames the app itself.
  */
 const CSP_DIRECTIVES = [
   "default-src 'self'",
@@ -105,7 +103,7 @@ const CSP_DIRECTIVES = [
   "font-src 'self' data:",
   "connect-src 'self'",
   "media-src 'self'",
-  "frame-src 'self' https://*.ts.net",
+  "frame-src 'self'",
   "worker-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
@@ -123,35 +121,15 @@ export const CONTENT_SECURITY_POLICY = CSP_DIRECTIVES.join("; ");
 const FRAMEABLE_HOST = /^(?:[a-z0-9-]+(?:\.[a-z0-9-]+)*|\[[0-9a-f:.]+\])$/i;
 
 /** The policy for a request from `origin` (requestOrigin): its host's other ports may be framed. */
-export function contentSecurityPolicy(origin?: string, assistantVm = process.env["OVIS_ASSISTANT"] === "1"): string {
+export function contentSecurityPolicy(origin?: string): string {
   let host: string | null = null;
   try {
     host = origin === undefined ? null : new URL(origin).hostname;
   } catch {
     host = null;
   }
-  const policy = host === null || !FRAMEABLE_HOST.test(host)
-    ? CONTENT_SECURITY_POLICY
-    : CSP_DIRECTIVES.map((directive) => directive.startsWith("frame-src ") ? `${directive} http://${host}:* https://${host}:*` : directive).join("; ");
-  return withAssistantFraming(policy, assistantVm, host);
-}
-
-/**
- * Assistant mode on an Ovis that is not the VM embeds the VM's page (src/components/AssistantView.tsx),
- * which install-assistant.sh always serves at an `https://<name>.<tailnet>.ts.net` address: any Ovis may
- * frame a tailnet HTTPS page. The Assistant VM (OVIS_ASSISTANT=1) lets a page served from a computer's
- * own loopback frame it, the Ovis on the user's PC (the Mac app's window is one), and a page of its own
- * tailnet (`https://*.<tailnet>.ts.net`, taken from the address the VM is reached at): the user's Ovis
- * served by `tailscale serve`. Never another tailnet's.
- * ponytail: loopback and own-tailnet ancestors; another local server on the same PC or another
- * machine of the tailnet could frame it too. A per-origin allow list set from the VM's settings, if
- * that matters.
- */
-function withAssistantFraming(policy: string, assistantVm: boolean, host: string | null = null): string {
-  if (!assistantVm) return policy;
-  const tailnet = host === null ? null : /^[a-z0-9-]+\.([a-z0-9-]+\.ts\.net)$/i.exec(host)?.[1] ?? null;
-  const ancestors = `http://127.0.0.1:* http://localhost:*${tailnet === null ? "" : ` https://*.${tailnet}`}`;
-  return policy.replace("frame-ancestors 'none'", `frame-ancestors ${ancestors}`);
+  if (host === null || !FRAMEABLE_HOST.test(host)) return CONTENT_SECURITY_POLICY;
+  return CSP_DIRECTIVES.map((directive) => directive === "frame-src 'self'" ? `frame-src 'self' http://${host}:* https://${host}:*` : directive).join("; ");
 }
 
 /**

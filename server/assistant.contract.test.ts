@@ -97,7 +97,7 @@ describe("Assistant machines", () => {
       expect((await state()).machines[0]!.maxRunning).toBe(5);
       expect(JSON.parse(readFileSync(join(root, "state", "assistant", "machines.json"), "utf8"))).toEqual({ [machine.id]: { maxRunning: 5 } });
       expect((await send("/machines/not-a-machine", "PATCH", { maxRunning: 2 })).status).toBe(404);
-      expect((await send("/restart", "GET")).status).toBe(405);
+      expect((await send("/restart", "GET")).status).toBe(404);
     } finally { app.stop(); rmSync(root, { recursive: true, force: true }); }
   });
 

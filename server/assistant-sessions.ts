@@ -264,23 +264,6 @@ export class AssistantSession {
     return this.checking;
   }
 
-  /** Restart Assistant, only on the user's click: the pane closed and a fresh conversation opened. */
-  restart(): Promise<void> {
-    const run = this.queue.then(() => this.restartNow());
-    this.queue = run.catch(() => undefined);
-    return run;
-  }
-
-  private async restartNow(): Promise<void> {
-    const old = this.stored;
-    this.state = "restarting";
-    this.compaction = null;
-    this.launched = null;
-    if (old?.workspace_id) await this.panes.close(old.workspace_id).catch(() => undefined);
-    await this.openPane(false, this.now());
-    this.state = "running";
-  }
-
   private async openPane(resume: boolean, startedAt: number): Promise<void> {
     const codex = this.agent === "codex";
     writeAgentFolder(this.folder, codex ? userCodexAuth() : undefined);

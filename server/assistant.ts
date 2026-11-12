@@ -462,23 +462,16 @@ export async function handleAssistantRequest(request: Request, pathname: string,
   const parts = pathname.slice("/api/assistant".length).split("/").filter(Boolean);
   const [collection, id, action] = parts;
   const route = parts.length === 0 ? ""
-    : collection === "restart" && parts.length === 1 ? "/restart"
     : collection === "machines" && id && (parts.length === 2 || (parts.length === 3 && action === "fix")) ? (action ? "/machines/:id/fix" : "/machines/:id") : null;
   if (route === null) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
   setRequestRoute(`/api/assistant${route}`);
-  const allowed: Record<string, string[]> = { "": ["GET"], "/restart": ["POST"], "/machines/:id": ["PATCH"], "/machines/:id/fix": ["POST"] };
+  const allowed: Record<string, string[]> = { "": ["GET"], "/machines/:id": ["PATCH"], "/machines/:id/fix": ["POST"] };
   if (!allowed[route]!.includes(request.method)) return jsonResponse({ error: { code: "method_not_allowed", message: `use ${allowed[route]!.join(" or ")}` } }, 405, { allow: allowed[route]!.join(", ") });
   if (request.method !== "GET" && !request.headers.get("origin")) return jsonResponse({ error: { code: "browser_only", message: "Use Assistant controls from this app" } }, 403);
   const body = request.method === "GET" ? null : await request.json().catch(() => null);
   try {
     switch (`${request.method} ${route}`) {
       case "GET ": return jsonResponse(assistant.state());
-      // Restart Assistant: only on the user's click, in this app; ovis-task has no such route
-      case "POST /restart": {
-        if (!assistant.session) throw new AssistantError("not_found", "This server runs no Assistant session", 404);
-        await assistant.session.restart();
-        return jsonResponse(assistant.state());
-      }
       case "PATCH /machines/:id": assistant.setMachine(id!, body); return jsonResponse({ ok: true });
       default: await assistant.fix(id!, body); return jsonResponse(assistant.state());
     }

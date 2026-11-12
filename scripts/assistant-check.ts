@@ -5,7 +5,7 @@
  *   bun scripts/assistant-check.ts <vm-address> [--ssh user@host] [--browser] [--out <dir>]
  *
  * Read only. It checks, and prints PASS or FAIL for each:
- * - the page says it is the Assistant VM, and its policy lets its own tailnet frame it
+ * - the page says it is the Assistant VM
  * - every machine is connected with no problem, and there is at least one
  * - long-lived: the one Assistant session has a live pane and is not restarting; its age and last
  *   compaction are printed, and its conversation reads
@@ -53,11 +53,6 @@ export function assessState(state: AssistantState, now = Date.now()): CheckResul
   return results;
 }
 
-/** the tailnet a `*.ts.net` address is in, or null */
-export function tailnetOf(host: string): string | null {
-  return /^[a-z0-9-]+\.([a-z0-9-]+\.ts\.net)$/i.exec(host)?.[1] ?? null;
-}
-
 async function main(): Promise<number> {
   const { values, positionals } = parseArgs({ args: process.argv.slice(2), allowPositionals: true, options: {
     ssh: { type: "string" }, browser: { type: "boolean" }, out: { type: "string" },
@@ -71,9 +66,6 @@ async function main(): Promise<number> {
   const health = await get("/api/health").then((response) => response.json() as Promise<{ web_ui?: { assistant?: boolean; revision?: string | null } }>).catch((error: unknown) => ({ failed: String(error) }));
   if ("failed" in health) { check("reachable", false, `${base}: ${health.failed}`); return 1; }
   check("assistant VM", health.web_ui?.assistant === true, `revision ${health.web_ui?.revision ?? "unknown"}${health.web_ui?.assistant ? "" : ": OVIS_ASSISTANT=1 is not set on this server"}`);
-  const policy = (await get("/")).headers.get("content-security-policy") ?? "";
-  const tailnet = tailnetOf(new URL(base).hostname);
-  if (tailnet) check("framing", policy.includes(`https://*.${tailnet}`), /frame-ancestors[^;]*/.exec(policy)?.[0] ?? "no frame-ancestors");
 
   const state = await (await get("/api/assistant")).json() as AssistantState;
   for (const result of assessState(state)) check(result.name, result.ok, result.detail);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { AssistantSessionInfo, AssistantState } from "../shared/assistant.ts";
-import { age, assessState, tailnetOf } from "./assistant-check.ts";
+import { age, assessState } from "./assistant-check.ts";
 
 const NOW = 10 * 86_400_000;
 const running: AssistantSessionInfo = { agent: "claude", pane_id: "w1:p1", started_at: NOW - 3 * 86_400_000 - 4 * 3_600_000, last_compaction: NOW - 7 * 60_000, state: "running" };
@@ -25,10 +25,7 @@ describe("assistant-check", () => {
     expect(assessState(state([healthy], { ...running, state: "prompt", last_compaction: null }), NOW)[1]).toMatchObject({ ok: true, detail: expect.stringContaining("prompt") });
     expect(assessState(state([healthy], { ...running, last_compaction: null }), NOW)[1]!.detail).toContain("never compacted");
   });
-  it("reads ages and the tailnet of a ts.net address only", () => {
+  it("reads ages", () => {
     expect([age(30_000), age(125 * 60_000), age(26 * 3_600_000)]).toEqual(["0m", "2h 5m", "1d 2h"]);
-    expect(tailnetOf("raka-devs.tail38376d.ts.net")).toBe("tail38376d.ts.net");
-    expect(tailnetOf("a.b.tail1.ts.net")).toBeNull();
-    expect(tailnetOf("example.com")).toBeNull();
   });
 });

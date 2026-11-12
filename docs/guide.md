@@ -414,9 +414,16 @@ More in [remote PCs](remote-pcs.md).
 
 ## Assistant
 
-The Assistant is a coding agent that runs all day on a Linux VM you own, in your tailnet: one coordinator for every project on every PC. It lives in Code mode. Add the VM as a remote PC and save its address; its row in the sidebar is tagged **Assistant**, and its Assistant workspace is a chat like any other. Beside that chat, the right panel shows the Assistant's controls in place of Environment, Context and Changes: **New chat**, the tasks (with Approve, Cancel, Restart agent), the earlier chats, the projects and the machines. New chat there opens the new chat. The VM's row comes first in the sidebar, in a tinted card.
+The Assistant is one coding agent that runs all day on a Linux VM you own, in your tailnet, and coordinates the herdr sessions on every PC it connects to. It lives in Code mode. Add the VM as a remote PC and save its address: its row comes first in the sidebar, a tinted card tagged **Assistant**, and its one workspace is the Assistant's chat. Beside that chat the agent panel shows Environment and Context and a **Sessions** section: every agent session on your PCs, working and blocked first, the rest folded under "N finished"; a click opens one. **Restart Assistant** in the ⋯ menu starts it on a fresh conversation.
 
-The Assistant coordinates every herdr session on the connected PCs, not only its own tasks: it lists them (`ovis-task sessions`), reads one (`ovis-task peek <machine> <pane>`: an agent's last turns, or a shell's screen), and hands work to the agent already open in one (`ovis-task send <machine> <pane> <message>`, typed in as you would). It sends only to an agent at rest: never to a working agent, a shell, or a task's own pane. New work in a project still goes as a task.
+It delegates through herdr sessions, with its tool `ovis-task`:
+
+- `ovis-task machines` and `ovis-task sessions [machine]`: the PCs, and every workspace and pane on them with its agent, state and folder.
+- `ovis-task peek <machine> <pane>`: an agent's last turns, or a shell's screen. Read only.
+- `ovis-task send <machine> <pane> <message>`: hands work to the agent already open there, typed in as you would. Never to a working agent or a shell.
+- `ovis-task open <machine> <folder> [--agent claude|codex] [--create] <brief>`: a new herdr session with an agent in a folder under that PC's home, full auto, the brief as its first message. `--create` makes the folder and a git repository. At most 3 such sessions work at once per PC.
+
+It sends and opens only what you asked for or agreed to, and says where. Its session lives on: within a minute of its pane or agent going away (or of herdr or the VM restarting) the VM brings it back, resuming the same conversation, and when it is idle past 70% of its context it saves lasting facts to its `notes.md` and compacts. An agent waiting on a prompt is left alone.
 
 Until you have a VM, **⋯ → Assistant VM…** opens the setup page: the install command to paste on a fresh VM, and a field for the VM's address once it runs. `bun run check:assistant <vm-address>` checks a running VM end to end.
 
