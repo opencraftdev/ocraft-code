@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from
 import type { AssistantAgent, AssistantMachine, AssistantProblem, AssistantProject, AssistantState, AssistantTask, AssistantTranscript, MergeMode, ProjectChange, TaskStatus } from "../../shared/assistant.ts";
 import type { InteractivePrompt } from "../../shared/protocol.ts";
 import { addAssistantProject, ApiError, approveAssistantTask, cancelAssistantTask, changeAssistantProject, fetchAssistant, fetchAssistantTranscript, fetchPanePrompt, fixAssistantMachine, dismissAssistantTask, removeAssistantProject, restartAssistantTask, setAssistantMaxRunning, startAssistantSession } from "../lib/api.ts";
-import { ASSISTANT_INSTALL_COMMAND, assistantLink, storeAssistantAddress, storedAssistantAddress } from "../lib/assistantMode.ts";
+import { ASSISTANT_INSTALL_COMMAND, assistantEmbed, assistantLink, storeAssistantAddress, storedAssistantAddress } from "../lib/assistantMode.ts";
 import { useLocale, useT, type Translate } from "../lib/i18n.ts";
 import { MachineContext } from "../lib/machineContext.tsx";
 import { AssistantSetupDialog } from "./AssistantSetupDialog.tsx";
@@ -30,8 +30,23 @@ function AssistantSetup() {
   const [address, setAddress] = useState(storedAssistantAddress);
   const [settingUp, setSettingUp] = useState(false);
   const link = assistantLink(address);
+  const embed = assistantEmbed(address);
+  // with a VM address saved, its Assistant shows here; Change address goes back to this page
+  const [editing, setEditing] = useState(false);
   // the address the install printed: kept as one typed in the field is
   const found = useCallback((next: string) => { setAddress(next); storeAssistantAddress(next); }, []);
+  if (embed !== null && !editing) {
+    return (
+      <main className="assistant-embed" data-testid="assistant-embed">
+        <div className="assistant-embed-bar">
+          <span className="assistant-embed-address">{new URL(embed).hostname}</span>
+          <a className="btn" href={embed} target="_blank" rel="noreferrer">{t("Open in new tab")}</a>
+          <button type="button" className="btn" onClick={() => setEditing(true)}>{t("Change address")}</button>
+        </div>
+        <iframe className="assistant-embed-frame" src={embed} title={t("Assistant")} allow="clipboard-read; clipboard-write; microphone" />
+      </main>
+    );
+  }
   return (
     <main className="assistant-setup" data-testid="assistant-setup">
       <div className="assistant-setup-inner">
@@ -47,6 +62,7 @@ function AssistantSetup() {
             onChange={(event) => { setAddress(event.target.value); storeAssistantAddress(event.target.value); }} />
         </label>
         {link !== null && <a href={link} target="_blank" rel="noreferrer">{link}</a>}
+        {embed !== null && <div><button type="button" className="btn" onClick={() => setEditing(false)}>{t("Show the Assistant")}</button></div>}
       </div>
     </main>
   );

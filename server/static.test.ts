@@ -63,9 +63,9 @@ describe("OVIS_APP_NAME", () => {
   });
 
   it("frames the other ports of the request's own host and no other host", () => {
-    expect(contentSecurityPolicy("http://100.123.228.51:7317")).toContain("frame-src 'self' http://100.123.228.51:* https://100.123.228.51:*;");
-    expect(contentSecurityPolicy("https://pc.tailnet.ts.net")).toContain("frame-src 'self' http://pc.tailnet.ts.net:* https://pc.tailnet.ts.net:*;");
-    expect(contentSecurityPolicy("http://[::1]:7317")).toContain("frame-src 'self' http://[::1]:* https://[::1]:*;");
+    expect(contentSecurityPolicy("http://100.123.228.51:7317")).toContain("frame-src 'self' https://*.ts.net http://100.123.228.51:* https://100.123.228.51:*;");
+    expect(contentSecurityPolicy("https://pc.tailnet.ts.net")).toContain("frame-src 'self' https://*.ts.net http://pc.tailnet.ts.net:* https://pc.tailnet.ts.net:*;");
+    expect(contentSecurityPolicy("http://[::1]:7317")).toContain("frame-src 'self' https://*.ts.net http://[::1]:* https://[::1]:*;");
     expect(contentSecurityPolicy("http://100.123.228.51:7317").replace(/ http:\/\/\S+ https:\/\/\S+;/, ";")).toBe(CONTENT_SECURITY_POLICY);
   });
 
@@ -73,7 +73,15 @@ describe("OVIS_APP_NAME", () => {
     expect(contentSecurityPolicy()).toBe(CONTENT_SECURITY_POLICY);
     expect(contentSecurityPolicy("not a url")).toBe(CONTENT_SECURITY_POLICY);
     expect(contentSecurityPolicy("http://a_b;script-src *")).toBe(CONTENT_SECURITY_POLICY);
-    expect(CONTENT_SECURITY_POLICY).toContain("frame-src 'self';");
+    expect(CONTENT_SECURITY_POLICY).toContain("frame-src 'self' https://*.ts.net;");
+  });
+
+  it("lets only loopback pages frame the Assistant VM, and nothing frame any other Ovis", () => {
+    expect(contentSecurityPolicy(undefined, false)).toContain("frame-ancestors 'none'");
+    const vm = contentSecurityPolicy("https://vm.tailnet.ts.net", true);
+    expect(vm).toContain("frame-ancestors http://127.0.0.1:* http://localhost:* http://[::1]:*");
+    expect(vm).not.toContain("frame-ancestors 'none'");
+    expect(vm).not.toMatch(/frame-ancestors[^;]*(https:|\*\.ts\.net|\s\*(;|$))/);
   });
 
   it("fetches the manifest with the page's cookies, so a sign-in proxy lets it through", () => {

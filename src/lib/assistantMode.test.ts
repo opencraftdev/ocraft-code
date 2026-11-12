@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { assistantLink, parseAppMode, storeAppMode, storeAssistantAddress, storedAppMode, storedAssistantAddress } from "./assistantMode.ts";
+import { assistantEmbed, assistantLink, parseAppMode, storeAppMode, storeAssistantAddress, storedAppMode, storedAssistantAddress } from "./assistantMode.ts";
 
 describe("the app mode", () => {
   it("is Code unless Assistant was chosen", () => {
@@ -57,5 +57,16 @@ describe("assistantLink", () => {
     expect(assistantLink("")).toBeNull();
     expect(assistantLink("javascript://alert(1)")).toBeNull();
     expect(assistantLink("https://")).toBeNull();
+  });
+});
+
+describe("assistantEmbed", () => {
+  it("embeds only an https tailnet address", () => {
+    expect(assistantEmbed("raka-devs.tail38376d.ts.net")).toBe("https://raka-devs.tail38376d.ts.net/");
+    expect(assistantEmbed("https://raka-devs.tail38376d.ts.net/")).toBe("https://raka-devs.tail38376d.ts.net/");
+    expect(assistantEmbed("http://raka-devs.tail38376d.ts.net")).toBeNull();
+    expect(assistantEmbed("https://example.com")).toBeNull();
+    expect(assistantEmbed("https://ts.net.example.com")).toBeNull();
+    expect(assistantEmbed("")).toBeNull();
   });
 });
