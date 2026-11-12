@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 
-import type { AssistantAgent, AssistantMachine, AssistantProblem, AssistantProject, AssistantSession, AssistantState, AssistantTask, AssistantTranscript, MergeMode, ProjectChange, TaskStatus } from "../../shared/assistant.ts";
+import type { AssistantAgent, AssistantMachine, AssistantProblem, AssistantProject, AssistantState, AssistantTask, AssistantTranscript, MergeMode, ProjectChange, TaskStatus } from "../../shared/assistant.ts";
 import type { InteractivePrompt } from "../../shared/protocol.ts";
 import { addAssistantProject, ApiError, approveAssistantTask, cancelAssistantTask, changeAssistantProject, fetchAssistant, fetchAssistantTranscript, fetchPanePrompt, fixAssistantMachine, dismissAssistantTask, removeAssistantProject, restartAssistantTask, setAssistantMaxRunning, startAssistantSession } from "../lib/api.ts";
 import { ASSISTANT_INSTALL_COMMAND, assistantLink, storeAssistantAddress, storedAssistantAddress } from "../lib/assistantMode.ts";
@@ -66,6 +66,7 @@ function AssistantLayout({ renderChat, onOpenTask }: { renderChat?: (paneId: str
       <nav className="assistant-sidebar" aria-label={t("Assistant")}>
         <Section title={t("Machines")} empty={machines.length === 0}>
           {machines.map((machine) => <MachineRow key={machine.id} machine={machine} onChange={setState} refresh={refresh} />)}
+          {state !== null && machines.length === 0 && <p className="assistant-dim">{t("The Assistant uses herdr's saved machines. Add one on this VM with herdr machine add <alias> ssh://user@host, then Connect it in Settings > Remote PCs.")}</p>}
         </Section>
         <Section title={t("Projects")} empty={projects.length === 0}>
           {projects.map((project) => <ProjectRow key={project.id} project={project} machine={machines.find((machine) => machine.id === project.machine)} refresh={refresh} />)}
@@ -81,7 +82,7 @@ function AssistantLayout({ renderChat, onOpenTask }: { renderChat?: (paneId: str
         </Section>
       </nav>
       <main className="assistant-chat" aria-label={t("Chat")}>
-        <SessionBar current={current} onStarted={(next) => { setState(next); setShown(null); }} />
+        <SessionBar name={shown ?? current?.name ?? null} onStarted={(next) => { setState(next); setShown(null); }} />
         {shown !== null ? <ArchivedSession key={shown} name={shown} />
           : current === null ? <p className="assistant-chat-note">{t("No Assistant session yet. Start one with New chat.")}</p>
           : (current.pane_id !== null && renderChat?.(current.pane_id)) || <p className="assistant-chat-note">{t("The Assistant's pane is not open. Start a new chat.")}</p>}
@@ -93,8 +94,11 @@ function AssistantLayout({ renderChat, onOpenTask }: { renderChat?: (paneId: str
   );
 }
 
-/** New session: only on this click. The pane before it is archived and stays readable in Sessions. */
-function SessionBar({ current, onStarted }: { current: AssistantSession | null; onStarted(state: AssistantState): void }) {
+/**
+ * New session: only on this click. The pane before it is archived and stays readable in Sessions.
+ * `name`: the session shown below it, an archived one when one is picked.
+ */
+export function SessionBar({ name, onStarted }: { name: string | null; onStarted(state: AssistantState): void }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +108,7 @@ function SessionBar({ current, onStarted }: { current: AssistantSession | null; 
   };
   return (
     <div className="assistant-chat-bar">
-      <span className="assistant-row-name">{current?.name ?? t("Assistant")}</span>
+      <span className="assistant-row-name">{name ?? t("Assistant")}</span>
       {error !== null && <span className="assistant-error" role="alert">{error}</span>}
       <button type="button" className="btn" disabled={busy} onClick={start}>{t("New chat")}</button>
     </div>

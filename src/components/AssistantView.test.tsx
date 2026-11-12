@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { SettingsProvider } from "../lib/settings.ts";
-import { AssistantView } from "./AssistantView.tsx";
+import { AssistantView, SessionBar } from "./AssistantView.tsx";
 
 const render = (vm: boolean) => renderToStaticMarkup(createElement(SettingsProvider, { children: createElement(AssistantView, { vm }) }));
 
@@ -29,5 +29,11 @@ describe("Assistant mode", () => {
     for (const section of ["Machines", "Projects", "Sessions", "Tasks"]) expect(page).toContain(`>${section}</h2>`);
     expect(page.match(/None yet/g)).toHaveLength(4);
     expect(page).not.toContain("assistant-setup");
+  });
+
+  it("names the session shown under the bar, an archived one too", () => {
+    const bar = (name: string | null) => renderToStaticMarkup(createElement(SettingsProvider, { children: createElement(SessionBar, { name, onStarted: () => {} }) }));
+    expect(bar("20261112-0914")).toContain(">20261112-0914</span>");
+    expect(bar(null)).toContain(">Assistant</span>");
   });
 });

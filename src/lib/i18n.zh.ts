@@ -175,6 +175,7 @@ const BASE: Record<string, string> = {
   "Assistant VM address": "助手 VM 地址",
   "Remove": "移除",
   "Checking…": "正在检查…",
+  "The Assistant uses herdr's saved machines. Add one on this VM with herdr machine add <alias> ssh://user@host, then Connect it in Settings > Remote PCs.": "助手使用 herdr 已保存的机器。请在此 VM 上运行 herdr machine add <alias> ssh://user@host 添加一台，然后在 设置 > 远程 PC 中“连接”它。",
   "Not connected yet: choose Connect on it in Settings > Remote PCs": "尚未连接：请在 设置 > 远程 PC 中选择“连接”",
   "SSH cannot reach it": "SSH 无法连接",
   "Windows isn't supported by the Assistant yet": "助手暂不支持 Windows",

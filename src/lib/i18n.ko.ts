@@ -170,6 +170,7 @@ const BASE: Record<string, string> = {
   "Assistant VM address": "어시스턴트 VM 주소",
   "Remove": "제거",
   "Checking…": "확인 중…",
+  "The Assistant uses herdr's saved machines. Add one on this VM with herdr machine add <alias> ssh://user@host, then Connect it in Settings > Remote PCs.": "어시스턴트는 herdr에 저장된 머신을 사용합니다. 이 VM에서 herdr machine add <alias> ssh://user@host로 추가한 뒤 설정 > 원격 PC에서 연결하세요.",
   "Not connected yet: choose Connect on it in Settings > Remote PCs": "아직 연결되지 않음: 설정 > 원격 PC에서 연결을 선택하세요",
   "SSH cannot reach it": "SSH로 연결할 수 없음",
   "Windows isn't supported by the Assistant yet": "어시스턴트는 아직 Windows를 지원하지 않습니다",
