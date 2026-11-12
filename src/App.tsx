@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Bot, ChevronDown, Ellipsis, FileDiff, FolderOpen, Link, List, Menu, MessageSquare, PanelLeft, PanelRight, Pencil, Search, SquareTerminal, X } from "lucide-react";
+import { Bell, Bot, ChevronDown, Ellipsis, ExternalLink, FileDiff, FolderOpen, Link, List, Menu, MessageSquare, PanelLeft, PanelRight, Pencil, Search, SquareTerminal, X } from "lucide-react";
 
 import type { HerdrPane } from "../shared/protocol.ts";
 import { authenticate, createTab, moveTabToWorkspace, pairDevice, shareSeen, signOut, splitPane, swapPaneWith, zoomPane } from "./lib/api.ts";
@@ -69,7 +69,7 @@ import { RepoDiffViewer } from "./components/RepoDiffViewer.tsx";
 import { OpenFileContext } from "./lib/filePaths.ts";
 import { useAccessState, useLockedRef } from "./lib/useAccess.ts";
 import { useLocalHealth } from "./lib/useLocalHealth.ts";
-import { useAppMode } from "./lib/assistantMode.ts";
+import { assistantEmbed, storedAssistantAddress, useAppMode } from "./lib/assistantMode.ts";
 import { AssistantView } from "./components/AssistantView.tsx";
 import { useMachinesRef, useRecentFolderMemory, useRefetchTimer, useRosterError, useRosterEvents, useRosterLoader, useRosterState } from "./lib/useMachineRoster.ts";
 import { useMachineDialog } from "./lib/useMachineDialog.ts";
@@ -181,7 +181,7 @@ export function App() {
   const { health, localFreshness, shownHealth, readLocalHealth } = useLocalHealth();
   // the header's Assistant | Code switch, per device; Code mode is the app as it always was
   // embedded: in the setup page's frame (another Ovis's Assistant mode), the Assistant alone, no header
-  const [appMode, chooseMode, embedded] = useAppMode();
+  const [appMode, chooseMode, embedded, assistantEditing, setAssistantEditing] = useAppMode();
   const codeMode = appMode === "code";
   const { error, setError } = useRosterError();
   const { layoutNotice, setLayoutNotice } = useLayoutNotice();
@@ -554,7 +554,14 @@ export function App() {
   // the palette's shortcut, said beside its item where a hardware keyboard is likely (a fine pointer)
   const keyboardLikely = useMediaQuery("(hover: hover) and (pointer: fine)");
   const paletteKeys = keyboardLikely ? formatKeys(shortcutDisplayKeys("palette", settings.shortcutOverrides)).join("+") : "";
+  // Assistant mode on an Ovis that is not the VM shows the VM's page; its two actions live in ⋯
+  const assistantVm = health?.web_ui?.assistant === true;
+  const assistantPage = codeMode || assistantVm ? null : assistantEmbed(storedAssistantAddress());
   const moreItems: RowMenuItem[] = [
+    ...(assistantPage !== null && !assistantEditing ? [
+      { id: "assistant-open", label: t("Open in new tab"), icon: ExternalLink, run: () => void window.open(assistantPage, "_blank", "noreferrer") },
+      { id: "assistant-address", label: t("Change address"), icon: Pencil, run: () => setAssistantEditing(true) },
+    ] : []),
     // the title's menu (the header has no tab strip): the pane's tab is renamed in the strip, drawn only while it edits
     ...(selectedPane && !selectedPane.restore_error ? [
       { id: "rename", label: t("Rename"), icon: Pencil, run: actions.renameTab },
@@ -652,6 +659,8 @@ export function App() {
             .header-side is the sidebar's own top row from 769px (styles.css); below that its
             buttons sit in the bar */}
         <div className="header-side">
+          {/* Assistant mode draws its own sidebar: these toggle Code mode's */}
+          {codeMode && <>
           <button
             type="button"
             className="icon-button drawer-toggle"
@@ -672,6 +681,7 @@ export function App() {
           >
             <PanelLeft />
           </button>
+          </>}
           <span className="workspace-brand" aria-label="OCraft Code">
             <img src="/icons/icon-192.png?v=sheep1" alt="" width="22" height="22" />
             <span>OCraft Code</span>
@@ -785,7 +795,7 @@ export function App() {
         )}
       </header>}
 
-      {!codeMode ? <div className="app-body"><AssistantView vm={health?.web_ui?.assistant === true} embedded={embedded} onOpenSettings={actions.openSettings} renderChat={(paneId, { greeting, startedAt }) => {
+      {!codeMode ? <div className="app-body"><AssistantView vm={assistantVm} embedded={embedded} editing={assistantEditing} onEditing={setAssistantEditing} onOpenSettings={actions.openSettings} renderChat={(paneId, { greeting, startedAt }) => {
         // the Assistant's pane is on this VM's own herdr: Code mode's chat lens over it, composer and all
         const local = machines.find((machine) => machine.id === "local");
         const item = local?.snapshot?.panes.find((candidate) => candidate.pane_id === paneId);

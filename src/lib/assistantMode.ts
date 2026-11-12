@@ -80,7 +80,9 @@ export function initialAppMode(search: string): AppMode {
 }
 
 /** The header's switch: the mode this load starts in, the way to choose another, and whether this load is the frame. */
-export function useAppMode(): [AppMode, (mode: AppMode) => void, boolean] {
+export function useAppMode(): [AppMode, (mode: AppMode) => void, boolean, boolean, (editing: boolean) => void] {
   const [mode, setMode] = useState<AppMode>(() => initialAppMode(window.location.search));
-  return [mode, (next) => { setMode(next); storeAppMode(next); }, embeddedAssistant(window.location.search)];
+  // the setup page shown over a saved VM address (the header's ⋯ menu, Change address)
+  const [editing, setEditing] = useState(false);
+  return [mode, (next) => { setMode(next); storeAppMode(next); }, embeddedAssistant(window.location.search), editing, setEditing];
 }
