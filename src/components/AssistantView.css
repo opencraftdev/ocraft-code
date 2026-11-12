@@ -59,27 +59,6 @@
   border-right: var(--hairline) solid var(--surface-edge);
 }
 
-/* the app's name, in the frame where there is no app header */
-.assistant-brand {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--header-h);
-  padding: 0 var(--space-4);
-  color: var(--text-strong);
-  font-size: var(--fs-md);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--tracking-tight);
-}
-
-.assistant-brand img {
-  display: block;
-  flex: none;
-  width: var(--mark-size);
-  height: var(--mark-size);
-}
-
 .assistant-lists { padding: 0 var(--space-2) var(--space-3); }
 .assistant-section { margin-top: var(--space-3); }
 .assistant-section .sidebar-section-label { min-height: var(--control-h); padding: 0 var(--space-2); font-size: var(--fs-xs); }

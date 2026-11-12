@@ -107,8 +107,6 @@ function AssistantLayout({ embedded, initial, renderChat, onOpenTask, onOpenSett
   return (
     <div className="assistant-layout" data-testid="assistant-layout">
       <aside id="assistant-drawer" className={`assistant-sidebar sidebar-shell${drawer ? " is-open" : ""}`} aria-label={t("Assistant")}>
-        {/* in the frame there is no app header: the sidebar names the app */}
-        {embedded && <div className="assistant-brand"><img src="/icons/icon-192.png?v=sheep1" alt="" width="22" height="22" /><span>{t("Assistant")}</span></div>}
         <nav className="sidebar-nav"><NewChat onStarted={started} /></nav>
         <div className="sidebar-navigation-scroll assistant-lists">
           <section className="assistant-section" aria-label={t("Sessions")}>

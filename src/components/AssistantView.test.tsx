@@ -85,11 +85,10 @@ describe("Assistant mode", () => {
     expect(page).not.toContain("No tasks yet");
   });
 
-  it("names the app in the frame, where the page has no header", () => {
+  it("draws no header or second app name in the frame: the embedding Ovis's header names the app", () => {
     const framed = render({ vm: true, embedded: true, initial: empty });
-    expect(framed).toContain("class=\"assistant-brand\"");
     expect(framed).not.toContain("app-header");
-    expect(render({ vm: true, initial: empty })).not.toContain("assistant-brand");
+    expect(framed).not.toContain("assistant-brand");
   });
 });
 
