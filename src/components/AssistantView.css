@@ -175,7 +175,12 @@
   background: var(--chat-canvas);
 }
 
-.assistant-panel-page > .agent-panel { flex: 1 1 auto; width: 100%; padding: 0; }
+/* the frame is narrower than 769px, where the agent panel turns into a floating sheet of cards: the
+   page keeps the desktop panel's flat column (styles.css "Claude desktop look: right panel") */
+.assistant-panel-page > .agent-panel { position: static; flex: 1 1 auto; width: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.assistant-panel-page .agent-panel-card { gap: 0; padding: var(--space-3) var(--space-4); }
+.assistant-panel-page .agent-panel-section { border: 0; border-bottom: var(--hairline) solid var(--border); border-radius: 0; background: transparent; box-shadow: none; padding-block: var(--space-2); }
+.assistant-panel-page .agent-panel-section:last-child { border-bottom: 0; }
 .assistant-panel-page .assistant-panel { max-height: 100%; }
 .assistant-more { color: var(--text-dim); }
 
