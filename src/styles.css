@@ -3086,7 +3086,6 @@ button, a, [role="button"] {
 }
 .sidebar-shell .machine-header .machine-title .sidebar-mark { order: 2; }
 .sidebar-shell .machine-group.is-assistant > .machine-header .machine-title { color: var(--text-strong); font-weight: var(--fw-semibold); }
-.sidebar-shell .machine-group.is-assistant > .machine-header .machine-title .sidebar-mark { order: 0; margin-right: var(--space-2); }
 .sidebar-shell .machine-header .machine-title .sidebar-mark svg { width: var(--fs-sm); height: var(--fs-sm); }
 
 .sidebar-shell .workspace-header > .sidebar-mark,
