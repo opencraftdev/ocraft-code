@@ -1,5 +1,5 @@
-import { ChevronLeft, Folder, Monitor, PanelRightClose, Plus, SquarePen } from "lucide-react";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { ChevronLeft, ChevronRight, Folder, MessageSquare, Monitor, Plus, SquarePen } from "lucide-react";
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import type { AssistantAgent, AssistantMachine, AssistantProblem, AssistantProject, AssistantState, AssistantTask, AssistantTranscript, MergeMode, ProjectChange, TaskStatus } from "../../shared/assistant.ts";
 import type { InteractivePrompt } from "../../shared/protocol.ts";
@@ -82,46 +82,60 @@ export function AssistantPanel({ initial = null, onOpenTask, onSession }: { init
     if (pane) onSession?.(pane);
   };
   if (shown !== null) return (
-    <div className="assistant-panel" data-testid="assistant-panel">
-      <header className="assistant-panel-head">
-        <button type="button" className="btn btn-ghost" onClick={() => setShown(null)}><ChevronLeft aria-hidden="true" /><span>{t("Back")}</span></button>
-        <span className="assistant-dim">{clockTime(locale, archived.find((session) => session.name === shown)?.started_at ?? 0)}</span>
-      </header>
-      <ArchivedSession key={shown} name={shown} />
+    <div className="agent-panel-card assistant-panel" data-testid="assistant-panel">
+      <section className="agent-panel-section" aria-label={t("Earlier chats")}>
+        <header className="agent-panel-section-head">
+          <button type="button" className="icon-button" aria-label={t("Back")} title={t("Back")} onClick={() => setShown(null)}><ChevronLeft aria-hidden="true" /></button>
+          <h2>{clockTime(locale, archived.find((session) => session.name === shown)?.started_at ?? 0)}</h2>
+        </header>
+        <div className="agent-panel-environment-body"><ArchivedSession key={shown} name={shown} /></div>
+      </section>
     </div>
   );
+  const tasks = state?.tasks ?? [];
   return (
-    <div className="assistant-panel" data-testid="assistant-panel">
-      <header className="assistant-panel-head">
-        <h2>{t("Assistant")}</h2>
+    <div className="agent-panel-card assistant-panel" data-testid="assistant-panel">
+      <PanelSection title={t("Assistant")}>
         <NewChat onStarted={started} />
-      </header>
-      <section className="assistant-board" aria-label={t("Tasks")}>
-        <TaskBoard tasks={state?.tasks ?? []} projects={projects} machines={machines} onChange={setState} onOpenTask={onOpenTask} />
-      </section>
-      <div className="assistant-lists">
-        {archived.length > 0 && <section className="assistant-section" aria-label={t("Earlier chats")}>
-          <h2 className="sidebar-section-label">{t("Earlier chats")}</h2>
-          {archived.map((session) => (
-            <button key={session.name} type="button" className="sidebar-nav-item assistant-item" title={session.name} onClick={() => setShown(session.name)}>
-              <span className="assistant-item-name">{clockTime(locale, session.started_at)}</span>
-            </button>
-          ))}
-        </section>}
-        <Projects projects={projects} machines={machines} loaded={state !== null} refresh={refresh} />
-        <section className="assistant-section" aria-label={t("Machines")}>
-          <h2 className="sidebar-section-label">{t("Machines")}</h2>
-          {machines.map((machine) => <MachineRow key={machine.id} machine={machine} onChange={setState} refresh={refresh} />)}
-          {state !== null && machines.length === 0 && <>
-            <p className="assistant-empty">{t("None yet")}</p>
-            <details className="assistant-help">
-              <summary>{t("How to add")}</summary>
-              <p>{t("The Assistant uses herdr's saved machines. Add one on this VM with herdr machine add <alias> ssh://user@host, then Connect it in Settings > Remote PCs.")}</p>
-            </details>
-          </>}
-        </section>
-      </div>
+        <p className="agent-panel-environment-row"><Monitor aria-hidden="true" /><span>{machines.length === 1 ? t("1 machine") : t("{n} machines", { n: machines.length })}</span></p>
+        <p className="agent-panel-environment-row"><Folder aria-hidden="true" /><span>{projects.length === 1 ? t("1 project") : t("{n} projects", { n: projects.length })}</span></p>
+      </PanelSection>
+      <PanelSection title={t("Tasks")} count={tasks.length || undefined}>
+        <TaskBoard tasks={tasks} projects={projects} machines={machines} onChange={setState} onOpenTask={onOpenTask} />
+      </PanelSection>
+      {archived.length > 0 && <PanelSection title={t("Earlier chats")} count={archived.length}>
+        {archived.map((session) => (
+          <button key={session.name} type="button" className="agent-panel-environment-row assistant-row" title={session.name} onClick={() => setShown(session.name)}>
+            <MessageSquare aria-hidden="true" /><span>{clockTime(locale, session.started_at)}</span><ChevronRight className="assistant-row-arrow" aria-hidden="true" />
+          </button>
+        ))}
+      </PanelSection>}
+      <Projects projects={projects} machines={machines} loaded={state !== null} refresh={refresh} />
+      <PanelSection title={t("Machines")} count={machines.length || undefined}>
+        {machines.map((machine) => <MachineRow key={machine.id} machine={machine} onChange={setState} refresh={refresh} />)}
+        {state !== null && machines.length === 0 && <>
+          <p className="assistant-empty">{t("None yet")}</p>
+          <details className="assistant-help">
+            <summary>{t("How to add")}</summary>
+            <p>{t("The Assistant uses herdr's saved machines. Add one on this VM with herdr machine add <alias> ssh://user@host, then Connect it in Settings > Remote PCs.")}</p>
+          </details>
+        </>}
+      </PanelSection>
     </div>
+  );
+}
+
+/** one of the panel's sections, as the agent panel draws Environment, Context and Changes (AgentPanel.css) */
+function PanelSection({ title, count, action, children }: { title: string; count?: number; action?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="agent-panel-section assistant-panel-section" aria-label={title}>
+      <header className="agent-panel-section-head">
+        <h2>{title}</h2>
+        {count !== undefined && <span className="agent-panel-count">{count}</span>}
+        {action}
+      </header>
+      <div className="agent-panel-environment-body">{children}</div>
+    </section>
   );
 }
 
@@ -150,7 +164,7 @@ function NewChat({ onStarted, primary = false }: { onStarted(state: AssistantSta
     startAssistantSession().then(onStarted, (failure: unknown) => setError(failure instanceof ApiError ? failure.detail : String(failure))).finally(() => setBusy(false));
   };
   return <>
-    <button type="button" className={primary ? "btn btn-primary" : "sidebar-nav-item"} disabled={busy} onClick={start}>{!primary && <SquarePen aria-hidden="true" />}<span>{t("New chat")}</span></button>
+    <button type="button" className={primary ? "btn btn-primary" : "agent-panel-action"} disabled={busy} onClick={start}>{!primary && <SquarePen aria-hidden="true" />}<span>{t("New chat")}</span></button>
     {error !== null && <p className={primary ? "assistant-error" : "sidebar-inline-error"} role="alert">{error}</p>}
   </>;
 }
@@ -215,17 +229,12 @@ function statusTone(status: TaskStatus): string {
  * Needs you card answers its agent's question in place with the chat's own prompt card, through
  * the machine's prompt-answer route.
  */
-function TaskBoard({ tasks, projects, machines, onChange, onOpenTask, onClose }: { tasks: AssistantTask[]; projects: AssistantProject[]; machines: AssistantMachine[]; onChange(state: AssistantState): void; onOpenTask?: OpenTask; onClose?: () => void }) {
+function TaskBoard({ tasks, projects, machines, onChange, onOpenTask }: { tasks: AssistantTask[]; projects: AssistantProject[]; machines: AssistantMachine[]; onChange(state: AssistantState): void; onOpenTask?: OpenTask }) {
   const t = useT();
   const locale = useLocale();
   const columns = COLUMNS.map((statuses) => ({ statuses, tasks: tasks.filter((task) => statuses.includes(task.status)) })).filter((column) => column.tasks.length > 0);
   return (
     <>
-      <header className="assistant-board-head">
-        <h2>{t("Tasks")}</h2>
-        {tasks.length > 0 && <span className="agent-panel-count">{tasks.length}</span>}
-        {onClose && <button type="button" className="icon-button" aria-label={t("Hide tasks")} title={t("Hide tasks")} onClick={onClose}><PanelRightClose aria-hidden="true" /></button>}
-      </header>
       {columns.length === 0 && <p className="assistant-empty assistant-board-empty">{t("No tasks yet")}</p>}
       {columns.map(({ statuses, tasks: shown }) => (
         <section key={statuses[0]} className="assistant-task-group" data-column={statuses[0]}>
@@ -388,8 +397,8 @@ function MachineRow({ machine, onChange, refresh }: { machine: AssistantMachine;
   const word = health === null ? t("Checking…") : health.problems.length === 0 ? t("Ready") : problemText(t, health.problems[0]!);
   return (
     <div className="assistant-item-group">
-      <button type="button" className="sidebar-nav-item assistant-item" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <Monitor aria-hidden="true" /><span className="assistant-item-name">{machine.name}</span>
+      <button type="button" className="agent-panel-environment-row assistant-row" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Monitor aria-hidden="true" /><span>{machine.name}</span>
         <span className={`machine-dot is-${dot}`} role="img" aria-label={word} title={word} />
       </button>
       {health !== null && health.problems.map((problem) => (
@@ -412,17 +421,14 @@ function Projects({ projects, machines, loaded, refresh }: { projects: Assistant
   const t = useT();
   const [adding, setAdding] = useState(false);
   return (
-    <section className="assistant-section" aria-label={t("Projects")}>
-      <div className="assistant-section-head">
-        <h2 className="sidebar-section-label">{t("Projects")}</h2>
-        {machines.length > 0 && <button type="button" className="icon-button" aria-label={t("Add project")} title={t("Add project")} aria-expanded={adding} onClick={() => setAdding(!adding)}><Plus aria-hidden="true" /></button>}
-      </div>
+    <PanelSection title={t("Projects")} count={projects.length || undefined}
+      action={machines.length > 0 && <button type="button" className="icon-button" aria-label={t("Add project")} title={t("Add project")} aria-expanded={adding} onClick={() => setAdding(!adding)}><Plus aria-hidden="true" /></button>}>
       {projects.map((project) => <ProjectRow key={project.id} project={project} machine={machines.find((machine) => machine.id === project.machine)} refresh={refresh} />)}
       {loaded && projects.length === 0 && !adding && (
         <p className="assistant-empty">{t("None yet")}{machines.length > 0 && <> · <button type="button" className="assistant-link" onClick={() => setAdding(true)}>{t("Add project")}</button></>}</p>
       )}
       {adding && machines.length > 0 && <AddProject machines={machines} refresh={refresh} onAdded={() => setAdding(false)} />}
-    </section>
+    </PanelSection>
   );
 }
 

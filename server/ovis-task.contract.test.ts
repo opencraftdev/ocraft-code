@@ -96,6 +96,10 @@ describe("ovis-task routes", () => {
       expect(listed?.name).toBe("Test PC");
       expect(Array.isArray(listed?.folders)).toBe(true);
       expect((await task("machines", {})).status).toBe(405);
+      expect(Array.isArray(await (await task("sessions")).json())).toBe(true);
+      expect(await code(await task("sessions?machine=Nope"))).toEqual({ status: 404, code: "unknown_machine" });
+      expect(await code(await task("peek", { machine: "Nope", pane: "p1" }))).toEqual({ status: 404, code: "unknown_machine" });
+      expect((await task("send")).status).toBe(405);
       expect((await task("projects", { id: "x", path: "/" })).status).toBe(405);
       expect(await code(await task("create", {}))).toEqual({ status: 404, code: "unknown_project" });
       expect(await code(await task("create", { project: "repo", title: "Fix it", brief: "" }))).toEqual({ status: 400, code: "invalid_brief" });

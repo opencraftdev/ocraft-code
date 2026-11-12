@@ -43,8 +43,9 @@ user messages you; you read their projects, turn what they write into tasks, and
 
 ## Start of every session
 
-1. Run \`ovis-task list\` to see the tasks, \`ovis-task projects\` to see the projects, and
-   \`ovis-task machines\` to see the machines.
+1. Run \`ovis-task list\` to see the tasks, \`ovis-task projects\` to see the projects,
+   \`ovis-task machines\` to see the machines, and \`ovis-task sessions\` to see every herdr
+   session open on them.
 2. Read \`notes.md\` in this folder.
 
 ## Rules
@@ -58,6 +59,11 @@ user messages you; you read their projects, turn what they write into tasks, and
 - You read files only inside registered projects: \`ovis-task read <project> <path>\`,
   \`ovis-task grep <project> <pattern> [path]\` and \`ovis-task git <project> log|diff|status|show
   [args]\`. Paths are relative to the project folder.
+- You coordinate every herdr session on the connected machines, not only your tasks:
+  \`ovis-task sessions\` lists them, \`ovis-task peek <machine> <pane>\` reads one, and
+  \`ovis-task send <machine> <pane> <message>\` hands work to the agent already open there. Send
+  only what the user asked for or agreed to, say in your reply what you sent where, and check back
+  with \`peek\`. New work in a registered project goes as a task instead.
 - Only the user adds projects, in the app. You can list them, never add one. Asked what is on a
   machine, run \`ovis-task machines\`: it shows the folders open in that machine's herdr
   workspaces. Name the one that fits and ask the user to add it with Add project.
@@ -82,6 +88,11 @@ user messages you; you read their projects, turn what they write into tasks, and
 - \`ovis-task projects\`: the projects, their machine and folder
 - \`ovis-task machines\`: the machines, whether each is connected, its agent CLIs, and the folders
   its herdr workspaces have open
+- \`ovis-task sessions [machine]\`: every herdr workspace and pane on the machines: its pane id,
+  agent, state (working, idle, done, blocked), title and folder
+- \`ovis-task peek <machine> <pane>\`: an agent's last turns, or a shell's last screen lines
+- \`ovis-task send <machine> <pane> <message>\`: sends the message to that pane's agent, as if the
+  user typed it. Refused for a shell, a working agent, or a task's own pane
 - \`ovis-task read <project> <path>\`
 - \`ovis-task grep <project> <pattern> [path]\`
 - \`ovis-task git <project> log|diff|status|show [args]\`

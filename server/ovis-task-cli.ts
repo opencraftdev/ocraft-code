@@ -14,7 +14,10 @@ ovis-task list [--status <status>]
 ovis-task show <id>
 ovis-task answer <id> <choice>
 ovis-task cancel <id>
-ovis-task machines`;
+ovis-task machines
+ovis-task sessions [machine]
+ovis-task peek <machine> <pane>
+ovis-task send <machine> <pane> <message>`;
 const CREATE_USAGE = USAGE.split("\n")[4]!;
 
 /** `--flag value` options, or null when one is unknown or lacks its value */
@@ -28,6 +31,9 @@ export function cliRequest(argv: readonly string[]): { path: string; body?: unkn
   switch (command) {
     case "projects": return argv.length === 1 ? { path: command } : { usage: "ovis-task projects" };
     case "machines": return argv.length === 1 ? { path: command } : { usage: "ovis-task machines" };
+    case "sessions": return argv.length <= 2 ? { path: argv[1] === undefined ? "sessions" : `sessions?machine=${encodeURIComponent(argv[1])}` } : { usage: "ovis-task sessions [machine]" };
+    case "peek": return project !== undefined && rest.length === 1 ? { path: "peek", body: { machine: project, pane: rest[0] } } : { usage: "ovis-task peek <machine> <pane>" };
+    case "send": return project !== undefined && rest.length >= 2 ? { path: "send", body: { machine: project, pane: rest[0], message: rest.slice(1).join(" ") } } : { usage: "ovis-task send <machine> <pane> <message>" };
     case "list": {
       const read = options(argv.slice(1), { status: { type: "string" } });
       if (!read || read.positionals.length > 0) return { usage: "ovis-task list [--status <status>]" };

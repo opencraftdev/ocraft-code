@@ -8,7 +8,8 @@
  * - every machine is connected with no problem, and there is at least one
  * - the current chat has a pane, and that pane's conversation reads
  * - every archived chat's transcript reads
- * - with --ssh: `ovis-task machines` answers on the VM itself, as the Assistant's own pane runs it
+ * - with --ssh: `ovis-task machines` and `ovis-task sessions` answer on the VM itself, as the
+ *   Assistant's own pane runs them
  * - with --browser: the VM's Code mode on the Assistant's chat shows the Assistant panel (New chat,
  *   tasks) beside it, the chat without "Couldn't load the conversation", and an earlier chat's answer
  *   drawn as Markdown, not as raw `**`
@@ -92,6 +93,12 @@ async function main(): Promise<number> {
     let listed: { name: string; folders: string[] }[] | null = null;
     try { listed = start < 0 ? null : JSON.parse(output.slice(start)); } catch { listed = null; }
     check("ovis-task machines", run.exitCode === 0 && Array.isArray(listed), listed ? listed.map((machine) => `${machine.name}: ${machine.folders.length} folders`).join("; ") : (run.stderr.toString() || output).trim().slice(-300));
+    // every herdr session the Assistant coordinates, read as its pane reads them
+    const sessions = Bun.spawnSync(["ssh", "-o", "BatchMode=yes", "-o", "LogLevel=ERROR", values.ssh, script.replace(/ machines$/, " sessions")], { stdout: "pipe", stderr: "pipe" });
+    const sessionText = sessions.stdout.toString();
+    let seen: { machine: string; workspaces: { panes: unknown[] }[] }[] | null = null;
+    try { seen = JSON.parse(sessionText.slice(sessionText.indexOf("["))); } catch { seen = null; }
+    check("ovis-task sessions", sessions.exitCode === 0 && Array.isArray(seen), seen ? seen.map((machine) => `${machine.machine}: ${machine.workspaces.reduce((sum, workspace) => sum + workspace.panes.length, 0)} panes`).join("; ") : (sessions.stderr.toString() || sessionText).trim().slice(-300));
   }
 
   if (values.browser || values["new-chat"]) {

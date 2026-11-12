@@ -11,7 +11,8 @@ import { join } from "node:path";
 import { ASSISTANT_AGENTS, type AddProjectRequest, type AssistantAgent, type AssistantMachine, type AssistantProblem, type AssistantProject, type AssistantState, type AssistantTask, type MachineHealth, type MergeMode, type ProjectRefusal } from "../shared/assistant.ts";
 import { LOCAL_MACHINE, type Machine, type MachineEvent } from "../shared/machines.ts";
 import type { AssistantSessions } from "./assistant-sessions.ts";
-import { AssistantTasks, type TaskBridge } from "./assistant-tasks.ts";
+import { AssistantTasks, pastedBrief, type TaskBridge } from "./assistant-tasks.ts";
+import type { ConversationResponse, HerdrPane } from "../shared/protocol.ts";
 import { isJsonObject, jsonResponse, setRequestRoute } from "./http.ts";
 import { shellQuote } from "./machine-security.ts";
 import { MachineActionRequired } from "./machines.ts";
@@ -118,6 +119,11 @@ const REFUSALS: Record<ProjectRefusal, string> = {
   unknown_machine: "That machine is not one of herdr's saved machines",
   windows: "Windows isn't supported by the Assistant yet",
 };
+/** what ovis-task peek shows of a session: its last turns, each cut to its end */
+const PEEK_TURNS = 12;
+const PEEK_TEXT = 8000;
+/** the longest message ovis-task send hands an agent */
+const SEND_LIMIT = 20_000;
 const refuse = (refusal: ProjectRefusal, status = 400) => new AssistantError(refusal, REFUSALS[refusal], status);
 
 const validAgent = (value: unknown): value is AssistantAgent => (ASSISTANT_AGENTS as readonly unknown[]).includes(value);
@@ -155,6 +161,7 @@ export class Assistant {
 
   readonly sessions: AssistantSessions | null;
   readonly tasks: AssistantTasks;
+  private bridge: TaskBridge;
 
   constructor(stateDir: string, private machines: AssistantMachines, private run: RunScript, options: { intervalMs?: number; timer?: Timer; now?: () => number; sessions?: AssistantSessions; bridge?: TaskBridge } = {}) {
     this.sessions = options.sessions ?? null;
@@ -167,12 +174,13 @@ export class Assistant {
     this.projects = readDocument(this.projectsPath, (value): value is AssistantProject[] => Array.isArray(value) && value.every(validProject), []);
     this.settings = readDocument(this.settingsPath, (value): value is MachineSettings => isJsonObject(value)
       && Object.values(value).every((entry) => isJsonObject(entry) && validMaxRunning(entry.maxRunning)), {});
+    this.bridge = options.bridge ?? (() => Promise.reject(new AssistantError("machine_offline", "This server reaches no machines", 503)));
     this.tasks = new AssistantTasks(join(directory, "tasks.json"), {
       project: (id) => this.projects.find((project) => project.id === id),
       // a Windows machine is none the queue can start a task on: its tasks stay Queued
       machine: (id) => this.isWindows(id) ? undefined : this.watchable().find((machine) => machine.id === id),
       maxRunning: (id) => this.settings[id]?.maxRunning ?? DEFAULT_MAX_RUNNING,
-      bridge: options.bridge ?? (() => Promise.reject(new AssistantError("machine_offline", "This server reaches no machines", 503))),
+      bridge: this.bridge,
       run: (machine, script, timeoutMs) => this.run(machine, script, timeoutMs),
       now: this.now,
     });
@@ -224,6 +232,74 @@ export class Assistant {
       agents: [...(this.watched.get(machine.id)?.health?.agents ?? [])],
       folders: [...new Set((machine.snapshot?.panes ?? []).map((pane) => pane.cwd).filter((cwd): cwd is string => typeof cwd === "string" && cwd !== ""))].sort(),
     }));
+  }
+
+  /** a connected machine by its name (or id), for the herdr session commands */
+  private machineNamed(name: unknown): Machine {
+    const machine = typeof name === "string" ? this.watchable().find((candidate) => candidate.name === name || candidate.id === name) : undefined;
+    if (!machine) throw refuse("unknown_machine", 404);
+    if (this.isWindows(machine.id)) throw refuse("windows");
+    if (machine.state !== "connected" || !machine.snapshot) throw new AssistantError("machine_offline", "That machine is not connected", 503);
+    return machine;
+  }
+  private paneOn(machine: Machine, paneId: unknown): HerdrPane {
+    const pane = typeof paneId === "string" ? machine.snapshot?.panes.find((candidate) => candidate.pane_id === paneId) : undefined;
+    if (!pane) throw new AssistantError("unknown_pane", "That pane is not open on that machine: run ovis-task sessions", 404);
+    return pane;
+  }
+
+  /**
+   * ovis-task sessions [machine]: every herdr workspace and pane on the connected machines (one
+   * machine when named), from the snapshot Remote PCs holds: its agent, state, title and folder.
+   */
+  herdrSessions(machineName?: unknown): unknown[] {
+    const machines = machineName === undefined ? this.watchable().filter((machine) => !this.isWindows(machine.id)) : [this.machineNamed(machineName)];
+    return machines.map((machine) => ({
+      machine: machine.name,
+      state: machine.state,
+      workspaces: (machine.snapshot?.workspaces ?? []).map((workspace) => ({
+        workspace: workspace.label ?? workspace.workspace_id,
+        panes: (machine.snapshot?.panes ?? []).filter((pane) => pane.workspace_id === workspace.workspace_id).map((pane) => ({
+          pane: pane.pane_id, agent: pane.agent ?? null, status: pane.agent_status ?? null,
+          title: pane.terminal_title_stripped ?? pane.terminal_title ?? null, folder: pane.cwd ?? null,
+        })),
+      })),
+    }));
+  }
+
+  /**
+   * ovis-task peek <machine> <pane>: what a herdr session says. An agent's last turns from its
+   * conversation, or the pane's last screen lines when it has none (a shell). Read only.
+   */
+  async peekSession(body: unknown): Promise<unknown> {
+    const machine = this.machineNamed(isJsonObject(body) ? body.machine : undefined);
+    const pane = this.paneOn(machine, isJsonObject(body) ? body.pane : undefined);
+    const conversation = pane.agent ? await this.bridge(machine.id, "pane/conversation", { query: { pane_id: pane.pane_id } }).catch(() => null) as ConversationResponse | null : null;
+    const turns = (conversation?.turns ?? []).slice(-PEEK_TURNS).map((turn) => ({
+      role: turn.role,
+      text: turn.parts.flatMap((part) => part.kind === "text" ? [part.text] : []).join("\n").slice(-PEEK_TEXT),
+    })).filter((turn) => turn.text !== "");
+    if (turns.length > 0) return { machine: machine.name, pane: pane.pane_id, agent: pane.agent, status: pane.agent_status ?? null, turns };
+    const read = await this.bridge(machine.id, "pane/read", { query: { pane_id: pane.pane_id, source: "recent", format: "text", lines: "200" } }) as { read?: { text?: string } };
+    return { machine: machine.name, pane: pane.pane_id, agent: pane.agent ?? null, status: pane.agent_status ?? null, screen: (read.read?.text ?? "").slice(-PEEK_TEXT) };
+  }
+
+  /**
+   * ovis-task send <machine> <pane> <message>: hands work to the agent of a herdr session, pasted
+   * as the user's own message would be, then Enter. Only to a pane with an agent at rest: a working
+   * agent is never interrupted, and a shell never typed into.
+   */
+  async sendToSession(body: unknown): Promise<unknown> {
+    const machine = this.machineNamed(isJsonObject(body) ? body.machine : undefined);
+    const pane = this.paneOn(machine, isJsonObject(body) ? body.pane : undefined);
+    const message = isJsonObject(body) ? body.message : undefined;
+    if (typeof message !== "string" || message.trim() === "" || message.length > SEND_LIMIT) throw new AssistantError("invalid_message", `A message is 1 to ${SEND_LIMIT} characters`, 400);
+    if (!pane.agent) throw new AssistantError("no_agent", "That pane runs no agent: send only to an agent's pane", 409);
+    if (pane.agent_status === "working") throw new AssistantError("pane_busy", "That agent is working: wait until it is idle or done, then send", 409);
+    if (this.tasks.list().some((task) => task.machine === machine.id && (task.paneId === pane.pane_id || task.reviewPaneId === pane.pane_id))) throw new AssistantError("task_pane", "That pane is a task's: use ovis-task answer or cancel for it", 409);
+    await this.bridge(machine.id, "pane/input", { method: "POST", body: { pane_id: pane.pane_id, text: pastedBrief(message) } });
+    await this.bridge(machine.id, "pane/keys", { method: "POST", body: { pane_id: pane.pane_id, keys: ["Enter"] } });
+    return { ok: true, machine: machine.name, pane: pane.pane_id };
   }
 
   state(): AssistantState {
