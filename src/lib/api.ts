@@ -1,7 +1,7 @@
 import { apiFetch as fetch } from "./api-request-id.ts";
 import type { PreferencesChange, SharedPreferences } from "../../shared/preferences.ts";
 import type { SeenFinish } from "../../shared/seen.ts";
-import type { AddProjectRequest, AssistantFix, AssistantProject, AssistantSetupJob, AssistantSetupMachine, AssistantSetupRequest, AssistantState, AssistantTranscript, ProjectChange } from "../../shared/assistant.ts";
+import type { AssistantSetupJob, AssistantSetupMachine, AssistantSetupRequest } from "../../shared/assistant.ts";
 import { resumeConnectionTraces } from "./connectionTrace.ts";
 import { machinePath, type BridgeHealth, type HerdrIdentity, type Machine, type MachineRoster, type SetupAction, type SetupJob, type SetupRequest } from "../../shared/machines.ts";
 import type {
@@ -516,62 +516,6 @@ async function sendJson(url: string, method: "POST" | "PATCH" | "DELETE", body: 
   });
   if (!response.ok) throw await errorFrom(url, response);
   return response;
-}
-
-/** GET /api/assistant: the Assistant VM's machines (with their health) and projects. */
-export function fetchAssistant(): Promise<AssistantState> {
-  return getJson<AssistantState>("/api/assistant");
-}
-
-export async function addAssistantProject(request: AddProjectRequest): Promise<AssistantProject> {
-  return (await sendJson("/api/assistant/projects", "POST", request)).json() as Promise<AssistantProject>;
-}
-
-export async function changeAssistantProject(id: string, change: ProjectChange): Promise<void> {
-  await sendJson(`/api/assistant/projects/${encodeURIComponent(id)}`, "PATCH", change);
-}
-
-export async function removeAssistantProject(id: string): Promise<void> {
-  await sendJson(`/api/assistant/projects/${encodeURIComponent(id)}`, "DELETE", {});
-}
-
-export async function setAssistantMaxRunning(machineId: string, maxRunning: number): Promise<void> {
-  await sendJson(`/api/assistant/machines/${encodeURIComponent(machineId)}`, "PATCH", { maxRunning });
-}
-
-/** Runs a fix on the machine: only ever from the user's click. */
-export async function fixAssistantMachine(machineId: string, fix: AssistantFix): Promise<AssistantState> {
-  return (await sendJson(`/api/assistant/machines/${encodeURIComponent(machineId)}/fix`, "POST", { fix })).json() as Promise<AssistantState>;
-}
-
-/** New session: a fresh Assistant pane; the one before is archived. */
-export async function startAssistantSession(): Promise<AssistantState> {
-  return (await sendJson("/api/assistant/sessions", "POST", {})).json() as Promise<AssistantState>;
-}
-
-/** Restart agent: a failed task's agent starts again in its worktree, only on the user's click. */
-export async function restartAssistantTask(taskId: string): Promise<AssistantState> {
-  return (await sendJson(`/api/assistant/tasks/${encodeURIComponent(taskId)}/restart`, "POST", {})).json() as Promise<AssistantState>;
-}
-
-/** Cancel: a task's pane closes, or a Queued or Scheduled task (a cron template too) never starts. */
-export async function cancelAssistantTask(taskId: string): Promise<AssistantState> {
-  return (await sendJson(`/api/assistant/tasks/${encodeURIComponent(taskId)}/cancel`, "POST", {})).json() as Promise<AssistantState>;
-}
-
-/** Approve: a Ready task merges (its PR, or into the checkout's branch). Only the user, here; the Assistant has no such route. */
-export async function approveAssistantTask(taskId: string): Promise<AssistantState> {
-  return (await sendJson(`/api/assistant/tasks/${encodeURIComponent(taskId)}/approve`, "POST", {})).json() as Promise<AssistantState>;
-}
-
-/** Dismiss: an ended task leaves the board, its worktree and branch removed. */
-export async function dismissAssistantTask(taskId: string): Promise<AssistantState> {
-  return (await sendJson(`/api/assistant/tasks/${encodeURIComponent(taskId)}/dismiss`, "POST", {})).json() as Promise<AssistantState>;
-}
-
-/** An archived Assistant session's saved conversation. */
-export function fetchAssistantTranscript(name: string): Promise<AssistantTranscript> {
-  return getJson<AssistantTranscript>(`/api/assistant/sessions/${encodeURIComponent(name)}`);
 }
 
 /** the connected Linux machines a VM setup may run on */

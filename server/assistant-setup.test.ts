@@ -115,6 +115,8 @@ describe.skipIf(process.platform === "win32")("POST /api/assistant-setup", () =>
     const stateDir = mkdtempSync(join(root, "state-"));
     for (const file of ["calls", "mode", "remote", "pid"]) rmSync(join(root, file), { force: true });
     const app = createServer({ port: 0, hostname: "127.0.0.1", token: options.token ?? "", stateDir, tailscaleOwner: null, assistant: options.assistant ?? false,
+      // the Assistant VM's own pane is never opened in the test herdr
+      assistantPanes: { open: async () => { throw new Error("no herdr in this test"); }, start: async () => undefined, pane: async () => null, context: async () => null, send: async () => undefined, close: async () => undefined },
       assistantSetup: { revision: REVISION, ...(options.pty === false ? { ptyAvailable: () => false } : {}), ...(options.machines ? { machines: () => options.machines! } : {}) } });
     const base = `http://127.0.0.1:${app.port}`;
     const call = (path: string, body?: unknown, headers: Record<string, string> = {}) => fetch(`${base}/api/assistant-setup${path}`, body === undefined ? { headers: { origin: base, ...headers } }

@@ -355,3 +355,7 @@
 @media (pointer: coarse) {
   .agent-work-tools > summary, .agent-work-metrics > summary, .agent-work-show-more { min-height: var(--touch-target); }
 }
+
+/* the Assistant's Sessions (AssistantSessions.tsx): a blocked pane's dot, and each PC's light header */
+.agent-panel-row.state-blocked .agent-panel-row-status { background: var(--status-blocked); }
+.agent-panel-sessions .agent-panel-section-label .machine-dot { margin: 0; }

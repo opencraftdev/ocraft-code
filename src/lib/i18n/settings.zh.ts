@@ -335,5 +335,4 @@ export const SETTINGS_ZH: Record<string, string> = {
   "This request came through Tailscale Funnel, which is open to the public internet.": "此请求经由向公共互联网开放的 Tailscale Funnel 到达。",
   "The server cannot see whether a proxy, tunnel or router makes it reachable from the internet.": "服务器无法判断代理、隧道或路由器是否使其可从互联网访问。",
   "Agent default": "代理默认",
-  "Needs input": "需要输入",
 };

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { assistantEmbed, assistantLink, assistantPanelFrame, assistantPanelOnly, isAssistantMachine, isAssistantPane, isAssistantPanelMessage, storeAssistantAddress, storedAssistantAddress } from "./assistantMode.ts";
+import { assistantLink, isAssistantMachine, isAssistantPane, storeAssistantAddress, storedAssistantAddress } from "./assistantMode.ts";
 
 describe("this device", () => {
   describe("in this browser", () => {
@@ -24,7 +24,6 @@ describe("this device", () => {
       expect(storedAssistantAddress()).toBe("");
       storeAssistantAddress("ovis-assistant.example.ts.net");
       expect(storedAssistantAddress()).toBe("ovis-assistant.example.ts.net");
-      expect(assistantPanelFrame()).toBe("https://ovis-assistant.example.ts.net/?assistant-panel=1");
       failing = true;
       expect(storedAssistantAddress()).toBe("");
     });
@@ -37,21 +36,6 @@ describe("the Assistant in Code mode", () => {
     expect(isAssistantPane("/home/opencraft/.config/ovis/assistant/agent/")).toBe(true);
     expect(isAssistantPane("/home/opencraft/repo")).toBe(false);
     expect(isAssistantPane(null)).toBe(false);
-  });
-
-  it("frames the panel only for an https tailnet address, and reads its flag", () => {
-    expect(assistantPanelFrame("vm.tail1.ts.net")).toBe("https://vm.tail1.ts.net/?assistant-panel=1");
-    expect(assistantPanelFrame("http://100.64.0.1:7317")).toBeNull();
-    expect(assistantPanelFrame("")).toBeNull();
-    expect(assistantPanelOnly("?assistant-panel=1")).toBe(true);
-    expect(assistantPanelOnly("?assistant-panel=0")).toBe(false);
-  });
-
-  it("accepts only a well-formed New chat message from the panel", () => {
-    expect(isAssistantPanelMessage({ type: "ovis-assistant-session", paneId: "w9:p1" })).toBe(true);
-    expect(isAssistantPanelMessage({ type: "ovis-assistant-session", paneId: "<script>" })).toBe(false);
-    expect(isAssistantPanelMessage({ type: "other", paneId: "w9:p1" })).toBe(false);
-    expect(isAssistantPanelMessage("w9:p1")).toBe(false);
   });
 });
 
@@ -67,18 +51,6 @@ describe("assistantLink", () => {
     expect(assistantLink("https://")).toBeNull();
   });
 });
-
-describe("assistantEmbed", () => {
-  it("embeds only an https tailnet address", () => {
-    expect(assistantEmbed("raka-devs.tail38376d.ts.net")).toBe("https://raka-devs.tail38376d.ts.net/");
-    expect(assistantEmbed("https://raka-devs.tail38376d.ts.net/")).toBe("https://raka-devs.tail38376d.ts.net/");
-    expect(assistantEmbed("http://raka-devs.tail38376d.ts.net")).toBeNull();
-    expect(assistantEmbed("https://example.com")).toBeNull();
-    expect(assistantEmbed("https://ts.net.example.com")).toBeNull();
-    expect(assistantEmbed("")).toBeNull();
-  });
-});
-
 
 describe("isAssistantMachine", () => {
   const address = "raka-devs.tail38376d.ts.net";

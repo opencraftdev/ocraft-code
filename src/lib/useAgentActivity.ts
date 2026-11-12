@@ -151,7 +151,7 @@ export function useAgentActivity(paneId: string, agent: string | null, graphShow
   const poll = usePoll(paneId, agent);
   // stable while the pane stays readable: a new subscribe each render would stop and restart the poll
   const subscribe = useCallback((listener: () => void) => visible && online ? poll.subscribe(listener) : () => undefined, [poll, visible, online]);
-  const value = useSyncExternalStore(subscribe, () => poll.value);
+  const value = useSyncExternalStore(subscribe, () => poll.value, () => poll.value);
   // a new count or an explicit Refresh asks again once the read in flight ends
   useEffect(() => { poll.nudge(); }, [poll, refresh, runningCount]);
   const [graph, setGraph] = useState<{ dagr: AgentGraph | null; failed: boolean }>({ dagr: null, failed: false });

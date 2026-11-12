@@ -335,5 +335,4 @@ export const SETTINGS_KO: Record<string, string> = {
   "This request came through Tailscale Funnel, which is open to the public internet.": "이 요청은 공개 인터넷에 열린 Tailscale Funnel을 거쳐\u00a0왔습니다.",
   "The server cannot see whether a proxy, tunnel or router makes it reachable from the internet.": "프록시, 터널 또는 라우터 때문에 인터넷에서 접속할\u00a0수\u00a0있는지 서버는 알\u00a0수\u00a0없습니다.",
   "Agent default": "에이전트 기본값",
-  "Needs input": "입력 필요",
 };

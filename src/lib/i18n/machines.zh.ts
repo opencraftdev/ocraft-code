@@ -141,4 +141,5 @@ export const MACHINES_ZH: Record<string, string> = {
   "The install finished.": "安装已完成。",
   "The setup failed": "设置失败",
   "The setup was stopped": "设置已停止",
+  "Machine": "机器",
 };

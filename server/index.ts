@@ -54,10 +54,9 @@ import { handleVoiceRequest, VoiceService } from "./voice.ts";
 import { BRIDGE_PROTOCOL } from "../shared/machines.ts";
 import { bridgeIdentity, loopbackRelay, registerBridge, relayTarget } from "./bridge.ts";
 import { handleMachineRequest, nonCanonicalPath, slowMachinePath } from "./machine-api.ts";
-import { Assistant, handleAssistantRequest, type RunScript } from "./assistant.ts";
+import { Assistant, handleAssistantRequest, machineBridge, type MachineBridge, type RunScript } from "./assistant.ts";
 import { AssistantSetup, handleAssistantSetupRequest, type AssistantSetupOptions } from "./assistant-setup.ts";
-import { AssistantSessions, OVIS_TASK_BIN, type AssistantPanes } from "./assistant-sessions.ts";
-import { machineBridge, type TaskBridge } from "./assistant-tasks.ts";
+import { AssistantSession, OVIS_TASK_BIN, type AssistantPanes } from "./assistant-sessions.ts";
 import { cliToken, handleOvisTaskRequest } from "./ovis-task.ts";
 import type { AssistantAgent } from "../shared/assistant.ts";
 import { handleSessionHistoryRequest, handleSessionResumeRequest, SESSION_HISTORY_PATH, SESSION_RESUME_PATH } from "./session-history-routes.ts";
@@ -218,10 +217,10 @@ export function createServer(
     assistantRun?: RunScript;
     /** the Assistant's own agent CLI; unset, OVIS_ASSISTANT_AGENT (the install script's answer), else Claude Code */
     assistantAgent?: AssistantAgent;
-    /** how Assistant sessions open, read and close their pane (server/assistant-sessions.ts); unset, herdr's. Tests pass their own. */
+    /** how the Assistant session opens, checks and messages its pane (server/assistant-sessions.ts); unset, herdr's. Tests pass their own. */
     assistantPanes?: AssistantPanes;
-    /** how tasks reach a machine's bridge (server/assistant-tasks.ts); unset, through Remote PCs. Tests pass their own. */
-    assistantBridge?: TaskBridge;
+    /** how ovis-task reaches a machine's bridge (server/assistant.ts); unset, through Remote PCs. Tests pass their own. */
+    assistantBridge?: MachineBridge;
     /** how a VM setup from the setup page runs (server/assistant-setup.ts); unset, over SSH on this server's PTY host. Tests pass their own. */
     assistantSetup?: AssistantSetupOptions;
   } = {},
@@ -275,20 +274,18 @@ export function createServer(
   const browserSnapshot = <S extends SessionSnapshot>(snapshot: S): S => options.bridgeOnly ? snapshot : snapshotWithoutHiddenTokens(herdrSidebar.get(), snapshot);
   const core = createCore({ options: { ...options, stateDir, openCodeState, orderSequence }, devices, preferences, usage, usageLogin, browserSnapshot, TYPED_SETTLE_MS, KEY_SETTLE_MS, SUBMIT_DEADLINE_MS, SUBMIT_DELAY_MS, DRAFT_CLEAR_WAIT_MS, DRAFT_CLEAR_POLL_MS });
   const { sidecar, serialize, push, logPushError, omo, claudeAgents, opencodeAgents, plans, clientSnapshot, machines, broadcastAll, collector, queueFirstMessage } = core;
-  // the Assistant VM's machines and projects: only on the VM, and only beside a PC manager to watch
+  // the Assistant VM's machines and its one session: only on the VM, and only beside a PC manager to watch
   // the Assistant's own pane reaches this server's ovis-task routes on loopback with a token only it is given
   const ovisTaskToken = assistant && machines ? cliToken(stateDir) : null;
   const assistantAgent = options.assistantAgent ?? (process.env["OVIS_ASSISTANT_AGENT"] === "codex" ? "codex" : "claude");
-  const assistantSessions = ovisTaskToken === null ? undefined : new AssistantSessions(stateDir, assistantAgent, () => ({
+  const assistantSession = ovisTaskToken === null ? undefined : new AssistantSession(stateDir, assistantAgent, () => ({
     OVIS_TASK_URL: `http://127.0.0.1:${server.port}`,
     OVIS_TASK_TOKEN: ovisTaskToken,
     OVIS_BUN: process.execPath,
     PATH: `${OVIS_TASK_BIN}${delimiter}${process.env["PATH"] ?? ""}`,
   }), options.assistantPanes);
-  const assistantService = assistant && machines ? new Assistant(stateDir, machines, options.assistantRun ?? ((machine, script, timeoutMs) => machines.runScript(machine.id, script, timeoutMs)), { sessions: assistantSessions, bridge: options.assistantBridge ?? machineBridge(machines) }) : null;
-  // a task's pane alerts under the task's title, in place of the pane's (same tag, same policy)
+  const assistantService = assistant && machines ? new Assistant(stateDir, machines, options.assistantRun ?? ((machine, script, timeoutMs) => machines.runScript(machine.id, script, timeoutMs)), { session: assistantSession, bridge: options.assistantBridge ?? machineBridge(machines) }) : null;
   const assistantSetup = new AssistantSetup(stateDir, { ...(machines ? { machines: () => machines.linuxMachines() } : {}), ...options.assistantSetup });
-  if (assistantService) push.describeTasks((machineId, paneId) => assistantService.tasks.paneTask(machineId, paneId));
   // read finishes are kept for the herdr run each PC told this server it is in
   const seen = new SeenStore(stateDir, () => machines?.finishEpochs() ?? new Map());
   // started after createCore's Node probe (server/pty/sidecar.ts), which can hold the thread up to 3 s: that wait
@@ -684,6 +681,8 @@ export function createServer(
 
     websocket: core.websocket,
   });
+  // the Assistant's keep-alive: its pane is checked now (opened the first time), then every minute
+  assistantSession?.start();
 
   const requestLog = new RequestLog(stateDir);
 

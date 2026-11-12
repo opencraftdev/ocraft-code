@@ -1,76 +1,49 @@
 import { describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { AssistantProject, AssistantState } from "../shared/assistant.ts";
-import type { RunScript } from "./assistant.ts";
+import type { Machine, MachineEvent } from "../shared/machines.ts";
+import type { SessionSnapshot } from "../shared/protocol.ts";
+import { Assistant, AssistantError, briefLabel, pastedBrief, type MachineBridge, type RunScript } from "./assistant.ts";
 import type { AssistantPanes } from "./assistant-sessions.ts";
 import type { HerdrMachineProfile } from "./herdr-profiles.ts";
 import { createServer } from "./index.ts";
 import { cliRequest } from "./ovis-task-cli.ts";
-import { gitArgumentFault } from "./ovis-task.ts";
 
 /**
- * The ovis-task routes against a machine that is this test's own shell: every read script runs
- * there for real, in a temporary folder. No herdr is touched: health checks get a fixed answer and
- * Assistant panes are fakes.
+ * The ovis-task routes. No herdr is touched: health checks get a fixed answer, the Assistant's own
+ * pane is a fake, and the delegation commands run against a fake machine and a fake bridge.
  */
 const PROFILE: HerdrMachineProfile = { id: "ovis-task-test", label: "Test PC", enabled: true, target: { destination: "ovis-task-test.invalid" } };
-const run: RunScript = async (_machine, script) => {
-  if (script.includes("status server")) return "herdr\nclaude\n";
-  const child = Bun.spawnSync(["sh", "-c", script], { stdout: "pipe", stderr: "pipe" });
-  if (child.exitCode !== 0) throw new Error(child.stderr.toString());
-  return child.stdout.toString();
+const panes: AssistantPanes = {
+  open: async () => { throw new Error("no herdr in this test"); }, start: async () => undefined, pane: async () => null,
+  context: async () => null, send: async () => undefined, close: async () => undefined,
 };
-const panes: AssistantPanes = { open: async () => { throw new Error("no herdr in this test"); }, read: async () => ({ turns: [] }), close: async () => undefined, alive: async () => true };
 
-async function fixture(options: { assistant?: boolean; projects?: unknown } = {}) {
+async function fixture(options: { assistant?: boolean } = {}) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "ovis-task-")));
   const stateDir = join(root, "state");
-  if (options.projects) {
-    mkdirSync(join(stateDir, "assistant"), { recursive: true });
-    writeFileSync(join(stateDir, "assistant", "projects.json"), JSON.stringify(options.projects));
-  }
-  const project = join(root, "repo");
-  mkdirSync(join(project, "src"), { recursive: true });
-  for (const args of [["init", "-q"], ["config", "user.email", "t@example.invalid"], ["config", "user.name", "T"]]) Bun.spawnSync(["git", ...args], { cwd: project });
-  writeFileSync(join(project, "src", "a.ts"), "export const answer = 42;\n");
-  Bun.spawnSync(["git", "add", "."], { cwd: project });
-  Bun.spawnSync(["git", "commit", "-q", "-m", "first"], { cwd: project });
-  writeFileSync(join(root, "secret.txt"), "outside the project\n");
-  symlinkSync(join(root, "secret.txt"), join(project, "link-out"));
-  symlinkSync(root, join(project, "dir-out"));
-
-  const app = createServer({ port: 0, hostname: "127.0.0.1", token: "", stateDir, tailscaleOwner: null, assistant: options.assistant ?? true, assistantRun: run, assistantPanes: panes, herdrProfiles: async () => [PROFILE] });
+  const app = createServer({ port: 0, hostname: "127.0.0.1", token: "", stateDir, tailscaleOwner: null, assistant: options.assistant ?? true, assistantRun: async () => "herdr\nclaude\n", assistantPanes: panes, herdrProfiles: async () => [PROFILE] });
   const base = `http://127.0.0.1:${app.port}`;
-  const state = async () => (await (await fetch(`${base}/api/assistant`)).json()) as AssistantState;
   const close = () => { app.stop(); rmSync(root, { recursive: true, force: true }); };
-  if (options.assistant === false) return { root, base, close, token: "", task: async () => new Response(null), project };
-  const deadline = Date.now() + 5000;
-  while ((await state()).machines.length === 0 && Date.now() < deadline) await Bun.sleep(20);
-  const machine = (await state()).machines[0]!;
-  if (!options.projects) {
-    const added = await fetch(`${base}/api/assistant/projects`, { method: "POST", headers: { "content-type": "application/json", origin: base }, body: JSON.stringify({ machine: machine.id, path: project }) });
-    expect(added.status).toBe(201);
-  }
+  if (options.assistant === false) return { base, close, token: "", task: async () => new Response(null) };
   const token = (JSON.parse(readFileSync(join(stateDir, "assistant", "cli-token.json"), "utf8")) as { token: string }).token;
   const task = (name: string, body?: unknown, headers: Record<string, string> = {}) => fetch(`${base}/api/ovis-task/${name}`, {
     method: body === undefined ? "GET" : "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...headers },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
-  return { root, base, close, token, task, project, machine };
+  return { base, close, token, task };
 }
 
-const answer = async (response: Response) => ({ status: response.status, ...(await response.json()) as { output?: string; truncated?: boolean; error?: { code: string } } });
 const code = async (response: Response) => ({ status: response.status, code: ((await response.json()) as { error?: { code: string } }).error?.code });
 
 describe("ovis-task routes", () => {
   it("are not there on an Ovis that is not the Assistant VM", async () => {
     const { base, close } = await fixture({ assistant: false });
     try {
-      expect((await fetch(`${base}/api/ovis-task/projects`)).status).toBe(404);
+      expect((await fetch(`${base}/api/ovis-task/machines`)).status).toBe(404);
     } finally { close(); }
   });
 
@@ -78,151 +51,176 @@ describe("ovis-task routes", () => {
     const { base, token, task, close } = await fixture();
     try {
       expect(token).toMatch(/^[0-9a-f]{64}$/);
-      expect((await fetch(`${base}/api/ovis-task/projects`)).status).toBe(401);
-      expect((await fetch(`${base}/api/ovis-task/projects`, { headers: { authorization: "Bearer wrong" } })).status).toBe(401);
-      expect((await task("projects")).status).toBe(200);
+      expect((await fetch(`${base}/api/ovis-task/machines`)).status).toBe(401);
+      expect((await fetch(`${base}/api/ovis-task/machines`, { headers: { authorization: "Bearer wrong" } })).status).toBe(401);
+      expect((await task("machines")).status).toBe(200);
       for (const header of [{ "x-forwarded-for": "100.64.0.9" }, { "x-forwarded-proto": "https" }, { "tailscale-user-login": "someone@example.com" }, { origin: base }] as Record<string, string>[]) {
-        expect(await code(await task("projects", undefined, header))).toEqual({ status: 403, code: "loopback_only" });
+        expect(await code(await task("machines", undefined, header))).toEqual({ status: 403, code: "loopback_only" });
       }
     } finally { close(); }
   });
 
-  it("lists projects and an empty task list, and offers no way to add a project", async () => {
-    const { task, project, close } = await fixture();
+  it("offers machines, sessions, peek, send and open, and nothing of projects or tasks", async () => {
+    const { task, close } = await fixture();
     try {
-      expect(await (await task("projects")).json()).toEqual([{ id: "repo", path: project, mergeMode: "local", defaultAgent: "claude", machine: "Test PC" }]);
-      expect(await (await task("list")).json()).toEqual([]);
-      const [listed] = await (await task("machines")).json() as { name: string; folders: string[] }[];
-      expect(listed?.name).toBe("Test PC");
-      expect(Array.isArray(listed?.folders)).toBe(true);
+      expect(Array.isArray(await (await task("machines")).json())).toBe(true);
       expect((await task("machines", {})).status).toBe(405);
       expect(Array.isArray(await (await task("sessions")).json())).toBe(true);
       expect(await code(await task("sessions?machine=Nope"))).toEqual({ status: 404, code: "unknown_machine" });
       expect(await code(await task("peek", { machine: "Nope", pane: "p1" }))).toEqual({ status: 404, code: "unknown_machine" });
+      expect(await code(await task("open", { machine: "Nope", folder: "~/x", brief: "b" }))).toEqual({ status: 404, code: "unknown_machine" });
       expect((await task("send")).status).toBe(405);
-      expect((await task("projects", { id: "x", path: "/" })).status).toBe(405);
-      expect(await code(await task("create", {}))).toEqual({ status: 404, code: "unknown_project" });
-      expect(await code(await task("create", { project: "repo", title: "Fix it", brief: "" }))).toEqual({ status: 400, code: "invalid_brief" });
-      expect(await code(await task("list?status=nope"))).toEqual({ status: 400, code: "invalid_status" });
-      // the Assistant never approves: only the user does, in the app
-      expect(await code(await task("approve", { id: "1" }))).toEqual({ status: 403, code: "ui_only" });
-    } finally { close(); }
-  });
-
-  it("cannot approve a task with the CLI token, through its own routes or the app's", async () => {
-    const { base, token, task, close } = await fixture();
-    try {
-      expect(await code(await task("approve", { id: "1" }))).toEqual({ status: 403, code: "ui_only" });
-      expect(cliRequest(["approve", "1"])).toEqual({ refused: "ovis-task approve is refused: only the user approves a task, in the app" });
-      // the app's Approve takes a browser page's Origin, which ovis-task never sends
-      for (const action of ["approve", "dismiss"]) {
-        const response = await fetch(`${base}/api/assistant/tasks/1/${action}`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: "{}" });
-        expect(await code(response)).toEqual({ status: 403, code: "browser_only" });
+      for (const gone of ["projects", "list", "read", "grep", "git", "create", "show", "answer", "cancel", "approve"]) {
+        expect({ gone, status: (await task(gone, {})).status }).toEqual({ gone, status: 404 });
       }
     } finally { close(); }
-  });
-
-  it("reads inside the project and refuses every way out of it", async () => {
-    const { task, close } = await fixture();
-    try {
-      expect(await answer(await task("read", { project: "repo", path: "src/a.ts" }))).toEqual({ status: 200, output: "export const answer = 42;\n", truncated: false });
-      expect(await answer(await task("read", { project: "repo", path: "src/../src/a.ts" }))).toMatchObject({ status: 200, output: "export const answer = 42;\n" });
-      for (const [path, refusal] of [
-        ["../secret.txt", "outside_project"],
-        ["src/../../secret.txt", "outside_project"],
-        ["link-out", "outside_project"],
-        ["dir-out/secret.txt", "outside_project"],
-        ["/etc/passwd", "absolute_path"],
-        ["~/secret.txt", "absolute_path"],
-        ["src/missing.ts", "not_found"],
-        ["src", "not_a_file"],
-        ["src/a.ts\nx", "invalid_path"],
-      ] as const) {
-        expect({ path, ...(await code(await task("read", { project: "repo", path }))) }).toMatchObject({ path, code: refusal });
-      }
-      expect(await code(await task("read", { project: "nope", path: "src/a.ts" }))).toEqual({ status: 404, code: "unknown_project" });
-    } finally { close(); }
-  });
-
-  it("greps inside the project only", async () => {
-    const { task, close } = await fixture();
-    try {
-      expect(await answer(await task("grep", { project: "repo", pattern: "answer" }))).toMatchObject({ status: 200, output: "./src/a.ts:1:export const answer = 42;\n" });
-      expect(await answer(await task("grep", { project: "repo", pattern: "answer", path: "src" }))).toMatchObject({ output: "./src/a.ts:1:export const answer = 42;\n" });
-      // a symlinked folder below is not followed, and the secret it leads to is not read
-      expect((await answer(await task("grep", { project: "repo", pattern: "outside" }))).output).toBe("");
-      expect((await code(await task("grep", { project: "repo", pattern: "outside", path: ".." }))).code).toBe("outside_project");
-      expect((await code(await task("grep", { project: "repo", pattern: "outside", path: "dir-out" }))).code).toBe("outside_project");
-      expect((await code(await task("grep", { project: "repo", pattern: "x", path: "/tmp" }))).code).toBe("absolute_path");
-      expect((await code(await task("grep", { project: "repo", pattern: "" }))).code).toBe("invalid_pattern");
-    } finally { close(); }
-  });
-
-  it("runs only git log, diff, status and show, without options that write, run or leave the repository", async () => {
-    const { task, root, close } = await fixture();
-    try {
-      expect(await answer(await task("git", { project: "repo", command: "log", args: ["--oneline"] }))).toMatchObject({ status: 200 });
-      expect((await answer(await task("git", { project: "repo", command: "log", args: ["--format=%s"] }))).output).toBe("first\n");
-      expect((await answer(await task("git", { project: "repo", command: "show", args: ["HEAD:src/a.ts"] }))).output).toBe("export const answer = 42;\n");
-      expect((await task("git", { project: "repo", command: "status", args: ["--short"] })).status).toBe(200);
-      for (const command of ["push", "config", "-c", "checkout"]) {
-        expect((await code(await task("git", { project: "repo", command, args: [] }))).code).toBe("invalid_git_command");
-      }
-      const written = join(root, "written");
-      for (const args of [
-        [`--output=${written}`], ["--output", written], [`--out=${written}`], ["-c", "core.pager=touch x"], ["-C", root],
-        ["--exec=touch x"], ["--upload-pack=touch x"], ["--ext-diff"], ["--no-index", "../secret.txt", "src/a.ts"],
-        ["-O/etc/passwd"], ["-pO/etc/passwd"], [`--git-dir=${root}`], [`--work-tree=${root}`], ["--textconv"],
-      ]) {
-        expect({ args, ...(await code(await task("git", { project: "repo", command: "diff", args }))) }).toMatchObject({ args, code: "invalid_git_argument" });
-      }
-      expect(() => readFileSync(written)).toThrow();
-    } finally { close(); }
-  });
-
-  it("refuses a project whose machine left herdr's catalog, and one removed", async () => {
-    const stray: AssistantProject = { id: "stray", machine: "not-a-machine", path: "/tmp", mergeMode: "local", defaultAgent: "claude" };
-    const { task, close } = await fixture({ projects: [stray] });
-    try {
-      expect(await code(await task("read", { project: "stray", path: "x" }))).toEqual({ status: 404, code: "unknown_machine" });
-    } finally { close(); }
-    const second = await fixture();
-    try {
-      expect((await fetch(`${second.base}/api/assistant/projects/repo`, { method: "DELETE", headers: { origin: second.base } })).status).toBe(200);
-      expect(await code(await second.task("read", { project: "repo", path: "src/a.ts" }))).toEqual({ status: 404, code: "unknown_project" });
-    } finally { second.close(); }
   });
 
   it("is what bin/ovis-task asks, with the pane's environment", async () => {
     const { base, token, close } = await fixture();
     try {
-      const child = Bun.spawn([join(import.meta.dir, "..", "bin", "ovis-task"), "read", "repo", "src/a.ts"], {
+      const child = Bun.spawn([join(import.meta.dir, "..", "bin", "ovis-task"), "machines"], {
         env: { ...process.env, OVIS_BUN: process.execPath, OVIS_TASK_URL: base, OVIS_TASK_TOKEN: token }, stdout: "pipe", stderr: "pipe",
       });
-      expect(await new Response(child.stdout).text()).toBe("export const answer = 42;\n");
+      expect(JSON.parse(await new Response(child.stdout).text())).toBeArray();
       expect(await child.exited).toBe(0);
-      const refused = Bun.spawn([join(import.meta.dir, "..", "bin", "ovis-task"), "read", "repo", "../secret.txt"], {
+      const refused = Bun.spawn([join(import.meta.dir, "..", "bin", "ovis-task"), "peek", "Nope", "p1"], {
         env: { ...process.env, OVIS_BUN: process.execPath, OVIS_TASK_URL: base, OVIS_TASK_TOKEN: token }, stdout: "pipe", stderr: "pipe",
       });
       expect(await refused.exited).toBe(1);
-      expect(await new Response(refused.stderr).text()).toContain("outside_project");
+      expect(await new Response(refused.stderr).text()).toContain("unknown_machine");
     } finally { close(); }
   });
 });
 
-describe("ovis-task's command line and git checks", () => {
+describe("ovis-task's command line", () => {
   it("makes a request of each command, and a usage line of anything else", () => {
-    expect(cliRequest(["projects"])).toEqual({ path: "projects" });
     expect(cliRequest(["machines"])).toEqual({ path: "machines" });
     expect("usage" in cliRequest(["machines", "x"])).toBe(true);
-    expect(cliRequest(["grep", "repo", "TODO", "src"])).toEqual({ path: "grep", body: { project: "repo", pattern: "TODO", path: "src" } });
-    expect(cliRequest(["git", "repo", "log", "-5"])).toEqual({ path: "git", body: { project: "repo", command: "log", args: ["-5"] } });
-    expect("usage" in cliRequest(["read", "repo"])).toBe(true);
-    expect("refused" in cliRequest(["approve", "1"])).toBe(true);
-    expect("usage" in cliRequest(["merge", "1"])).toBe(true);
+    expect(cliRequest(["sessions", "Air"])).toEqual({ path: "sessions?machine=Air" });
+    expect(cliRequest(["send", "Air", "w1:p1", "run", "the", "tests"])).toEqual({ path: "send", body: { machine: "Air", pane: "w1:p1", message: "run the tests" } });
+    expect(cliRequest(["open", "Air", "~/app", "--agent", "codex", "--create", "Fix", "the", "login"])).toEqual({ path: "open", body: { machine: "Air", folder: "~/app", brief: "Fix the login", agent: "codex", create: true } });
+    expect(cliRequest(["open", "Air", "~/app", "Fix it"])).toEqual({ path: "open", body: { machine: "Air", folder: "~/app", brief: "Fix it", create: false } });
+    expect("usage" in cliRequest(["open", "Air", "~/app"])).toBe(true);
+    expect("usage" in cliRequest(["open", "Air", "~/app", "--nope", "x"])).toBe(true);
+    for (const gone of ["projects", "list", "create", "read", "approve"]) expect("usage" in cliRequest([gone, "x"])).toBe(true);
+  });
+});
+
+/** sessions, peek, send and open against a fake machine (this test's shell, with a home of its own) and a fake bridge */
+function delegation(options: { maxRunning?: number } = {}) {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "ovis-delegate-")));
+  const home = join(root, "home");
+  mkdirSync(join(home, "code", "app"), { recursive: true });
+  const stateDir = join(root, "state");
+  const panes: SessionSnapshot["panes"] = [];
+  const snapshot = { panes, workspaces: [{ workspace_id: "w1", label: "app" }], tabs: [], agents: [], layouts: [], protocol: 22, version: "0" } as unknown as SessionSnapshot;
+  const machine: Machine = { id: "m1", herdr_profile_id: "p1", name: "Laptop", kind: "ssh", target: { destination: "laptop.invalid" }, enabled: true, state: "connected", error: null, snapshot };
+  const pane = (pane_id: string, agent_status: string, agent: string | null = "claude") => panes.push({ pane_id, workspace_id: "w1", tab_id: "t1", terminal_id: pane_id, focused: false, revision: 0, agent, agent_status, cwd: join(home, "code", "app") } as unknown as SessionSnapshot["panes"][number]);
+  const calls: { path: string; body?: unknown; query?: Record<string, string> }[] = [];
+  let made = 0;
+  const bridge: MachineBridge = async (_machineId, path, request = {}) => {
+    calls.push({ path, ...(request.body === undefined ? {} : { body: request.body }), ...(request.query ? { query: request.query } : {}) });
+    if (path === "workspace/create") { made += 1; pane(`w${made + 1}:p1`, "idle"); return { workspace_id: `w${made + 1}`, pane_id: `w${made + 1}:p1`, agent_started: true }; }
+    if (path === "pane/conversation") return { source: "claude-transcript", turns: [{ role: "assistant", parts: [{ kind: "text", text: "all green" }] }] };
+    return { ok: true };
+  };
+  const run: RunScript = async (_machine, script) => {
+    if (script.includes("status server")) return "herdr\nclaude\n";
+    const child = Bun.spawnSync(["sh", "-c", script], { env: { ...process.env, HOME: home }, stdout: "pipe", stderr: "pipe" });
+    if (child.exitCode !== 0) throw new Error(child.stderr.toString());
+    return child.stdout.toString();
+  };
+  let listener: ((event: MachineEvent) => void) | undefined;
+  const assistant = new Assistant(stateDir, { list: () => [machine], subscribe: (next) => { listener = next; return () => {}; }, retryNow: () => {} }, run, { bridge, timer: () => () => {} });
+  listener!({ type: "machines", machines: [machine] });
+  if (options.maxRunning) assistant.setMachine("m1", { maxRunning: options.maxRunning });
+  const refusal = (promise: Promise<unknown>) => promise.then(() => null, (error: unknown) => error instanceof AssistantError ? error.code : String(error));
+  return { assistant, home: realpathSync(home), root, stateDir, calls, pane, panes, refusal, done: () => { assistant.stop(); rmSync(root, { recursive: true, force: true }); } };
+}
+
+describe("delegating to herdr sessions", () => {
+  it("lists, peeks and sends to a session, never to a working agent or a shell", async () => {
+    const d = delegation();
+    try {
+      d.pane("w1:p1", "idle");
+      d.pane("w1:p2", "working");
+      d.pane("w1:p3", "unknown", null);
+      const [listed] = d.assistant.herdrSessions() as { machine: string; workspaces: { panes: { pane: string; status: string }[] }[] }[];
+      expect(listed!.workspaces[0]!.panes.map((pane) => [pane.pane, pane.status])).toEqual([["w1:p1", "idle"], ["w1:p2", "working"], ["w1:p3", "unknown"]]);
+      expect(await d.assistant.peekSession({ machine: "Laptop", pane: "w1:p1" })).toMatchObject({ pane: "w1:p1", turns: [{ role: "assistant", text: "all green" }] });
+      expect(await d.assistant.sendToSession({ machine: "Laptop", pane: "w1:p1", message: "run the tests" })).toEqual({ ok: true, machine: "Laptop", pane: "w1:p1" });
+      expect(d.calls.slice(-2)).toEqual([
+        { path: "pane/input", body: { pane_id: "w1:p1", text: pastedBrief("run the tests") } },
+        { path: "pane/keys", body: { pane_id: "w1:p1", keys: ["Enter"] } },
+      ]);
+      expect(await d.refusal(d.assistant.sendToSession({ machine: "Laptop", pane: "w1:p2", message: "x" }))).toBe("pane_busy");
+      expect(await d.refusal(d.assistant.sendToSession({ machine: "Laptop", pane: "w1:p3", message: "x" }))).toBe("no_agent");
+      expect(await d.refusal(d.assistant.sendToSession({ machine: "Laptop", pane: "w9:p9", message: "x" }))).toBe("unknown_pane");
+    } finally { d.done(); }
   });
 
-  it("lets ordinary options through", () => {
-    for (const arg of ["--oneline", "--stat", "-5", "-p", "--name-only", "--format=%h %s", "HEAD~2..HEAD", "--", "src/a.ts", "--no-ext-diff"]) expect({ arg, fault: gitArgumentFault(arg) }).toEqual({ arg, fault: false });
+  it("opens a session in a folder under home with a full-auto agent, named from the brief, and pastes the brief", async () => {
+    const d = delegation();
+    try {
+      const brief = "Fix the login form so valid emails pass\nand add a test";
+      const opened = await d.assistant.openSession({ machine: "Laptop", folder: "~/code/app", brief, agent: "codex" });
+      expect(opened).toMatchObject({ ok: true, pane: "w2:p1", folder: join(d.home, "code", "app"), agent: "codex" });
+      // the bridge adds the full-auto flag (agent-launch.ts SKIP_PERMISSIONS); focus is never asked for
+      expect(d.calls).toEqual([
+        { path: "workspace/create", body: { cwd: join(d.home, "code", "app"), label: "Fix the login form so", agent: { kind: "codex" } } },
+        { path: "pane/input", body: { pane_id: "w2:p1", text: pastedBrief(brief) } },
+        { path: "pane/keys", body: { pane_id: "w2:p1", keys: ["Enter"] } },
+      ]);
+      expect(JSON.stringify(d.calls)).not.toMatch(/focus|takeover/);
+      // remembered as the Assistant's, privately
+      const [listed] = d.assistant.herdrSessions("Laptop") as { workspaces: { panes: { pane: string; assistant?: true }[] }[] }[];
+      expect(listed!.workspaces.flatMap((workspace) => workspace.panes).find((pane) => pane.pane === "w2:p1")?.assistant).toBe(true);
+      expect(JSON.parse(readFileSync(join(d.stateDir, "assistant", "opened.json"), "utf8"))).toMatchObject([{ machine: "m1", pane: "w2:p1" }]);
+      expect(statSync(join(d.stateDir, "assistant", "opened.json")).mode & 0o777).toBe(0o600);
+      expect(briefLabel("One two three four five six")).toBe("One two three four five");
+    } finally { d.done(); }
+  });
+
+  it("refuses a folder outside home, home itself, a missing one without --create, and a path with ..", async () => {
+    const d = delegation();
+    try {
+      mkdirSync(join(d.root, "outside"));
+      symlinkSync(join(d.root, "outside"), join(d.home, "link-out"));
+      const open = (folder: string, create = false) => d.refusal(d.assistant.openSession({ machine: "Laptop", folder, brief: "Do it", create }));
+      for (const [folder, expected] of [
+        ["~", "invalid_path"], ["~/", "home"], [d.home, "home"], [join(d.root, "outside"), "outside_home"], ["~/link-out", "outside_home"], ["/", "outside_home"],
+        ["~/missing", "missing"], ["~/code/../..", "invalid_path"], ["relative/path", "invalid_path"], ["~other/x", "invalid_path"],
+      ] as const) expect({ folder, code: await open(folder) }).toEqual({ folder, code: expected });
+      // --create makes nothing outside home, not even through a symlink
+      expect(await open(join(d.root, "outside", "new"), true)).toBe("outside_home");
+      expect(await open("~/link-out/new", true)).toBe("outside_home");
+      expect(existsSync(join(d.root, "outside", "new"))).toBe(false);
+      expect(await d.refusal(d.assistant.openSession({ machine: "Laptop", folder: "~/code/app", brief: "" }))).toBe("invalid_brief");
+      expect(await d.refusal(d.assistant.openSession({ machine: "Laptop", folder: "~/code/app", brief: "x", agent: "gemini" }))).toBe("invalid_agent");
+      expect(d.calls).toEqual([]);
+    } finally { d.done(); }
+  });
+
+  it("with --create, makes the folder and git inits it", async () => {
+    const d = delegation();
+    try {
+      expect(await d.assistant.openSession({ machine: "Laptop", folder: "~/new/project", brief: "Start it", create: true })).toMatchObject({ folder: join(d.home, "new", "project") });
+      expect(existsSync(join(d.home, "new", "project", ".git"))).toBe(true);
+      // an existing repository is left as it is
+      expect(await d.assistant.openSession({ machine: "Laptop", folder: "~/new/project", brief: "Again", create: true })).toMatchObject({ ok: true });
+    } finally { d.done(); }
+  });
+
+  it("refuses past the machine's Max running sessions the Assistant opened that work", async () => {
+    const d = delegation({ maxRunning: 2 });
+    try {
+      d.pane("w1:p1", "working");
+      await d.assistant.openSession({ machine: "Laptop", folder: "~/code/app", brief: "One" });
+      await d.assistant.openSession({ machine: "Laptop", folder: "~/code/app", brief: "Two" });
+      // a working pane the user opened does not count; the two just opened do
+      expect(await d.refusal(d.assistant.openSession({ machine: "Laptop", folder: "~/code/app", brief: "Three" }))).toBe("limit_reached");
+      expect(d.calls.filter((call) => call.path === "workspace/create")).toHaveLength(2);
+    } finally { d.done(); }
   });
 });

@@ -189,9 +189,9 @@ async function remoteFixture(options: { bootId?: string; now?: () => number } = 
   };
 }
 
-// An Assistant task's pane is such a remote pane (server/assistant-tasks.ts): its Needs you (blocked)
+// A pane the Assistant delegated to is such a remote pane: its Needs you (blocked)
 // and Ready (done) reach web push here, under each device's notify policy (server/push.ts).
-it("tells web push a remote pane's status, as it tells the Assistant's tasks", async () => {
+it("tells web push a remote pane's status, as it tells the Assistant", async () => {
   const f = await remoteFixture();
   const told: string[] = [];
   f.manager.subscribe((event) => { if (event.type === "machine-message" && event.message.type === "pane-status") told.push(`${event.machine_id}:${event.message.agent_status}`); });

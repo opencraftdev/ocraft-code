@@ -1,6 +1,6 @@
 # Assistant delegation and long-lived session
 
-Status: approved
+Status: done
 Created: 2026-11-12 16:22
 Follows: [Assistant](20261111-2112-assistant.md); replaces its projects, tasks and sessions parts.
 
@@ -56,3 +56,14 @@ panel shows its Environment and Context plus every agent session it can delegate
 ## Open questions
 
 - None yet.
+
+## As built
+
+- Restart Assistant sends `/clear` (Claude Code) or `/new` (Codex) to the Assistant's pane through
+  the composer's own send path, only while the agent is not working: same workspace, fresh
+  conversation. There is no server restart route.
+- The Sessions section's per-machine rows carry the connection dot only; the Start herdr fix is not
+  shown there (the VM still watches herdr, and `ovis-task machines` reports it).
+- Codex is compacted with plain `/compact` (no keep instructions). A 30-minute cooldown separates
+  compactions, so a usage figure not yet updated after one cannot trigger the next.
+- Nothing frames the VM any more: its frame-ancestors and frame-src allowances were removed.

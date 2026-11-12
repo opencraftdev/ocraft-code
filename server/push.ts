@@ -184,11 +184,6 @@ export interface PushService {
   onEnded(paneId: string, machineId?: string): Promise<void>;
   /** The shared mute list changed: an alert waiting for a pane now muted is called off. */
   mutesChanged(): void;
-  /**
-   * The Assistant's task a pane runs (server/assistant-tasks.ts paneTask): that pane's alert is titled by
-   * the task instead of the pane. Same tag, same policy: it replaces the pane's alert, never adds one.
-   */
-  describeTasks(lookup: (machineId: string, paneId: string) => { id: string; title: string } | undefined): void;
   /** Resolves once every alert scheduled so far went out or was called off (tests wait). */
   settled(): Promise<void>;
 }
@@ -283,11 +278,6 @@ export function statusMessage(paneId: string, title: string, status: AgentStatus
   return { pane_id: paneId, title, body: statusNotificationBody(status), tag: paneNotificationTag(paneId) };
 }
 
-/** A task's pane at rest or waiting: "Task #12 needs you: <title>", the pane's own title below it. */
-export function taskStatusMessage(paneId: string, task: { id: string; title: string }, paneTitle: string, status: AgentStatus): PushPayload {
-  return { pane_id: paneId, title: `Task #${task.id} ${status === "blocked" ? "needs you" : "ready"}: ${task.title}`, body: paneTitle, tag: paneNotificationTag(paneId) };
-}
-
 export function endedMessage(paneId: string, title: string): PushPayload {
   return { pane_id: paneId, title, body: ENDED_NOTIFICATION_BODY, tag: paneNotificationTag(paneId) };
 }
@@ -314,7 +304,6 @@ export function createPushService(options: PushServiceOptions): PushService {
   let stale = false;
   const lastStatus = new Map<string, AgentStatus>();
   const titles = new Map<string, string>();
-  let taskOf: (machineId: string, paneId: string) => { id: string; title: string } | undefined = () => undefined;
   // the workspace a pane was last seen in: an alert names it, so the tap of an ended pane can open
   // its workspace (src/lib/deepLink.ts resolveLink) once herdr has dropped the pane
   const workspaces = new Map<string, string>();
@@ -871,9 +860,7 @@ export function createPushService(options: PushServiceOptions): PushService {
           const current = store().get(subscription.endpoint);
           return current && current.device_id === subscription.device_id ? [current] : [];
         });
-        const task = taskOf(machineId, paneId);
-        const message = task ? taskStatusMessage(paneId, task, title, status) : statusMessage(paneId, title, status);
-        await broadcast({ ...message, ...where(key, machineId), tag: paneNotificationTag(paneId, machineId) }, status === "blocked" ? "high" : "normal", live);
+        await broadcast({ ...statusMessage(paneId, title, status), ...where(key, machineId), tag: paneNotificationTag(paneId, machineId) }, status === "blocked" ? "high" : "normal", live);
       });
     },
 
@@ -904,8 +891,6 @@ export function createPushService(options: PushServiceOptions): PushService {
     async settled() {
       while (inFlight.size > 0) await Promise.all([...inFlight]);
     },
-
-    describeTasks(lookup) { taskOf = lookup; },
   };
 }
 
