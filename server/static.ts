@@ -95,7 +95,7 @@ function cacheControlFor(pathname: string): string {
  * - `form-action 'self'`: every form is submitted by script, but a form that ever grows
  *   an action must not post this PC's credentials somewhere else.
  * - `frame-ancestors 'none'`: nothing frames the app itself, except the Assistant VM's page from
- *   loopback (withAssistantFraming).
+ *   loopback or its own tailnet (withAssistantFraming).
  */
 const CSP_DIRECTIVES = [
   "default-src 'self'",
@@ -133,19 +133,25 @@ export function contentSecurityPolicy(origin?: string, assistantVm = process.env
   const policy = host === null || !FRAMEABLE_HOST.test(host)
     ? CONTENT_SECURITY_POLICY
     : CSP_DIRECTIVES.map((directive) => directive.startsWith("frame-src ") ? `${directive} http://${host}:* https://${host}:*` : directive).join("; ");
-  return withAssistantFraming(policy, assistantVm);
+  return withAssistantFraming(policy, assistantVm, host);
 }
 
 /**
  * Assistant mode on an Ovis that is not the VM embeds the VM's page (src/components/AssistantView.tsx),
  * which install-assistant.sh always serves at an `https://<name>.<tailnet>.ts.net` address: any Ovis may
  * frame a tailnet HTTPS page. The Assistant VM (OVIS_ASSISTANT=1) lets a page served from a computer's
- * own loopback frame it, the Ovis on the user's PC (the Mac app's window is one), and nothing else.
- * ponytail: loopback ancestors only; another local server on the same PC could frame it too. A
- * per-origin allow list set from the VM's settings, if that matters.
+ * own loopback frame it, the Ovis on the user's PC (the Mac app's window is one), and a page of its own
+ * tailnet (`https://*.<tailnet>.ts.net`, taken from the address the VM is reached at): the user's Ovis
+ * served by `tailscale serve`. Never another tailnet's.
+ * ponytail: loopback and own-tailnet ancestors; another local server on the same PC or another
+ * machine of the tailnet could frame it too. A per-origin allow list set from the VM's settings, if
+ * that matters.
  */
-function withAssistantFraming(policy: string, assistantVm: boolean): string {
-  return assistantVm ? policy.replace("frame-ancestors 'none'", "frame-ancestors http://127.0.0.1:* http://localhost:*") : policy;
+function withAssistantFraming(policy: string, assistantVm: boolean, host: string | null = null): string {
+  if (!assistantVm) return policy;
+  const tailnet = host === null ? null : /^[a-z0-9-]+\.([a-z0-9-]+\.ts\.net)$/i.exec(host)?.[1] ?? null;
+  const ancestors = `http://127.0.0.1:* http://localhost:*${tailnet === null ? "" : ` https://*.${tailnet}`}`;
+  return policy.replace("frame-ancestors 'none'", `frame-ancestors ${ancestors}`);
 }
 
 /**

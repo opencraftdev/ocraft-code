@@ -76,12 +76,17 @@ describe("OVIS_APP_NAME", () => {
     expect(CONTENT_SECURITY_POLICY).toContain("frame-src 'self' https://*.ts.net;");
   });
 
-  it("lets only loopback pages frame the Assistant VM, and nothing frame any other Ovis", () => {
+  it("lets only loopback and its own tailnet frame the Assistant VM, and nothing frame any other Ovis", () => {
     expect(contentSecurityPolicy(undefined, false)).toContain("frame-ancestors 'none'");
-    const vm = contentSecurityPolicy("https://vm.tailnet.ts.net", true);
-    expect(vm).toMatch(/frame-ancestors http:\/\/127\.0\.0\.1:\* http:\/\/localhost:\*(;|$)/);
+    const vm = contentSecurityPolicy("https://vm.tail123.ts.net", true);
+    expect(vm).toMatch(/frame-ancestors http:\/\/127\.0\.0\.1:\* http:\/\/localhost:\* https:\/\/\*\.tail123\.ts\.net(;|$)/);
     expect(vm).not.toContain("frame-ancestors 'none'");
-    expect(vm).not.toMatch(/frame-ancestors[^;]*(https:|\*\.ts\.net|\s\*(;|$))/);
+    // reached by another name (loopback, a LAN address): loopback only, never any ts.net
+    for (const origin of [undefined, "http://127.0.0.1:7317", "https://a.b.tail123.ts.net", "https://ts.net"]) {
+      const policy = contentSecurityPolicy(origin, true);
+      expect(policy).toMatch(/frame-ancestors http:\/\/127\.0\.0\.1:\* http:\/\/localhost:\*(;|$)/);
+      expect(policy).not.toMatch(/frame-ancestors[^;]*(https:|\*\.ts\.net|\s\*(;|$))/);
+    }
   });
 
   it("fetches the manifest with the page's cookies, so a sign-in proxy lets it through", () => {

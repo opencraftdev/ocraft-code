@@ -21,8 +21,8 @@ import "./AssistantView.css";
  * `web_ui.assistant`) the layout later phases fill; on any other Ovis the setup page. The switch
  * between the two modes is the Claude app's Chat | Code one.
  */
-export function AssistantView({ vm, embedded = false, initial = null, renderChat, onOpenTask, onOpenSettings }: { vm: boolean; embedded?: boolean; initial?: AssistantState | null; renderChat?: RenderChat; onOpenTask?: OpenTask; onOpenSettings?: () => void }) {
-  return vm ? <AssistantLayout embedded={embedded} initial={initial} renderChat={renderChat} onOpenTask={onOpenTask} onOpenSettings={onOpenSettings} /> : <AssistantSetup />;
+export function AssistantView({ vm, embedded = false, initial = null, renderChat, onOpenTask, onOpenSettings, editing = false, onEditing }: { vm: boolean; embedded?: boolean; initial?: AssistantState | null; renderChat?: RenderChat; onOpenTask?: OpenTask; onOpenSettings?: () => void; editing?: boolean; onEditing?: (editing: boolean) => void }) {
+  return vm ? <AssistantLayout embedded={embedded} initial={initial} renderChat={renderChat} onOpenTask={onOpenTask} onOpenSettings={onOpenSettings} /> : <AssistantSetup editing={editing} onEditing={onEditing} />;
 }
 
 /** a task's pane in Code mode's own pane view: the machine it runs on, and the pane */
@@ -32,24 +32,18 @@ type OpenTask = (machineId: string, paneId: string) => void;
 export interface AssistantChat { greeting: { title: string; where: string }; startedAt: number }
 type RenderChat = (paneId: string, chat: AssistantChat) => ReactNode;
 
-function AssistantSetup() {
+/** `editing`: the setup page over a saved address (the header's ⋯ menu, Change Assistant address) */
+function AssistantSetup({ editing, onEditing }: { editing: boolean; onEditing?: (editing: boolean) => void }) {
   const t = useT();
   const [address, setAddress] = useState(storedAssistantAddress);
   const [settingUp, setSettingUp] = useState(false);
   const link = assistantLink(address);
   const embed = assistantEmbed(address);
-  // with a VM address saved, its Assistant shows here; Change address goes back to this page
-  const [editing, setEditing] = useState(false);
   // the address the install printed: kept as one typed in the field is
   const found = useCallback((next: string) => { setAddress(next); storeAssistantAddress(next); }, []);
   if (embed !== null && !editing) {
     return (
       <main className="assistant-embed" data-testid="assistant-embed">
-        <div className="assistant-embed-bar">
-          <span className="assistant-embed-address">{new URL(embed).hostname}</span>
-          <a className="btn" href={embed} target="_blank" rel="noreferrer">{t("Open in new tab")}</a>
-          <button type="button" className="btn" onClick={() => setEditing(true)}>{t("Change address")}</button>
-        </div>
         <iframe className="assistant-embed-frame" src={assistantFrame(embed)} title={t("Assistant")} allow="clipboard-read; clipboard-write; microphone" />
       </main>
     );
@@ -69,7 +63,7 @@ function AssistantSetup() {
             onChange={(event) => { setAddress(event.target.value); storeAssistantAddress(event.target.value); }} />
         </label>
         {link !== null && <a href={link} target="_blank" rel="noreferrer">{link}</a>}
-        {embed !== null && <div><button type="button" className="btn" onClick={() => setEditing(false)}>{t("Show the Assistant")}</button></div>}
+        {embed !== null && <div><button type="button" className="btn" onClick={() => onEditing?.(false)}>{t("Show the Assistant")}</button></div>}
       </div>
     </main>
   );
