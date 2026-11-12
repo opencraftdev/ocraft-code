@@ -8,6 +8,7 @@ import { parseArgs } from "node:util";
 const OPEN_USAGE = "ovis-task open <machine> <folder> [--agent claude|codex] [--create] <brief>";
 const USAGE = `ovis-task machines
 ovis-task sessions [machine]
+ovis-task graph [machine]
 ovis-task peek <machine> <pane>
 ovis-task send <machine> <pane> <message>
 ${OPEN_USAGE}`;
@@ -18,6 +19,7 @@ export function cliRequest(argv: readonly string[]): { path: string; body?: unkn
   switch (command) {
     case "machines": return argv.length === 1 ? { path: command } : { usage: "ovis-task machines" };
     case "sessions": return argv.length <= 2 ? { path: machine === undefined ? "sessions" : `sessions?machine=${encodeURIComponent(machine)}` } : { usage: "ovis-task sessions [machine]" };
+    case "graph": return argv.length <= 2 ? { path: machine === undefined ? "graph" : `graph?machine=${encodeURIComponent(machine)}` } : { usage: "ovis-task graph [machine]" };
     case "peek": return machine !== undefined && rest.length === 1 ? { path: "peek", body: { machine, pane: rest[0] } } : { usage: "ovis-task peek <machine> <pane>" };
     case "send": return machine !== undefined && rest.length >= 2 ? { path: "send", body: { machine, pane: rest[0], message: rest.slice(1).join(" ") } } : { usage: "ovis-task send <machine> <pane> <message>" };
     case "open": {

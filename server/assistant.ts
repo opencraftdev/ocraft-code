@@ -13,6 +13,7 @@ import { ASSISTANT_AGENTS, type AssistantMachine, type AssistantProblem, type As
 import { firstMessageFault, MAX_FIRST_MESSAGE_CHARS } from "../shared/launch-rules.ts";
 import { MAX_LABEL_CHARS } from "../shared/labels.ts";
 import { LOCAL_MACHINE, sshHost, type Machine, type MachineEvent } from "../shared/machines.ts";
+import { AssistantGraph } from "./assistant-graph.ts";
 import type { AssistantSession } from "./assistant-sessions.ts";
 import type { ConversationResponse, HerdrPane } from "../shared/protocol.ts";
 import { isJsonObject, jsonResponse, setRequestRoute } from "./http.ts";
@@ -193,9 +194,11 @@ export class Assistant {
   private opening = new Map<string, Promise<unknown>>();
 
   readonly session: AssistantSession | null;
+  readonly graph: AssistantGraph;
   private bridge: MachineBridge;
 
-  constructor(stateDir: string, private machines: AssistantMachines, private run: RunScript, options: { intervalMs?: number; timer?: Timer; now?: () => number; session?: AssistantSession; bridge?: MachineBridge } = {}) {
+  /** `graphTimer`: the session graph's clock (writes and sweeps), apart from the health checks' `timer` */
+  constructor(stateDir: string, private machines: AssistantMachines, private run: RunScript, options: { intervalMs?: number; timer?: Timer; graphTimer?: Timer; now?: () => number; session?: AssistantSession; bridge?: MachineBridge } = {}) {
     this.session = options.session ?? null;
     this.intervalMs = options.intervalMs ?? HEALTH_INTERVAL_MS;
     this.timer = options.timer ?? defaultTimer;
@@ -208,17 +211,25 @@ export class Assistant {
     this.opened = readDocument(this.openedPath, (value): value is Opened[] => Array.isArray(value)
       && value.every((item) => isJsonObject(item) && typeof item.machine === "string" && typeof item.pane === "string" && typeof item.at === "number"), []);
     this.bridge = options.bridge ?? (() => Promise.reject(new AssistantError("machine_offline", "This server reaches no machines", 503)));
+    this.graph = new AssistantGraph(join(directory, "agent", "graph.json"), {
+      machines: () => this.watchable(), windows: (id) => this.isWindows(id), ownPane: () => this.session?.info()?.pane_id ?? null,
+      opened: (machine, pane) => this.openedHere(machine, pane), bridge: this.bridge, run: this.run, now: this.now,
+      ...(options.graphTimer ? { timer: options.graphTimer } : {}),
+    });
     this.unsubscribe = machines.subscribe((event) => {
       if (event.type === "machines") {
         this.sync();
+        this.graph.changed();
         // herdr here came back (or this server started): the Assistant's pane is checked at once
         const local = event.machines.find((machine) => machine.id === LOCAL_MACHINE);
         if (local?.state === "connected" && local.snapshot) void this.session?.check();
       }
-      if (event.type === "machine-message" && event.machine_id === LOCAL_MACHINE && event.message.type === "pane-status") {
-        this.session?.heard(event.message.pane_id, event.message.agent_status);
+      if (event.type === "machine-message" && event.message.type === "pane-status") {
+        if (event.machine_id === LOCAL_MACHINE) this.session?.heard(event.message.pane_id, event.message.agent_status);
+        this.graph.heard(event.machine_id, event.message.pane_id, event.message.agent_status);
       }
     });
+    this.graph.start();
   }
 
   /** herdr's saved machines, the ones the Assistant delegates to */
@@ -290,6 +301,11 @@ export class Assistant {
         })),
       })),
     }));
+  }
+
+  /** ovis-task graph [machine]: the session graph as it is now, or one machine's part (named as the other commands take it) */
+  sessionGraph(machineName?: unknown): unknown {
+    return this.graph.build(machineName === undefined ? undefined : this.machineNamed(machineName).id);
   }
 
   /**
@@ -459,6 +475,7 @@ export class Assistant {
     this.unsubscribe();
     for (const watch of this.watched.values()) watch.cancel?.();
     this.watched.clear();
+    this.graph.stop();
     this.session?.stop();
   }
 }
