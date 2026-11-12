@@ -100,3 +100,42 @@ export interface AssistantSetupMachine {
 
 /** One event of GET /api/assistant-setup/stream: the terminal's output, or the setup's state */
 export type AssistantSetupEvent = { type: "output"; data: string } | { type: "job"; job: AssistantSetupJob };
+
+/**
+ * The session graph the Assistant VM keeps (stateDir/assistant/agent/graph.json, `ovis-task graph`;
+ * server/assistant-graph.ts): the agent sessions open now on the connected machines.
+ */
+export interface SessionGraph {
+  /** ms since the epoch */
+  updated_at: number;
+  /** `host`: the machine's SSH host without its tailnet suffix (sshHost); null when it has none */
+  machines: { name: string; id: string; host: string | null; state: MachineState }[];
+  /** sessions grouped by remote, or by repo root when there is none; `roots`: the folder on each machine, by machine name */
+  projects: { repo: string; remote: string | null; roots: Record<string, string>; sessions: string[] }[];
+  sessions: GraphSession[];
+}
+
+export interface GraphSession {
+  /** `<machine>/<pane>` */
+  key: string;
+  machine: string;
+  host: string | null;
+  /** the workspace's label, else its id */
+  workspace: string;
+  pane: string;
+  agent: string;
+  state: string | null;
+  title: string | null;
+  folder: string | null;
+  repo_root: string | null;
+  branch: string | null;
+  head: string | null;
+  remote: string | null;
+  prs: { number: number; url: string; title: string; state: string }[];
+  /** `changed`: uncommitted, relative to repo_root (at most 50); `touched`: paths the agent's edit tools named, newest first (at most 50) */
+  files: { changed: string[]; touched: string[] };
+  /** the Assistant opened it (`ovis-task open`) */
+  assistant_opened: boolean;
+  /** ms since the epoch of its last detailed read; null before one succeeded */
+  seen_at: number | null;
+}

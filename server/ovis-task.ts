@@ -5,7 +5,7 @@
  * CLI token reaches them. The token is a file in stateDir only this server reads, handed to the
  * Assistant's pane in its environment.
  *
- * machines, sessions and peek read; send messages an agent at rest; open starts a session
+ * machines, sessions, graph and peek read; send messages an agent at rest; open starts a session
  * (server/assistant.ts). No route restarts the Assistant or changes a machine's settings: those are the user's.
  */
 import { randomBytes } from "node:crypto";
@@ -26,7 +26,7 @@ export function cliToken(stateDir: string): string {
   return token;
 }
 
-const ROUTES: Record<string, "GET" | "POST"> = { machines: "GET", sessions: "GET", peek: "POST", send: "POST", open: "POST" };
+const ROUTES: Record<string, "GET" | "POST"> = { machines: "GET", sessions: "GET", graph: "GET", peek: "POST", send: "POST", open: "POST" };
 
 /**
  * /api/ovis-task/*. `local`: the request came from this VM's loopback and through no proxy, which
@@ -44,6 +44,7 @@ export async function handleOvisTaskRequest(request: Request, pathname: string, 
   try {
     if (name === "machines") return jsonResponse(assistant.machineFolders());
     if (name === "sessions") return jsonResponse(assistant.herdrSessions(new URL(request.url).searchParams.get("machine") ?? undefined));
+    if (name === "graph") return jsonResponse(assistant.sessionGraph(new URL(request.url).searchParams.get("machine") ?? undefined));
     const body = await request.json().catch(() => null);
     if (name === "peek") return jsonResponse(await assistant.peekSession(body));
     if (name === "send") return jsonResponse(await assistant.sendToSession(body));

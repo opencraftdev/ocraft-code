@@ -60,13 +60,16 @@ describe("ovis-task routes", () => {
     } finally { close(); }
   });
 
-  it("offers machines, sessions, peek, send and open, and nothing of projects or tasks", async () => {
+  it("offers machines, sessions, graph, peek, send and open, and nothing of projects or tasks", async () => {
     const { task, close } = await fixture();
     try {
       expect(Array.isArray(await (await task("machines")).json())).toBe(true);
       expect((await task("machines", {})).status).toBe(405);
       expect(Array.isArray(await (await task("sessions")).json())).toBe(true);
       expect(await code(await task("sessions?machine=Nope"))).toEqual({ status: 404, code: "unknown_machine" });
+      expect(await (await task("graph")).json()).toMatchObject({ machines: [{ name: "Test PC" }], projects: [], sessions: [] });
+      expect((await task("graph", {})).status).toBe(405);
+      expect(await code(await task("graph?machine=Nope"))).toEqual({ status: 404, code: "unknown_machine" });
       expect(await code(await task("peek", { machine: "Nope", pane: "p1" }))).toEqual({ status: 404, code: "unknown_machine" });
       expect(await code(await task("open", { machine: "Nope", folder: "~/x", brief: "b" }))).toEqual({ status: 404, code: "unknown_machine" });
       expect((await task("send")).status).toBe(405);
@@ -98,6 +101,9 @@ describe("ovis-task's command line", () => {
     expect(cliRequest(["machines"])).toEqual({ path: "machines" });
     expect("usage" in cliRequest(["machines", "x"])).toBe(true);
     expect(cliRequest(["sessions", "Air"])).toEqual({ path: "sessions?machine=Air" });
+    expect(cliRequest(["graph"])).toEqual({ path: "graph" });
+    expect(cliRequest(["graph", "muhammad macbook"])).toEqual({ path: "graph?machine=muhammad%20macbook" });
+    expect("usage" in cliRequest(["graph", "a", "b"])).toBe(true);
     expect(cliRequest(["send", "Air", "w1:p1", "run", "the", "tests"])).toEqual({ path: "send", body: { machine: "Air", pane: "w1:p1", message: "run the tests" } });
     expect(cliRequest(["open", "Air", "~/app", "--agent", "codex", "--create", "Fix", "the", "login"])).toEqual({ path: "open", body: { machine: "Air", folder: "~/app", brief: "Fix the login", agent: "codex", create: true } });
     expect(cliRequest(["open", "Air", "~/app", "Fix it"])).toEqual({ path: "open", body: { machine: "Air", folder: "~/app", brief: "Fix it", create: false } });

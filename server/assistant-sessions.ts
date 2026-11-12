@@ -1,7 +1,8 @@
 /**
  * The Assistant itself (docs/plan/20261112-1622-assistant-delegation.md): one long-lived Claude
  * Code or Codex agent in a herdr pane on the VM, started in stateDir/assistant/agent/, which holds
- * its instructions, its notes and its permission settings. The Assistant is not full auto: its
+ * its instructions, its profile (profiles/<session>/, docs/plan/20261112-1900-assistant-graph-and-profile.md),
+ * the session graph the server keeps (graph.json, server/assistant-graph.ts) and its permission settings. The Assistant is not full auto: its
  * settings allow `ovis-task` and its own folder, and deny ssh, scp, herdr and curl.
  *
  * There is one session, forever (stateDir/assistant/session.json): no New chat, no archive. A
@@ -9,10 +10,10 @@
  * a pane gone is opened again in the same folder and an agent that exited is started again in its
  * pane, both resuming the same conversation (`claude --continue`, `codex resume --last`); an agent
  * waiting on a prompt is left as it is. A compaction watchdog asks an idle agent whose context is
- * over 70% full to save lasting facts to notes.md, then sends `/compact`. Restart Assistant (the
+ * over 70% full to save lasting facts to its profile, then sends `/compact`. Restart Assistant (the
  * user's only) starts a fresh conversation. herdr's focus is never moved and nothing takes over a pane.
  */
-import { existsSync, lstatSync, mkdirSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { constants, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { ASSISTANT_AGENTS, type AssistantAgent, type AssistantSessionInfo, type AssistantSessionState } from "../shared/assistant.ts";
@@ -30,7 +31,11 @@ import { trustNewFolder } from "./trust-new-folder.ts";
 /** where bin/ovis-task is: put first on the pane's PATH */
 export const OVIS_TASK_BIN = join(import.meta.dir, "..", "bin");
 
-export const INSTRUCTIONS = `# The Assistant
+/** the long-lived session's profile: stateDir/assistant/agent/profiles/assistant/ */
+export const DEFAULT_PROFILE = "assistant";
+
+/** The Assistant's instructions (AGENTS.md); `profile` names its folder under profiles/. */
+export const instructions = (profile: string): string => `# The Assistant
 
 You are the Assistant: one long-lived coordinator for the herdr sessions on every machine in this
 tailnet. The user messages you; you delegate their work to coding agents in those sessions, watch
@@ -38,16 +43,30 @@ them, and report back. You do not write code yourself.
 
 ## Start of every conversation, and after a compaction
 
-1. Read \`notes.md\` in this folder.
-2. Run \`ovis-task machines\` and \`ovis-task sessions\` to see what is open where.
+1. Read your profile in \`profiles/${profile}/\`: \`SOUL.md\`, \`PROFILE.md\`, the names of the files in
+   \`projects/\` (open the ones this message touches), and today's and yesterday's
+   \`logs/YYYY-MM-DD.md\`.
+2. Run \`ovis-task graph\`, \`ovis-task machines\` and \`ovis-task sessions\` to see what is open where.
+
+## Your profile: profiles/${profile}/
+
+- \`SOUL.md\`: who you are and how you work. You may refine it.
+- \`PROFILE.md\`: the user, their preferences, their machines and what each one holds.
+- \`projects/<project>.md\`: one per project: its folder on each machine, repo and remote, people,
+  open work, history.
+- \`logs/YYYY-MM-DD.md\`: the day's log, append only. Append to today's as you work: every send and
+  open (machine, pane, folder, what was asked) and every outcome you see.
+- Before a compaction, and in the first turn of a new day, distill the lasting facts from the logs
+  into \`PROFILE.md\` and \`projects/\`. Keep PROFILE.md and each project file short: rewrite them
+  rather than append. Never delete a log.
+- These are the only files you edit.
 
 ## Rules
 
 - The state lives in \`ovis-task\`, not in your memory. Ask it again rather than trust what you
   remember from earlier in this conversation.
-- This conversation is long-lived and is compacted from time to time. Write lasting facts to
-  \`notes.md\` as you learn them: the user's preferences, which folder on which machine holds which
-  project, what you delegated where and why. It is the only file you edit.
+- This conversation is long-lived and is compacted from time to time: what is not in your profile
+  is lost then.
 - You reach machines only through \`ovis-task\`. Never try ssh, scp, herdr, curl or any other way to
   another machine: they are denied.
 - Send or open only what the user asked for or agreed to. Say in your reply what you sent or opened,
@@ -62,8 +81,18 @@ them, and report back. You do not write code yourself.
   \`peek\` and \`send\` as they are; do not look it up again. Act on the tagged sessions only as the
   message asks. A tag followed by \`(closed)\` names a session that is no longer open.
 
+## The session graph: graph.json
+
+\`graph.json\` in this folder (read only: the server rewrites it) lists every active agent session
+on the connected machines: its machine, workspace, pane, agent, state, title and folder, its repo
+root, branch, head and remote, its PRs, and its files (\`changed\`: uncommitted; \`touched\`: the
+files its agent edited lately). \`projects\` groups the sessions by remote (or by repo root), with
+the folder on each machine. Use it to go from a file to its session and project.
+\`ovis-task graph\` prints it as it is now.
+
 ## ovis-task
 
+- \`ovis-task graph [machine]\`: the session graph above, or one machine's part of it
 - \`ovis-task machines\`: the machines, whether each is connected, its agent CLIs, and the folders
   its herdr workspaces have open
 - \`ovis-task sessions [machine]\`: every herdr workspace and pane on the machines: its pane id,
@@ -84,20 +113,20 @@ them, and report back. You do not write code yourself.
 /**
  * Claude Code's project settings. `dontAsk` refuses every tool the allow list does not name, so
  * nothing outside it runs, asked or not; the deny list says the important refusals out loud and
- * wins over any allow rule the user's own settings add.
+ * wins over any allow rule the user's own settings add. It edits its own profile only.
  */
-export const CLAUDE_SETTINGS = {
+export const claudeSettings = (profile: string) => ({
   permissions: {
     defaultMode: "dontAsk",
-    allow: ["Bash(ovis-task:*)", "Bash(ovis-task)", "Read(./**)", "Edit(./notes.md)"],
+    allow: ["Bash(ovis-task:*)", "Bash(ovis-task)", "Read(./**)", `Edit(./profiles/${profile}/**)`, `Write(./profiles/${profile}/**)`],
     deny: [
       "Bash(ssh:*)", "Bash(scp:*)", "Bash(sftp:*)", "Bash(rsync:*)", "Bash(herdr:*)", "Bash(curl:*)", "Bash(wget:*)",
-      // its own instructions and settings stay as this server writes them
-      "Edit(./.claude/**)", "Edit(./.codex/**)", "Edit(./AGENTS.md)", "Edit(./CLAUDE.md)",
+      // its own instructions and settings stay as this server writes them; the graph is the server's
+      "Edit(./.claude/**)", "Edit(./.codex/**)", "Edit(./AGENTS.md)", "Edit(./CLAUDE.md)", "Edit(./graph.json)",
       "WebFetch",
     ],
   },
-};
+});
 
 /**
  * Codex's nearest equivalent: the sandbox keeps writes inside this folder (its `.codex/` stays read
@@ -121,24 +150,56 @@ prefix_rule(pattern=[["ssh", "scp", "sftp", "rsync", "herdr", "curl", "wget"]], 
 /** the user's own Codex sign-in, where their Codex keeps it */
 export const userCodexAuth = (): string => join(process.env["CODEX_HOME"] || join(homedir(), ".codex"), "auth.json");
 
+const SOUL = `# Soul
+
+I am the Assistant: one long-lived coordinator for the user's herdr sessions on every machine. I
+delegate their work to coding agents, watch it, and report back plainly. I do not write code myself.
+I keep this profile so that nothing lasting is lost when my conversation is compacted.
+`;
+const PROFILE = "# Profile\n\nThe user, their preferences, their machines and what each one holds.\n";
+
+/** a day as the profile's logs name it, in this server's time zone */
+export const logDay = (ms: number): string => {
+  const date = new Date(ms);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
+/** the notes.md an earlier build kept, as the profile's logs hold it since its migration; null when there is none */
+export function notesImport(folder: string, profile: string): string | null {
+  const logs = join(folder, "profiles", profile, "logs");
+  return existsSync(logs) ? readdirSync(logs).find((name) => name.endsWith("-notes-import.md")) ?? null : null;
+}
+
 /**
- * Writes the Assistant's folder. Its instructions and settings are rewritten each start; notes.md is the Assistant's own.
+ * Writes the Assistant's folder. Its instructions and settings are rewritten each start; its profile
+ * (profiles/<profile>/) is the Assistant's own: only missing files are seeded. A notes.md of an
+ * earlier build moves, byte for byte, to the profile's logs/<today>-notes-import.md once, and is
+ * kept beside as notes.md.migrated.
  * `codexAuth`: the sign-in the Assistant's Codex shares, linked as its CODEX_HOME's auth.json. Codex writes a
  * refreshed token through that link, so a rotated token does not sign the user's own Codex out.
  */
-export function writeAgentFolder(folder: string, codexAuth?: string): void {
+export function writeAgentFolder(folder: string, codexAuth?: string, profile = DEFAULT_PROFILE, now = Date.now()): void {
   mkdirSync(join(folder, ".claude"), { recursive: true, mode: 0o700 });
   mkdirSync(join(folder, ".codex", "rules"), { recursive: true, mode: 0o700 });
-  writeFileSync(join(folder, "AGENTS.md"), INSTRUCTIONS);
+  const own = join(folder, "profiles", profile);
+  for (const directory of ["projects", "logs"]) mkdirSync(join(own, directory), { recursive: true, mode: 0o700 });
+  for (const [name, text] of [["SOUL.md", SOUL], ["PROFILE.md", PROFILE]] as const) {
+    if (!existsSync(join(own, name))) writeFileSync(join(own, name), text);
+  }
+  const notes = join(folder, "notes.md");
+  if (existsSync(notes) && notesImport(folder, profile) === null) {
+    copyFileSync(notes, join(own, "logs", `${logDay(now)}-notes-import.md`), constants.COPYFILE_EXCL);
+    renameSync(notes, `${notes}.migrated`);
+  }
+  writeFileSync(join(folder, "AGENTS.md"), instructions(profile));
   writeFileSync(join(folder, "CLAUDE.md"), "@AGENTS.md\n");
-  writeFileSync(join(folder, ".claude", "settings.json"), JSON.stringify(CLAUDE_SETTINGS, null, 2) + "\n");
+  writeFileSync(join(folder, ".claude", "settings.json"), JSON.stringify(claudeSettings(profile), null, 2) + "\n");
   writeFileSync(join(folder, ".codex", "config.toml"), CODEX_CONFIG);
   writeFileSync(join(folder, ".codex", "rules", "ovis-task.rules"), CODEX_RULES);
   const auth = join(folder, ".codex", "auth.json");
   if (codexAuth !== undefined && !lstatSync(auth, { throwIfNoEntry: false })) {
     try { symlinkSync(codexAuth, auth); } catch (error) { console.error(`The Assistant's Codex cannot share your Codex sign-in: ${error instanceof Error ? error.message : String(error)}`); }
   }
-  if (!existsSync(join(folder, "notes.md"))) writeFileSync(join(folder, "notes.md"), "# Notes\n\nLasting facts about the user and their projects.\n");
 }
 
 
@@ -150,10 +211,12 @@ export const COMPACT_AT = 0.7;
 export const COMPACT_COOLDOWN_MS = 30 * 60_000;
 /** the notes request before /compact: how long an agent that was never seen working is waited for */
 const NOTES_WAIT_MS = 2 * KEEP_ALIVE_MS;
-export const NOTES_REQUEST = "Your context is nearly full and will be compacted next. First write to notes.md every lasting fact from this conversation that is not there yet: the user's preferences, open delegations (machine, pane, what was asked), and what each session is doing. Reply with one line when done.";
+export const notesRequest = (profile: string): string => `Your context is nearly full and will be compacted next. First bring your profile in profiles/${profile}/ up to date with every lasting fact from this conversation that is not there yet: append open delegations (machine, pane, what was asked) and what each session is doing to today's log in logs/, and distill the user's preferences into PROFILE.md and each project's facts into projects/. Reply with one line when done.`;
+/** the one-time request after notes.md moved into the profile's logs */
+export const distillRequest = (profile: string, file: string): string => `Your old notes.md is now profiles/${profile}/logs/${file}. Distill its lasting facts into profiles/${profile}/PROFILE.md and one projects/<project>.md file per project, short, and keep the import file as it is. Reply with one line when done.`;
 /** what the agent is told to keep through a compaction (Claude Code's /compact takes it; Codex's takes none) */
-export const compactCommand = (agent: AssistantAgent): string =>
-  agent === "claude" ? "/compact keep: open delegations, user preferences, what each session is doing" : "/compact";
+export const compactCommand = (agent: AssistantAgent, profile = DEFAULT_PROFILE): string =>
+  agent === "claude" ? `/compact keep: open delegations, user preferences, what each session is doing; then reread profiles/${profile}/ (SOUL.md, PROFILE.md, projects/, today's log)` : "/compact";
 
 /** The agent's arguments: its permission settings, and with `resume` the conversation it had in this folder. */
 export function agentArgs(agent: AssistantAgent, resume: boolean): string[] {
@@ -213,10 +276,16 @@ export const herdrPanes: AssistantPanes = {
   close: (workspaceId) => workspaceClose(workspaceId),
 };
 
-interface Stored { agent: AssistantAgent; started_at: number; pane_id: string | null; workspace_id: string | null; last_compaction: number | null }
+/**
+ * `profile`: its folder under profiles/ (absent in an earlier build's file: "assistant");
+ * `profile_migrated_asked`: the one request to distill the notes.md import was sent.
+ */
+interface Stored { agent: AssistantAgent; started_at: number; pane_id: string | null; workspace_id: string | null; last_compaction: number | null; profile?: string; profile_migrated_asked?: boolean }
 const validStored = (value: unknown): value is Stored => isJsonObject(value) && (ASSISTANT_AGENTS as readonly unknown[]).includes(value.agent)
   && typeof value.started_at === "number" && (value.pane_id === null || typeof value.pane_id === "string")
-  && (value.workspace_id === null || typeof value.workspace_id === "string") && (value.last_compaction === null || typeof value.last_compaction === "number");
+  && (value.workspace_id === null || typeof value.workspace_id === "string") && (value.last_compaction === null || typeof value.last_compaction === "number")
+  && (value.profile === undefined || (typeof value.profile === "string" && /^[a-z0-9][a-z0-9-]*$/.test(value.profile)))
+  && (value.profile_migrated_asked === undefined || typeof value.profile_migrated_asked === "boolean");
 const AT_REST: readonly (AgentStatus | null)[] = ["idle", "done"];
 const defaultTimer: Timer = (run, ms) => { const timer = setTimeout(run, ms); timer.unref(); return () => clearTimeout(timer); };
 
@@ -233,6 +302,7 @@ export class AssistantSession {
   private launched: "resume" | "fresh" | null = null;
   /** a notes request sent, waiting for the agent to work on it and come to rest */
   private compaction: { notesAt: number; worked: boolean } | null = null;
+  private folderWritten = false;
   private now: () => number;
   private timer: Timer;
 
@@ -259,6 +329,15 @@ export class AssistantSession {
 
   stop(): void { this.stopped = true; this.cancel?.(); }
 
+  /** its folder under profiles/ */
+  get profile(): string { return this.stored?.profile ?? DEFAULT_PROFILE; }
+
+  /** the folder as this build writes it: at each pane opened, and once at this server's first check (a running pane is kept) */
+  private writeFolder(): void {
+    writeAgentFolder(this.folder, this.agent === "codex" ? userCodexAuth() : undefined, this.profile, this.now());
+    this.folderWritten = true;
+  }
+
   private save(stored: Stored): void { writePrivateState(this.path, stored); this.stored = stored; }
 
   /** one at a time, after a restart in progress; a check asked for while one waits or runs is that one */
@@ -271,16 +350,17 @@ export class AssistantSession {
 
   private async openPane(resume: boolean, startedAt: number): Promise<void> {
     const codex = this.agent === "codex";
-    writeAgentFolder(this.folder, codex ? userCodexAuth() : undefined);
+    this.writeFolder();
     const { paneId, workspaceId } = await this.panes.open({
       cwd: this.folder, label: "Assistant", agent: this.agent, args: agentArgs(this.agent, resume),
       env: { ...this.env(), ...(codex ? { CODEX_HOME: join(this.folder, ".codex") } : {}) },
     });
-    this.save({ agent: this.agent, started_at: startedAt, pane_id: paneId, workspace_id: workspaceId, last_compaction: resume ? this.stored?.last_compaction ?? null : null });
+    this.save({ agent: this.agent, started_at: startedAt, pane_id: paneId, workspace_id: workspaceId, last_compaction: resume ? this.stored?.last_compaction ?? null : null, profile: this.profile, ...(this.stored?.profile_migrated_asked ? { profile_migrated_asked: true } : {}) });
   }
 
   private async checkNow(): Promise<void> {
     const stored = this.stored;
+    if (stored !== null && stored.pane_id !== null && !this.folderWritten) this.writeFolder();
     if (stored === null || stored.pane_id === null) {
       // the first session ever: a fresh conversation
       this.state = "restarting";
@@ -333,15 +413,22 @@ export class AssistantSession {
     if (this.compaction) {
       if (!this.compaction.worked && now - this.compaction.notesAt < NOTES_WAIT_MS) return;
       this.compaction = null;
-      await this.panes.send(paneId, compactCommand(this.agent));
+      await this.panes.send(paneId, compactCommand(this.agent, this.profile));
       this.save({ ...this.stored!, last_compaction: now });
+      return;
+    }
+    // once, at rest: the notes.md import distilled into the profile
+    const imported = this.stored?.profile_migrated_asked ? null : notesImport(this.folder, this.profile);
+    if (imported !== null) {
+      await this.panes.send(paneId, distillRequest(this.profile, imported));
+      this.save({ ...this.stored!, profile: this.profile, profile_migrated_asked: true });
       return;
     }
     const last = this.stored?.last_compaction;
     if (last != null && now - last < COMPACT_COOLDOWN_MS) return;
     const context = await this.panes.context(paneId, this.agent === "codex" ? join(this.folder, ".codex") : undefined).catch(() => null);
     if (!context?.window || context.used / context.window <= COMPACT_AT) return;
-    await this.panes.send(paneId, NOTES_REQUEST);
+    await this.panes.send(paneId, notesRequest(this.profile));
     this.compaction = { notesAt: now, worked: false };
   }
 }

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { AssistantState } from "../shared/assistant.ts";
 import type { AgentStatus } from "../shared/protocol.ts";
-import { AssistantSession, CLAUDE_SETTINGS, CODEX_ARGS, COMPACT_COOLDOWN_MS, compactCommand, KEEP_ALIVE_MS, NOTES_REQUEST, userCodexAuth, writeAgentFolder, type AssistantPanes } from "./assistant-sessions.ts";
+import { AssistantSession, claudeSettings, CODEX_ARGS, COMPACT_COOLDOWN_MS, compactCommand, distillRequest, KEEP_ALIVE_MS, logDay, notesRequest, userCodexAuth, writeAgentFolder, type AssistantPanes } from "./assistant-sessions.ts";
 import type { HerdrMachineProfile } from "./herdr-profiles.ts";
 import { createServer } from "./index.ts";
 
@@ -137,7 +137,7 @@ describe("the long-lived Assistant session", () => {
       expect(s.sent).toEqual([]);
       s.set("pane-1", { agent: "claude", status: "idle" });
       await s.assistant.check();
-      expect(s.sent).toEqual([NOTES_REQUEST]);
+      expect(s.sent).toEqual([notesRequest("assistant")]);
       // the notes request at work, then at rest: /compact with what to keep
       s.assistant.heard("pane-1", "working");
       s.set("pane-1", { agent: "claude", status: "working" });
@@ -147,8 +147,10 @@ describe("the long-lived Assistant session", () => {
       s.advance(10_000);
       s.assistant.heard("pane-1", "idle");
       await s.assistant.check();
-      expect(s.sent).toEqual([NOTES_REQUEST, compactCommand("claude")]);
-      expect(compactCommand("claude")).toBe("/compact keep: open delegations, user preferences, what each session is doing");
+      expect(s.sent).toEqual([notesRequest("assistant"), compactCommand("claude")]);
+      expect(compactCommand("claude")).toBe("/compact keep: open delegations, user preferences, what each session is doing; then reread profiles/assistant/ (SOUL.md, PROFILE.md, projects/, today's log)");
+      expect(notesRequest("assistant")).toContain("profiles/assistant/");
+      expect(notesRequest("assistant")).not.toContain("notes.md");
       expect(s.assistant.info()!.last_compaction).toBe(s.now());
       // a usage figure still over 70% right after does not compact again
       await s.assistant.check();
@@ -188,10 +190,11 @@ describe("the long-lived Assistant session", () => {
       const folder = join(s.stateDir, "assistant", "agent");
       expect(readFileSync(join(folder, "CLAUDE.md"), "utf8")).toBe("@AGENTS.md\n");
       const instructions = readFileSync(join(folder, "AGENTS.md"), "utf8");
-      for (const line of ["ovis-task sessions", "ovis-task peek", "ovis-task send", "ovis-task open", "notes.md", "not in your memory", "@session(", "its SSH host"]) expect(instructions).toContain(line);
+      for (const line of ["ovis-task sessions", "ovis-task peek", "ovis-task send", "ovis-task open", "ovis-task graph", "graph.json", "profiles/assistant/", "SOUL.md", "PROFILE.md", "projects/", "logs/YYYY-MM-DD.md", "not in your memory", "@session(", "its SSH host"]) expect(instructions).toContain(line);
       for (const gone of ["ovis-task projects", "ovis-task create", "ovis-task list", "ovis-task read"]) expect(instructions).not.toContain(gone);
-      const settings = JSON.parse(readFileSync(join(folder, ".claude", "settings.json"), "utf8")) as typeof CLAUDE_SETTINGS;
-      expect(settings).toEqual(CLAUDE_SETTINGS);
+      expect(instructions).not.toContain("notes.md");
+      const settings = JSON.parse(readFileSync(join(folder, ".claude", "settings.json"), "utf8")) as ReturnType<typeof claudeSettings>;
+      expect(settings).toEqual(claudeSettings("assistant"));
       expect(settings.permissions.allow).toContain("Bash(ovis-task:*)");
       for (const rule of ["Bash(ssh:*)", "Bash(scp:*)", "Bash(herdr:*)", "Bash(curl:*)", "Edit(./.claude/**)"]) expect(settings.permissions.deny).toContain(rule);
       // nothing outside the allow list runs, asked or not, and the Assistant is never started full auto
@@ -202,11 +205,70 @@ describe("the long-lived Assistant session", () => {
       if (process.platform !== "win32") expect(readlinkSync(join(folder, ".codex", "auth.json"))).toBe(userCodexAuth());
       const rules = readFileSync(join(folder, ".codex", "rules", "ovis-task.rules"), "utf8");
       expect(rules).toContain('prefix_rule(pattern=["ovis-task"], decision="allow")');
-      // the Assistant's own notes survive the folder being written again (every pane it opens)
-      writeFileSync(join(folder, "notes.md"), "kept");
+      // the Assistant's own profile survives the folder being written again (every pane it opens)
+      writeFileSync(join(folder, "profiles", "assistant", "PROFILE.md"), "kept");
       writeAgentFolder(folder);
-      expect(readFileSync(join(folder, "notes.md"), "utf8")).toBe("kept");
+      expect(readFileSync(join(folder, "profiles", "assistant", "PROFILE.md"), "utf8")).toBe("kept");
+      expect(existsSync(join(folder, "notes.md"))).toBe(false);
       expect(compactCommand("codex")).toBe("/compact");
+    } finally { s.done(); }
+  });
+
+  it("seeds the profile folder once and lets the agent edit only its own profile", () => {
+    const folder = mkdtempSync(join(tmpdir(), "ovis-assistant-profile-"));
+    try {
+      writeAgentFolder(folder, undefined, "second");
+      const own = join(folder, "profiles", "second");
+      expect(readdirSync(own).sort()).toEqual(["PROFILE.md", "SOUL.md", "logs", "projects"]);
+      writeFileSync(join(own, "SOUL.md"), "refined by the agent");
+      writeAgentFolder(folder, undefined, "second");
+      expect(readFileSync(join(own, "SOUL.md"), "utf8")).toBe("refined by the agent");
+      const { allow, deny } = claudeSettings("second").permissions;
+      expect(allow.filter((rule) => /^(Edit|Write)\(/.test(rule))).toEqual(["Edit(./profiles/second/**)", "Write(./profiles/second/**)"]);
+      expect(deny).toContain("Edit(./graph.json)");
+      expect(JSON.parse(readFileSync(join(folder, ".claude", "settings.json"), "utf8"))).toEqual(claudeSettings("second"));
+      expect(readFileSync(join(folder, "AGENTS.md"), "utf8")).toContain("profiles/second/");
+    } finally { rmSync(folder, { recursive: true, force: true }); }
+  });
+
+  it("moves notes.md into the profile byte for byte, once, and asks a resting Assistant once to distill it", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "ovis-assistant-migrate-"));
+    const folder = join(stateDir, "assistant", "agent");
+    mkdirSync(folder, { recursive: true });
+    const notes = Buffer.from("# Notes\n\n- macbook: ~/ovis é\r\nno newline at end", "utf8");
+    writeFileSync(join(folder, "notes.md"), notes);
+    // a session.json of the build before profiles: no profile field
+    writeFileSync(join(stateDir, "assistant", "session.json"), JSON.stringify({ agent: "claude", started_at: 1, pane_id: "pane-9", workspace_id: "ws-9", last_compaction: null }));
+    const s = session("claude", stateDir);
+    try {
+      expect(s.assistant.profile).toBe("assistant");
+      s.set("pane-9", { agent: "claude", status: "working" });
+      await s.assistant.check();
+      const logs = join(folder, "profiles", "assistant", "logs");
+      const file = `${logDay(s.now())}-notes-import.md`;
+      expect(readdirSync(logs)).toEqual([file]);
+      expect(readFileSync(join(logs, file)).equals(notes)).toBe(true);
+      expect(readFileSync(join(folder, "notes.md.migrated")).equals(notes)).toBe(true);
+      expect(existsSync(join(folder, "notes.md"))).toBe(false);
+      // never while it works; once it is at rest, one request
+      expect(s.sent).toEqual([]);
+      s.set("pane-9", { agent: "claude", status: "idle" });
+      await s.assistant.check();
+      expect(s.sent).toEqual([distillRequest("assistant", file)]);
+      await s.assistant.check();
+      expect(s.sent).toHaveLength(1);
+      expect(JSON.parse(readFileSync(join(stateDir, "assistant", "session.json"), "utf8"))).toMatchObject({ profile: "assistant", profile_migrated_asked: true });
+      // a notes.md that shows up again is not imported a second time
+      writeFileSync(join(folder, "notes.md"), "later");
+      writeAgentFolder(folder, undefined, "assistant", s.now() + 86_400_000);
+      expect(readdirSync(logs)).toEqual([file]);
+      expect(readFileSync(join(folder, "notes.md"), "utf8")).toBe("later");
+      // a server started again does not ask again
+      const again = session("claude", stateDir);
+      again.set("pane-9", { agent: "claude", status: "idle" });
+      await again.assistant.check();
+      expect(again.sent).toEqual([]);
+      again.assistant.stop();
     } finally { s.done(); }
   });
 
