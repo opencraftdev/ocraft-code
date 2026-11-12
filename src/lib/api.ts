@@ -1,7 +1,7 @@
 import { apiFetch as fetch } from "./api-request-id.ts";
 import type { PreferencesChange, SharedPreferences } from "../../shared/preferences.ts";
 import type { SeenFinish } from "../../shared/seen.ts";
-import type { AddProjectRequest, AssistantFix, AssistantProject, AssistantState, AssistantTranscript, ProjectChange } from "../../shared/assistant.ts";
+import type { AddProjectRequest, AssistantFix, AssistantProject, AssistantSetupJob, AssistantSetupRequest, AssistantState, AssistantTranscript, ProjectChange } from "../../shared/assistant.ts";
 import { resumeConnectionTraces } from "./connectionTrace.ts";
 import { machinePath, type BridgeHealth, type HerdrIdentity, type Machine, type MachineRoster, type SetupAction, type SetupJob, type SetupRequest } from "../../shared/machines.ts";
 import type {
@@ -573,6 +573,17 @@ export async function dismissAssistantTask(taskId: string): Promise<AssistantSta
 export function fetchAssistantTranscript(name: string): Promise<AssistantTranscript> {
   return getJson<AssistantTranscript>(`/api/assistant/sessions/${encodeURIComponent(name)}`);
 }
+
+/** Set up a VM (server/assistant-setup.ts): start, answer SSH's question, type into its terminal, resize it, stop it. */
+export async function startAssistantSetup(request: AssistantSetupRequest): Promise<AssistantSetupJob> {
+  return (await sendJson("/api/assistant-setup", "POST", request)).json() as Promise<AssistantSetupJob>;
+}
+export async function answerAssistantSetup(challengeId: string, answer: string): Promise<AssistantSetupJob> {
+  return (await sendJson("/api/assistant-setup/answer", "POST", { challenge_id: challengeId, answer })).json() as Promise<AssistantSetupJob>;
+}
+export async function assistantSetupInput(data: string): Promise<void> { await sendJson("/api/assistant-setup/input", "POST", { data }); }
+export async function resizeAssistantSetup(cols: number, rows: number): Promise<void> { await sendJson("/api/assistant-setup/resize", "POST", { cols, rows }); }
+export async function stopAssistantSetup(): Promise<void> { await sendJson("/api/assistant-setup/stop", "POST", {}); }
 
 /** GET /api/plugins/actions: the PC's herdr plugins and the actions it can run. */
 export async function fetchPluginActions(machineId = "local"): Promise<PluginActions[]> {

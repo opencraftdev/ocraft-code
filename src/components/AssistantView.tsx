@@ -6,6 +6,7 @@ import { addAssistantProject, ApiError, approveAssistantTask, cancelAssistantTas
 import { ASSISTANT_INSTALL_COMMAND, assistantLink, storeAssistantAddress, storedAssistantAddress } from "../lib/assistantMode.ts";
 import { useLocale, useT, type Translate } from "../lib/i18n.ts";
 import { MachineContext } from "../lib/machineContext.tsx";
+import { AssistantSetupDialog } from "./AssistantSetupDialog.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { Command } from "./PhonePanel.tsx";
 import { PromptCard } from "./PromptCard.tsx";
@@ -27,13 +28,19 @@ type OpenTask = (machineId: string, paneId: string) => void;
 function AssistantSetup() {
   const t = useT();
   const [address, setAddress] = useState(storedAssistantAddress);
+  const [settingUp, setSettingUp] = useState(false);
   const link = assistantLink(address);
+  // the address the install printed: kept as one typed in the field is
+  const found = useCallback((next: string) => { setAddress(next); storeAssistantAddress(next); }, []);
   return (
     <main className="assistant-setup" data-testid="assistant-setup">
       <div className="assistant-setup-inner">
         <h1 className="assistant-title">{t("Assistant")}</h1>
         <p>{t("The Assistant is a coding agent that runs all day on a cloud VM you own. You message it, it turns what you write into tasks, runs each one on the right PC in your tailnet, and brings back only what needs you. Run this on a fresh Linux VM to set it up:")}</p>
         <Command command={ASSISTANT_INSTALL_COMMAND} />
+        <p>{t("Or set it up from here over SSH:")}</p>
+        <div><button type="button" className="btn" onClick={() => setSettingUp(true)}>{t("Set up a VM")}</button></div>
+        {settingUp && <AssistantSetupDialog onClose={() => setSettingUp(false)} onAddress={found} />}
         <label className="field assistant-address">
           <span className="field-label">{t("Assistant VM address")}</span>
           <input className="input" autoComplete="off" spellCheck={false} placeholder="ovis-assistant.your-tailnet.ts.net" value={address}

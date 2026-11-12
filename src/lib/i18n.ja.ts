@@ -169,6 +169,8 @@ const BASE: Record<string, string> = {
   "Sessions": "セッション",
   "Tasks": "タスク",
   "None yet": "まだありません",
+  "Set up a VM": "VM をセットアップ",
+  "Or set it up from here over SSH:": "または、ここから SSH でセットアップします:",
   "Assistant VM address": "アシスタント VM のアドレス",
   "Remove": "削除",
   "Checking…": "確認中…",

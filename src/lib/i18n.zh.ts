@@ -172,6 +172,8 @@ const BASE: Record<string, string> = {
   "Sessions": "会话",
   "Tasks": "任务",
   "None yet": "暂无",
+  "Set up a VM": "设置 VM",
+  "Or set it up from here over SSH:": "或者从这里通过 SSH 设置：",
   "Assistant VM address": "助手 VM 地址",
   "Remove": "移除",
   "Checking…": "正在检查…",

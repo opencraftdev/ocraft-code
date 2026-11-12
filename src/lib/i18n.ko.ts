@@ -167,6 +167,8 @@ const BASE: Record<string, string> = {
   "Sessions": "세션",
   "Tasks": "작업",
   "None yet": "아직 없음",
+  "Set up a VM": "VM 설정하기",
+  "Or set it up from here over SSH:": "또는 여기에서 SSH로 설정하세요:",
   "Assistant VM address": "어시스턴트 VM 주소",
   "Remove": "제거",
   "Checking…": "확인 중…",

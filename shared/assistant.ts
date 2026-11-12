@@ -182,3 +182,36 @@ export interface ProjectChange { mergeMode?: MergeMode; defaultAgent?: Assistant
 
 /** Why a folder was refused as a project (the error code of POST /api/assistant/projects). */
 export type ProjectRefusal = "invalid_path" | "missing" | "not_git" | "root" | "home" | "home_parent" | "duplicate" | "unknown_machine" | "windows";
+
+/** POST /api/assistant-setup: set up a VM as the Assistant over SSH, from any Ovis but the VM itself */
+export interface AssistantSetupRequest {
+  /** an SSH alias or user@host, as Add PC takes it */
+  destination: string;
+  port?: number;
+  /** the VM's Tailscale machine name (ASSISTANT_NAME) */
+  name: string;
+  agent: AssistantAgent;
+  /** the page's terminal size, for the first frame */
+  cols?: number;
+  rows?: number;
+}
+
+/**
+ * A setup's state (GET /api/assistant-setup, and each `job` event of its stream).
+ * `unsupported`: this server has no PTY host, so `command` is to be pasted on the VM instead.
+ */
+export interface AssistantSetupJob {
+  id: string;
+  phase: "connecting" | "authentication" | "running" | "done" | "failed" | "stopped" | "unsupported";
+  destination: string;
+  /** what SSH asks before the install runs: a new host's fingerprint, or a password or key passphrase */
+  challenge: { id: string; kind: "host_key" | "secret"; prompt: string } | null;
+  /** the command the VM runs, to paste in its own terminal where this server cannot run it */
+  command: string;
+  /** the https://….ts.net address the install printed */
+  address: string | null;
+  error: string | null;
+}
+
+/** One event of GET /api/assistant-setup/stream: the terminal's output, or the setup's state */
+export type AssistantSetupEvent = { type: "output"; data: string } | { type: "job"; job: AssistantSetupJob };
