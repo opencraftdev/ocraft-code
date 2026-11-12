@@ -1,6 +1,6 @@
 # Assistant session mentions
 
-Status: approved
+Status: done
 Created: 2026-11-12 17:28
 Follows: [Assistant delegation](20261112-1622-assistant-delegation.md)
 
@@ -64,3 +64,16 @@ receives each tag as an exact session (machine, pane id, folder) it can `ovis-ta
   reload, or would you rather a shorter `@[macbook-pro · trina-ax]` that is matched on send (it can
   be ambiguous when one folder has two sessions)?
   Resolved (approved 2026-11-12): the pane id stays in the tag.
+
+## As built
+
+- `src/lib/sessionTags.ts` holds the picker data (`sessionPicker`: `assistantSessions` over the
+  connected PCs, the rest as offline), tag format/parse, filter, Backspace/× removal and the
+  expansion; `mentions.ts` has a `session` trigger used only when App passes `sessionMachines` to
+  the Assistant pane's composer (PaneTerminal → Composer). A tag expands in place, inline in the
+  sentence, as `@session(...)`; the draft keeps the readable tag.
+- `machineNamed` (server/assistant.ts) falls back to the SSH host, full or first label, any case;
+  `sshHost` in shared/machines.ts is shared with the client's `host=`.
+- `scripts/assistant-mentions-demo-regression.ts` checks it on the demo build (fixture extended at
+  build time). The demo's socket only knows the recorded panes, so the fictional Assistant pane
+  reuses an idle recorded pane id, and its chat shows the demo's "Couldn't load the conversation".

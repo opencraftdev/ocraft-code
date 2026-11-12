@@ -959,6 +959,8 @@ export function App() {
                         cwd={item?.cwd ?? null}
                         // the Assistant's own chat greets as the Assistant, not as an agent in its folder
                         greeting={isAssistantPane(item?.cwd) ? { title: t("What should the Assistant do?"), where: machine?.name ?? machineId } : undefined}
+                        // only the Assistant's own chat tags sessions with `@`; every other pane's `@` stays files and skills
+                        sessionMachines={item?.agent && isAssistantPane(item.cwd) && (machineId === "local" ? assistantVm : isAssistantMachine(machine?.target?.destination)) ? machines : null}
                         workspaceId={item?.workspace_id ?? null}
                         worktreeRepo={worktreeRepoName(item === null ? undefined : slotSnapshot?.workspaces.find((workspace) => workspace.workspace_id === item.workspace_id))}
                         machineName={machine?.name ?? machineId}

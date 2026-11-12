@@ -30,7 +30,7 @@ import { composerDrafts } from "../lib/composerDraft.ts";
 import { appendQuote, formatTerminalQuote } from "../lib/terminalQuote.ts";
 import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
 import { useSessionHistoryOffered } from "../lib/useSessionHistoryOffered.ts";
-import { paneStorageId } from "../../shared/machines.ts";
+import { paneStorageId, type Machine } from "../../shared/machines.ts";
 import { KeyBar } from "./KeyBar.tsx";
 import { TerminalInput, type TerminalInputHandle } from "./TerminalInput.tsx";
 import { FindBar } from "./FindBar.tsx";
@@ -109,6 +109,8 @@ export interface PaneTerminalProps {
   machineName?: string;
   /** an empty chat's greeting in place of "What should {agent} do in {folder}?" (the Assistant's own) */
   greeting?: { title: string; where: string };
+  /** the Assistant's own pane only: the PCs whose agent sessions its composer's `@` tags */
+  sessionMachines?: readonly Machine[] | null;
   /** when the pane's agent was started (ms): a chat this new may have no transcript yet (lib/startingChat.ts) */
   startedAt?: number;
   /** the lens over the pane: the chat transcript, or the live xterm grid (App remembers it per pane) */
@@ -181,6 +183,7 @@ export function PaneTerminal({
   worktreeRepo = null,
   machineName = "",
   greeting,
+  sessionMachines = null,
   startedAt,
   view,
   findRequest = 0,
@@ -1311,6 +1314,7 @@ export function PaneTerminal({
           onSend={composerSend}
           onAbort={abortTurn}
           onUploadImage={uploadImage}
+          sessionMachines={sessionMachines}
         />
       )}
       {/* In the terminal lens the input line and the masked input float over the grid's last rows

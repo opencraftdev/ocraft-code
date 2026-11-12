@@ -6,6 +6,14 @@ import type { SeenFinish } from "./seen.ts";
 export const LOCAL_MACHINE = "local";
 export const BRIDGE_PROTOCOL = 1;
 export const REMOTE_BUNDLE_VERSION = "38";
+/**
+ * The host an SSH destination (`user@host`, `host:port`) names, lowercased, with its domain (a
+ * tailnet's suffix) dropped: `opencraft@Raka-Devs.tail38376d.ts.net` is `raka-devs`. An IP address stays whole.
+ */
+export function sshHost(destination: string): string {
+  const host = destination.replace(/^.*@/, "").replace(/:\d+$/, "").toLowerCase();
+  return /^[\d.]+$|:/.test(host) ? host : host.split(".")[0]!;
+}
 export interface PaneTarget { machine_id: string; pane_id: string }
 export type MachineState = "connecting" | "connected" | "reconnecting" | "disconnected" | "error";
 export interface SshTarget {

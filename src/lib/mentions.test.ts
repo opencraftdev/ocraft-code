@@ -4,6 +4,23 @@ import { activeTrigger, applyCompletion } from "./mentions.ts";
 import { atSkillCommands, atSkillReplacement, rankSlashCommands } from "./compose.ts";
 import type { SlashCommand } from "../../shared/protocol.ts";
 
+describe("activeTrigger in the Assistant's pane", () => {
+  it("lists sessions from a bare @, with spaces in the query; any other pane's @ stays a file", () => {
+    expect(activeTrigger("@", 1, { sessions: true })).toEqual({ kind: "session", query: "", start: 0, end: 1 });
+    expect(activeTrigger("ask @trina mcp", 14, { sessions: true })).toEqual({ kind: "session", query: "trina mcp", start: 4, end: 14 });
+    expect(activeTrigger("@", 1)).toBeNull();
+    expect(activeTrigger("ask @trina", 10)).toEqual({ kind: "file", query: "trina", start: 4, end: 10 });
+  });
+
+  it("is no query after an inserted tag, nor in an address", () => {
+    const tag = "@[macbook-pro w1:p1 · trina-ax · MCP progress]";
+    expect(activeTrigger(`${tag} `, tag.length + 1, { sessions: true })).toBeNull();
+    expect(activeTrigger(tag.slice(0, 5), 5, { sessions: true })).toBeNull();
+    expect(activeTrigger("me@host", 7, { sessions: true })).toBeNull();
+    expect(activeTrigger("/re", 3, { sessions: true })).toMatchObject({ kind: "slash", query: "re" });
+  });
+});
+
 describe("activeTrigger", () => {
   it("opens slash completion at the start of the text, including an empty query", () => {
     expect(activeTrigger("/", 1)).toEqual({ kind: "slash", query: "", start: 0, end: 1 });

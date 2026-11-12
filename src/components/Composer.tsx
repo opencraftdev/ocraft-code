@@ -20,7 +20,7 @@ import type { AgentStatus, ClientRole, ConversationMetadata, PlanSummary, Provid
 import { skillSyntax } from "../../shared/skill-syntax.ts";
 import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
 import { composerDrafts } from "../lib/composerDraft.ts";
-import { paneStorageId } from "../../shared/machines.ts";
+import { paneStorageId, type Machine } from "../../shared/machines.ts";
 import {
   agentDisplayLabel,
   atSkillCommands,
@@ -54,6 +54,8 @@ import { paneStatus } from "../lib/status.ts";
 import { modelLabel } from "../lib/modelName.ts";
 import { useFacesArrived } from "../lib/fontFaces.ts";
 import { activeTrigger, applyCompletion, type ActiveTrigger } from "../lib/mentions.ts";
+import { expandSessionTags, filterSessions, parseSessionTags, removeTag, sessionFolder, sessionPicker, sessionTag, tagBefore, taggedSession, type SessionChoice } from "../lib/sessionTags.ts";
+import { displayPaneTitle } from "./Sidebar.tsx";
 import { resolveComposerMenuActiveItemId } from "../lib/composerMenuHighlight.ts";
 import { quickReplyButtons, useSettings } from "../lib/settings.ts";
 import { composerUsage, formatPercent, formatResetIn, HIGH_PERCENT, meterPercent, meterText, providerForAgent, statusWindows, usageName, useUsage, windowLabel } from "../lib/usage.ts";
@@ -118,7 +120,14 @@ export interface ComposerProps {
   onSend: (text: string, clearDraft?: string, sendAnyway?: boolean) => boolean | string | DraftRefusal | Promise<boolean | string | DraftRefusal>;
   onAbort: () => void;
   onUploadImage: (file: File) => Promise<string>;
+  /** the Assistant's own pane only: its `@` tags these PCs' agent sessions instead of files (lib/sessionTags.ts) */
+  sessionMachines?: readonly Machine[] | null;
 }
+
+/** a session's dot as the Sessions section draws it; closed: its tag names a session no longer listed */
+type SessionTone = "working" | "blocked" | "done" | "idle" | "closed";
+const sessionTone = (status: AgentStatus | undefined): SessionTone => status === "working" ? "working" : status === "blocked" ? "blocked" : status === "done" ? "done" : "idle";
+const SESSION_STATE: Readonly<Record<SessionTone, string>> = { working: "Working", blocked: "Needs input", done: "Done", idle: "Idle", closed: "Closed" };
 
 const UPLOADS_AT_ONCE = 3;
 /** files one paste, pick or drop takes; the rest are left out with a note */
@@ -270,6 +279,7 @@ export function Composer({
   onSend,
   onAbort,
   onUploadImage,
+  sessionMachines = null,
 }: ComposerProps) {
   const t = useT();
   const activeRef = useRef(active);
@@ -346,7 +356,8 @@ export function Composer({
   const syntax = skillSyntax(agent);
   /** the pane's `@` skills (OpenCode v2), listed with the files; a pane without them keeps the file menu alone */
   const atSkills = useMemo(() => atSkillCommands(commands), [commands]);
-  const trigger = useMemo(() => activeTrigger(text, caret, { skills: syntax.skillTriggers.includes("$"), namespaced: syntax.namespaced, atSkills: atSkills.length > 0 }), [atSkills, syntax, caret, text]);
+  const picker = useMemo(() => sessionMachines === null ? null : sessionPicker(sessionMachines), [sessionMachines]);
+  const trigger = useMemo(() => activeTrigger(text, caret, { skills: syntax.skillTriggers.includes("$"), namespaced: syntax.namespaced, atSkills: atSkills.length > 0, sessions: picker !== null }), [atSkills, syntax, caret, text, picker]);
   /** /resume retains the session picker instead of being sent to the terminal. */
   const terminalTyped = useMemo(() => typedTerminalCommand(commands, text), [commands, text]);
   const uploading = attachments.some((attachment) => attachment.state === "uploading");
@@ -555,13 +566,16 @@ export function Composer({
     () => (trigger?.kind === "file" ? rankSlashCommands(atSkills, trigger.query, slashUsage, true) : []),
     [atSkills, slashUsage, trigger],
   );
-  const choices: readonly (SlashCommand | string)[] = trigger?.kind === "slash" ? orderedCommands : [...atChoices, ...files];
+  // the Assistant's `@`: its sessions by PC, the typed words matched in any order
+  const sessionGroups = useMemo(() => (trigger?.kind === "session" && picker !== null ? filterSessions(picker.groups, trigger.query) : []), [picker, trigger]);
+  const sessionChoices = useMemo(() => sessionGroups.flatMap(({ machine, panes }) => panes.map((pane) => ({ machine, pane }))), [sessionGroups]);
+  const choices: readonly (SlashCommand | string | SessionChoice)[] = trigger?.kind === "slash" ? orderedCommands : trigger?.kind === "session" ? sessionChoices : [...atChoices, ...files];
   const menuOpen = !menuDismissed && trigger !== null && choices.length > 0;
   // a failed listing opens the menu on its one line, which no key picks; beside listed skills it is a line of theirs
   const filesFailedShown = !menuDismissed && trigger?.kind === "file" && filesFailed && files.length === 0 && !menuOpen;
   // clamped as the list is drawn, not by an effect after it: a Tab or Enter typed before that
   // effect's render found no row at the old index and did nothing
-  const choiceIds = choices.map((choice) => typeof choice === "string" ? `file:${choice}` : `${choice.source}:${choice.name}`);
+  const choiceIds = choices.map((choice) => typeof choice === "string" ? `file:${choice}` : "pane" in choice ? `session:${choice.machine.id}:${choice.pane.pane_id}` : `${choice.source}:${choice.name}`);
   const activeItemId = resolveComposerMenuActiveItemId({
     items: choiceIds.map((id) => ({ id })),
     highlightedItemId: searchKey === null ? null : highlightedItemId.current,
@@ -700,13 +714,14 @@ export function Composer({
   }, [placeWaitingMentions, text]);
 
   const selectCompletion = useCallback(
-    (choice: SlashCommand | string, currentTrigger: ActiveTrigger) => {
+    (choice: SlashCommand | string | SessionChoice, currentTrigger: ActiveTrigger) => {
       const replacement = typeof choice === "string" ? `@${choice} `
+        : "pane" in choice ? `${sessionTag(choice)} `
         : currentTrigger.kind === "slash" ? slashCommandReplacement(choice, agent, currentTrigger) : atSkillReplacement(choice);
       const completed = applyCompletion(text, currentTrigger, replacement);
       setTextAndCaret(completed.text, completed.caret);
       setMenuDismissed(true);
-      if (typeof choice !== "string") {
+      if (typeof choice !== "string" && !("pane" in choice)) {
         if (terminalCommand(choice) && choice.name === "resume") onOpenHistory?.();
         const name = choice.name;
         setSlashUsage((current) => {
@@ -848,7 +863,8 @@ export function Composer({
     // a polish landing before the acknowledgement would count as an edit and keep the sent message here
     dictation.forget();
     try {
-      const result = onSend(text, clearDraft, sendAnyway);
+      // the Assistant gets each tag as the exact session it names (or as closed)
+      const result = onSend(picker === null ? text : expandSessionTags(text, picker.groups), clearDraft, sendAnyway);
       if (!(result instanceof Promise)) { settle(result); composerDrafts.end(draftKey, sendId); return true; }
       void result.then(settle).catch(() => { if (mounted.current) setNote(t("Not confirmed. Check the terminal before sending again.")); }).finally(() => composerDrafts.end(draftKey, sendId));
     } catch {
@@ -856,7 +872,7 @@ export function Composer({
       if (mounted.current) setNote(t("Not confirmed. Check the terminal before sending again."));
     }
     return true;
-  }, [attachments, connected, dictation.forget, draftKey, onOpenHistory, onSend, role, roomless, sending, terminalTyped, text, uploading]);
+  }, [attachments, connected, dictation.forget, draftKey, onOpenHistory, onSend, picker, role, roomless, sending, terminalTyped, text, uploading]);
   const sendRef = useRef(send);
   sendRef.current = send;
   const connectedRef = useRef(connected);
@@ -947,6 +963,16 @@ export function Composer({
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
       // an IME keeps its keys; WebKit can send the committing Enter after compositionend, as key code 229
       if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+      // a session tag is one thing: Backspace right after it takes it whole
+      const box = event.currentTarget;
+      const tag = picker !== null && event.key === "Backspace" && !event.altKey && !event.metaKey && !event.ctrlKey && box.selectionStart === box.selectionEnd
+        ? tagBefore(textRef.current, box.selectionStart) : null;
+      if (tag !== null) {
+        event.preventDefault();
+        const next = removeTag(textRef.current, tag);
+        setTextAndCaret(next.text, next.caret);
+        return;
+      }
       if (menuOpen && trigger) {
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
           event.preventDefault();
@@ -1007,7 +1033,7 @@ export function Composer({
       event.preventDefault();
       send();
     },
-    [agentStatus, choices, connected, menuDismissed, menuOpen, offered, onAbort, selectCompletion, selectedIndex, send, sendBeside, setTextAndCaret, settings.enterSends, trigger, waitingAnswer],
+    [agentStatus, choices, connected, menuDismissed, menuOpen, offered, onAbort, picker, selectCompletion, selectedIndex, send, sendBeside, setTextAndCaret, settings.enterSends, trigger, waitingAnswer],
   );
 
   const onPaste = useCallback(
@@ -1097,6 +1123,8 @@ export function Composer({
   /** the strip under the card: the folder and the branch the caller knows; none, or a phone's screen, no strip */
   const strip = mobile ? null : composerStrip({ cwd, branch, repo: worktreeRepo });
   const worktree = worktreeRepo !== null;
+  /** the tags in the text, once each, for the chip row */
+  const sessionTags = picker === null ? [] : parseSessionTags(text).filter((tag, index, all) => all.findIndex((other) => other.text === tag.text) === index);
   // Fit only changes to drawn content. Streaming context usage is a fixed-size ring unless
   // its number is open on desktop; transcript/status refreshes need no measurement layout.
   useLayoutEffect(fitStatus, [fitStatus, agent, metadata?.model, metadata?.reasoning_effort,
@@ -1186,7 +1214,7 @@ export function Composer({
         {menuOpen && trigger && (
           <div className="menu composer-menu">
             {menuClose}
-            <div id={menuId} className="composer-menu-list" role="listbox" aria-label={t(trigger.kind === "slash" ? "Slash commands" : atSkills.length > 0 ? "Skills and files" : "Files")}>
+            <div id={menuId} className="composer-menu-list" role="listbox" aria-label={t(trigger.kind === "slash" ? "Slash commands" : trigger.kind === "session" ? "Sessions" : atSkills.length > 0 ? "Skills and files" : "Files")}>
             {(() => {
                 // a row says what a command does in one sentence (the full text is the row's
                 // tooltip), and a skill's icon says where it comes from: yours, this project's,
@@ -1236,6 +1264,42 @@ export function Composer({
                     </button>
                   );
                 };
+                if (trigger.kind === "session") {
+                  // by PC as the Sessions section lists them; a PC not connected is a dimmed header with nothing under it
+                  let index = 0;
+                  return <>
+                    {sessionGroups.map(({ machine, panes }) => (
+                      <div className="composer-menu-group" key={machine.id}>
+                        <div className="menu-heading">{machine.name}</div>
+                        {panes.map((pane) => {
+                          const at = index++;
+                          return (
+                            <button
+                              id={`${menuId}-${at}`}
+                              key={pane.pane_id}
+                              type="button"
+                              className="menu-item composer-session-item"
+                              role="option"
+                              aria-selected={at === selectedIndex}
+                              title={pane.cwd ?? undefined}
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => selectCompletion({ machine, pane }, trigger)}
+                            >
+                              <span className="menu-item-main">{displayPaneTitle(pane)}</span>
+                              <span className="menu-item-hint">{sessionFolder(pane.cwd)} · {pane.display_agent ?? pane.agent}</span>
+                              <span className={`composer-session-dot state-${sessionTone(pane.agent_status)}`} role="img" aria-label={t(SESSION_STATE[sessionTone(pane.agent_status)])} />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                    {trigger.query === "" && picker?.offline.map((machine) => (
+                      <div className="composer-menu-group" key={machine.id}>
+                        <div className="menu-heading composer-session-offline">{machine.name} · {t("offline")}</div>
+                      </div>
+                    ))}
+                  </>;
+                }
                 if (trigger.kind === "file") {
                   // the pane's `@` skills first, under their own heading, then the files (or the line saying they could not be read)
                   return <>
@@ -1497,6 +1561,26 @@ export function Composer({
           )}
         </div>
       </div>
+      {/* the message's session tags, one quiet chip each: × takes that tag out of the text */}
+      {sessionTags.length > 0 && (
+        <div className="composer-session-tags" role="group" aria-label={t("Tagged sessions")}>
+          {sessionTags.map((tag) => {
+            const found = picker === null ? null : taggedSession(picker.groups, tag);
+            const tone = found === null ? "closed" : sessionTone(found.pane.agent_status);
+            return (
+              <span className="composer-session-tag" key={tag.text} title={found?.pane.cwd ?? undefined}>
+                <span className={`composer-session-dot state-${tone}`} role="img" aria-label={t(SESSION_STATE[tone])} />
+                <span className="composer-session-tag-text">{tag.label}</span>
+                <button type="button" aria-label={t("Remove {file}", { file: tag.label })}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => { const at = parseSessionTags(textRef.current).find((item) => item.text === tag.text); if (at) { const next = removeTag(textRef.current, at); setTextAndCaret(next.text, next.caret); } }}>
+                  <X aria-hidden="true" />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
       {/* the strip tucked under the card (t3code's composer context strip): the pane's working folder and its
           branch, each drawn only when the caller passes it. It only names them; nothing in it is pressed */}
       {strip !== null && (
