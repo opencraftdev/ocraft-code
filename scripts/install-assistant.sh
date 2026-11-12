@@ -109,6 +109,12 @@ main() {
   bun_version=$(bun --version 2>/dev/null || echo 0)
   if [ "$(printf '%s\n' 1.4.0 "$bun_version" | sort -V | head -n1)" != 1.4.0 ]; then
     say "installing Bun (https://bun.sh) into ~/.bun (found: $bun_version, needs 1.4 or newer)"
+    # Bun's installer unpacks a zip; a minimal server image (Ubuntu cloud) has no unzip
+    if ! command -v unzip >/dev/null 2>&1; then
+      if command -v apt-get >/dev/null 2>&1; then run sudo apt-get install -y unzip
+      elif command -v dnf >/dev/null 2>&1; then run sudo dnf install -y unzip
+      elif [ "$DRY" != 1 ]; then fail "Bun's installer needs unzip; install it and run this again"; fi
+    fi
     run bash -c 'curl -fsSL https://bun.sh/install | bash'
     hash -r
     [ "$DRY" = 1 ] || [ "$(printf '%s\n' 1.4.0 "$(bun --version)" | sort -V | head -n1)" = 1.4.0 ] \
