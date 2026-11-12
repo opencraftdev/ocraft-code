@@ -57,6 +57,10 @@ them, and report back. You do not write code yourself.
   does its own branching, commits and PRs; never tell it to call \`ovis-task\` or to report back.
 - Asked what is on a machine, run \`ovis-task machines\`: it shows the folders its herdr workspaces
   have open.
+- A message may tag sessions as \`@session(machine="…" host="…" pane="…" folder="…" agent="…" title="…")\`:
+  that is an exact session, the user picked it. Use its \`host\` (or \`machine\`) and \`pane\` with
+  \`peek\` and \`send\` as they are; do not look it up again. Act on the tagged sessions only as the
+  message asks. A tag followed by \`(closed)\` names a session that is no longer open.
 
 ## ovis-task
 
@@ -64,7 +68,8 @@ them, and report back. You do not write code yourself.
   its herdr workspaces have open
 - \`ovis-task sessions [machine]\`: every herdr workspace and pane on the machines: its pane id,
   agent, state (working, idle, done, blocked), title and folder; \`assistant: true\` marks a session
-  you opened
+  you opened. Wherever a command takes \`<machine>\`, the machine's name, its id or its SSH host
+  (with or without the tailnet suffix) all work
 - \`ovis-task peek <machine> <pane>\`: an agent's last turns, or a shell's last screen lines
 - \`ovis-task send <machine> <pane> <message>\`: sends the message to that pane's agent, as if the
   user typed it. Refused for a shell and for a working agent: wait until it is idle or done

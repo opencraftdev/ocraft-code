@@ -56,6 +56,8 @@ export const COMPOSER_JA: Record<string, string> = {
   "{count} characters left": "残り {count} 文字",
   "Slash commands": "スラッシュコマンド",
   "Close suggestions": "候補を閉じる",
+  "Tagged sessions": "タグ付けしたセッション",
+  "offline": "オフライン",
   "Built in": "組み込み",
   "User": "ユーザー",
   "Project": "プロジェクト",

@@ -423,6 +423,10 @@ It delegates through herdr sessions, with its tool `ovis-task`:
 - `ovis-task send <machine> <pane> <message>`: hands work to the agent already open there, typed in as you would. Never to a working agent or a shell.
 - `ovis-task open <machine> <folder> [--agent claude|codex] [--create] <brief>`: a new herdr session with an agent in a folder under that PC's home, full auto, the brief as its first message. `--create` makes the folder and a git repository. At most 3 such sessions work at once per PC.
 
+Wherever `<machine>` is asked for, the PC's name, its id or its SSH host (with or without the tailnet suffix) works.
+
+To point the Assistant at sessions, type `@` in its chat: the agent sessions on your connected PCs, grouped by PC, filtered by the words you type (title, folder, workspace or PC, in any order); arrows, Enter or Tab, Esc and the mouse work as in the file menu. A pick becomes a tag in the box, `@[macbook-pro wV:p1 · trina-ax · MCP progress]`, that survives a reload; Backspace right after it removes it whole, and the chips under the box show each tag's state with an × to remove it. On send each tag reaches the Assistant as an exact `@session(machine="…" host="…" pane="…" folder="…" agent="…" title="…")`, or as typed with `(closed)` when the session is gone. Only the Assistant's own chat does this; every other pane's `@` lists files and skills.
+
 It sends and opens only what you asked for or agreed to, and says where. Its session lives on: within a minute of its pane or agent going away (or of herdr or the VM restarting) the VM brings it back, resuming the same conversation, and when it is idle past 70% of its context it saves lasting facts to its `notes.md` and compacts. An agent waiting on a prompt is left alone.
 
 Until you have a VM, **⋯ → Assistant VM…** opens the setup page: the install command to paste on a fresh VM, and a field for the VM's address once it runs. `bun run check:assistant <vm-address>` checks a running VM end to end.

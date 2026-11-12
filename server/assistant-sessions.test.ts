@@ -188,7 +188,7 @@ describe("the long-lived Assistant session", () => {
       const folder = join(s.stateDir, "assistant", "agent");
       expect(readFileSync(join(folder, "CLAUDE.md"), "utf8")).toBe("@AGENTS.md\n");
       const instructions = readFileSync(join(folder, "AGENTS.md"), "utf8");
-      for (const line of ["ovis-task sessions", "ovis-task peek", "ovis-task send", "ovis-task open", "notes.md", "not in your memory"]) expect(instructions).toContain(line);
+      for (const line of ["ovis-task sessions", "ovis-task peek", "ovis-task send", "ovis-task open", "notes.md", "not in your memory", "@session(", "its SSH host"]) expect(instructions).toContain(line);
       for (const gone of ["ovis-task projects", "ovis-task create", "ovis-task list", "ovis-task read"]) expect(instructions).not.toContain(gone);
       const settings = JSON.parse(readFileSync(join(folder, ".claude", "settings.json"), "utf8")) as typeof CLAUDE_SETTINGS;
       expect(settings).toEqual(CLAUDE_SETTINGS);

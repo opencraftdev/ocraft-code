@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { ASSISTANT_AGENTS, type AssistantMachine, type AssistantProblem, type AssistantState, type MachineHealth } from "../shared/assistant.ts";
 import { firstMessageFault, MAX_FIRST_MESSAGE_CHARS } from "../shared/launch-rules.ts";
 import { MAX_LABEL_CHARS } from "../shared/labels.ts";
-import { LOCAL_MACHINE, type Machine, type MachineEvent } from "../shared/machines.ts";
+import { LOCAL_MACHINE, sshHost, type Machine, type MachineEvent } from "../shared/machines.ts";
 import type { AssistantSession } from "./assistant-sessions.ts";
 import type { ConversationResponse, HerdrPane } from "../shared/protocol.ts";
 import { isJsonObject, jsonResponse, setRequestRoute } from "./http.ts";
@@ -246,9 +246,19 @@ export class Assistant {
     }));
   }
 
-  /** a connected machine by its name (or id), for the herdr session commands */
+  /**
+   * a connected machine by its name, its id, or its SSH host (full, or without the tailnet suffix, any
+   * case), for the herdr session commands: another Ovis names its PCs its own way, the host is the same
+   */
   private machineNamed(name: unknown): Machine {
-    const machine = typeof name === "string" ? this.watchable().find((candidate) => candidate.name === name || candidate.id === name) : undefined;
+    const host = typeof name === "string" ? name.toLowerCase() : "";
+    const sameHost = (candidate: Machine): boolean => {
+      const destination = candidate.target?.destination;
+      if (candidate.kind !== "ssh" || !destination || host === "") return false;
+      return destination.replace(/^.*@/, "").replace(/:\d+$/, "").toLowerCase() === host || sshHost(destination) === host;
+    };
+    const machine = typeof name === "string" ? this.watchable().find((candidate) => candidate.name === name || candidate.id === name)
+      ?? this.watchable().find(sameHost) : undefined;
     if (!machine) throw new AssistantError("unknown_machine", "That machine is not one of herdr's saved machines: run ovis-task machines", 404);
     if (this.isWindows(machine.id)) throw new AssistantError("windows", "Windows isn't supported by the Assistant yet");
     if (machine.state !== "connected" || !machine.snapshot) throw new AssistantError("machine_offline", "That machine is not connected", 503);

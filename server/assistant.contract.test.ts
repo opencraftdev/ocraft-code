@@ -230,6 +230,23 @@ describe("the machine health watcher", () => {
     } finally { assistant.stop(); rmSync(stateDir, { recursive: true, force: true }); }
   });
 
+  it("finds a session's machine by its name, its id or its SSH host, with or without the tailnet suffix", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "ovis-assistant-host-"));
+    const snapshot = { workspaces: [], panes: [] } as unknown as Machine["snapshot"];
+    const pc = (id: string, name: string, destination: string): Machine => ({ id, herdr_profile_id: id, name, kind: "ssh", target: { destination }, enabled: true, state: "connected", error: null, snapshot });
+    const machines = [pc("m-pro", "macbook-pro", "potenlab@potenlab-macbookpro"), pc("m-air", "muhammad-macbook", "muhammadrayandika@Muhammads-MacBook-Air-2.tail38376d.ts.net:22")];
+    const assistant = new Assistant(stateDir, { list: () => machines, subscribe: () => () => {}, retryNow: () => {} }, async () => "", { timer: () => () => {} });
+    const named = (name: string) => (assistant.herdrSessions(name) as { machine: string }[])[0]!.machine;
+    try {
+      expect(named("macbook-pro")).toBe("macbook-pro");
+      expect(named("m-air")).toBe("muhammad-macbook");
+      expect(named("potenlab-macbookpro")).toBe("macbook-pro");
+      expect(named("muhammads-macbook-air-2")).toBe("muhammad-macbook");
+      expect(named("Muhammads-MacBook-Air-2.tail38376d.ts.net")).toBe("muhammad-macbook");
+      expect(() => assistant.herdrSessions("muhammads-macbook")).toThrow("not one of herdr's saved machines");
+    } finally { assistant.stop(); rmSync(stateDir, { recursive: true, force: true }); }
+  });
+
   it("caps the back-off at five minutes", () => {
     expect([0, 1, 2, 3, 20].map((failures) => nextCheckDelay(HEALTH_INTERVAL_MS, failures))).toEqual([30_000, 60_000, 120_000, 240_000, 300_000]);
   });

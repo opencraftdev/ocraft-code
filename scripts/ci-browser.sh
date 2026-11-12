@@ -77,6 +77,7 @@ run_script scripts/key-bar-customization-demo-regression.ts
 run_script scripts/key-bar-hold-repeat-regression.ts
 run_script scripts/settings-pages-demo-regression.ts
 run_script scripts/interface-font-demo-regression.ts
+run_script scripts/assistant-mentions-demo-regression.ts
 run_script scripts/theme-first-paint-demo-regression.ts
 run_script scripts/security-summary-demo-regression.ts
 run_script scripts/push-health-demo-regression.ts
