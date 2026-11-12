@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { AssistantProject, AssistantState } from "../shared/assistant.ts";
-import type { Machine, MachineEvent } from "../shared/machines.ts";
+import { LOCAL_MACHINE, type Machine, type MachineEvent } from "../shared/machines.ts";
+import type { AssistantSessions } from "./assistant-sessions.ts";
 import { Assistant, HEALTH_INTERVAL_MS, nextCheckDelay, type RunScript } from "./assistant.ts";
 import type { HerdrMachineProfile } from "./herdr-profiles.ts";
 import { createServer } from "./index.ts";
@@ -239,6 +240,46 @@ describe("the machine health watcher", () => {
       expect(await next()).toBe(HEALTH_INTERVAL_MS);
       expect(assistant.state().machines[0]!.health!.problems).toEqual(["not_connected"]);
     } finally { done(); }
+  });
+
+  it("leaves a Windows PC out: no check runs there, and no project or task goes to it", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "ovis-assistant-windows-"));
+    // a project registered before its machine was found to be Windows
+    const project: AssistantProject = { id: "app", machine: machine.id, path: "/c/app", mergeMode: "local", defaultAgent: "claude" };
+    mkdirSync(join(stateDir, "assistant"), { recursive: true });
+    writeFileSync(join(stateDir, "assistant", "projects.json"), JSON.stringify([project]));
+    const scripts: string[] = [];
+    let listener: ((event: MachineEvent) => void) | undefined;
+    const assistant = new Assistant(stateDir, {
+      list: () => [machine], subscribe: (next) => { listener = next; return () => {}; }, retryNow: () => {}, windows: (id) => id === machine.id,
+    }, async (_machine, script) => { scripts.push(script); return ""; }, { timer: () => () => {} });
+    try {
+      listener!({ type: "machines", machines: [machine] });
+      await assistant.check(machine.id);
+      expect(assistant.state().machines[0]!.health).toMatchObject({ problems: ["windows"], agents: [] });
+      const refused = (promise: Promise<unknown>) => promise.then(() => null, (error: Error & { code?: string }) => [error.code, error.message]);
+      const windows = ["windows", "Windows isn't supported by the Assistant yet"];
+      expect(await refused(assistant.addProject({ machine: machine.id, path: "/c/other" }))).toEqual(windows);
+      expect(await refused(assistant.runInProject("app", () => "cat x"))).toEqual(windows);
+      expect(await refused(assistant.createTask({ project: "app", title: "t", brief: "b" }))).toEqual(windows);
+      expect(assistant.tasks.list()).toEqual([]);
+      expect(scripts).toEqual([]);
+    } finally { assistant.stop(); rmSync(stateDir, { recursive: true, force: true }); }
+  });
+
+  it("hands this PC's panes to the Assistant session each time its herdr answers, and not while it does not", () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "ovis-assistant-revive-"));
+    const lists: string[][] = [];
+    let listener: ((event: MachineEvent) => void) | undefined;
+    const sessions = { revive: async (live: ReadonlySet<string>) => { lists.push([...live]); }, list: () => [] } as unknown as AssistantSessions;
+    const assistant = new Assistant(stateDir, { list: () => [], subscribe: (next) => { listener = next; return () => {}; }, retryNow: () => {} }, async () => "", { sessions, timer: () => () => {} });
+    const local = (state: Machine["state"], panes: string[]): Machine => ({ id: LOCAL_MACHINE, name: "VM", kind: "local", enabled: true, state, error: null,
+      snapshot: { panes: panes.map((pane_id) => ({ pane_id })) } as unknown as Machine["snapshot"] });
+    try {
+      listener!({ type: "machines", machines: [local("error", [])] });
+      listener!({ type: "machines", machines: [local("connected", ["p1", "p2"])] });
+      expect(lists).toEqual([["p1", "p2"]]);
+    } finally { assistant.stop(); rmSync(stateDir, { recursive: true, force: true }); }
   });
 
   it("caps the back-off at five minutes", () => {

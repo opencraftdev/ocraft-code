@@ -7,14 +7,19 @@
  * Each session is stateDir/assistant/sessions/<YYYYMMDD-HHMM>/ (decision 18). New session opens a
  * fresh pane, then archives the one before: its conversation is saved there as it stands and its
  * pane closed. herdr's focus is never moved and nothing takes over a pane.
+ *
+ * A current session whose pane is gone (herdr or the VM restarted) gets a fresh pane under the same
+ * name (revive). Its conversation before that cannot be read once the pane is gone (herdr reads it
+ * through the pane), so nothing is archived: the agent starts again from ovis-task and notes.md.
  */
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { ASSISTANT_AGENTS, type AssistantAgent, type AssistantSession, type AssistantTranscript } from "../shared/assistant.ts";
 import { freeAgentName } from "./agent-name.ts";
 import { AssistantError } from "./assistant.ts";
 import { paneConversation } from "./conversation.ts";
-import { agentStart, HerdrError, paneRead, sessionSnapshot, workspaceClose, workspaceCreate } from "./herdr/client.ts";
+import { agentStart, HerdrError, paneGet, paneRead, sessionSnapshot, workspaceClose, workspaceCreate } from "./herdr/client.ts";
 import { isJsonObject } from "./http.ts";
 import { launchedAgents } from "./launched-agents.ts";
 import { writePrivateState } from "./private-state.ts";
@@ -117,13 +122,15 @@ export const CLAUDE_SETTINGS = {
 };
 
 /**
- * Codex's nearest equivalent: commands outside the rules ask the user (`untrusted`), the sandbox
- * keeps writes inside this folder, and the rules allow ovis-task and forbid the rest. The network
- * stays open to the sandbox because ovis-task reaches this server on loopback. Codex has no read
- * limit to one folder (the plan's open questions).
+ * Codex's nearest equivalent: the sandbox keeps writes inside this folder (its `.codex/` stays read
+ * only there), and the rules allow ovis-task and forbid ssh, scp, herdr, curl and the like. Codex
+ * runs with CODEX_HOME at this folder's `.codex/`, so the rules and config load as its user layer:
+ * a project's own `.codex/` loads only once the user trusted that folder (the plan's open
+ * questions). `on-request`: Codex 0.165 no longer takes `untrusted`. The network stays open to the
+ * sandbox because ovis-task reaches this server on loopback. Codex has no read limit to one folder.
  */
-export const CODEX_ARGS = ["--ask-for-approval", "untrusted", "--sandbox", "workspace-write", "-c", "sandbox_workspace_write.network_access=true"];
-export const CODEX_CONFIG = `approval_policy = "untrusted"
+export const CODEX_ARGS = ["--ask-for-approval", "on-request", "--sandbox", "workspace-write", "-c", "sandbox_workspace_write.network_access=true"];
+export const CODEX_CONFIG = `approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 
 [sandbox_workspace_write]
@@ -133,8 +140,15 @@ export const CODEX_RULES = `prefix_rule(pattern=["ovis-task"], decision="allow")
 prefix_rule(pattern=[["ssh", "scp", "sftp", "rsync", "herdr", "curl", "wget"]], decision="forbidden")
 `;
 
-/** Writes the Assistant's folder. Its instructions and settings are rewritten each start; notes.md is the Assistant's own. */
-export function writeAgentFolder(folder: string): void {
+/** the user's own Codex sign-in, where their Codex keeps it */
+export const userCodexAuth = (): string => join(process.env["CODEX_HOME"] || join(homedir(), ".codex"), "auth.json");
+
+/**
+ * Writes the Assistant's folder. Its instructions and settings are rewritten each start; notes.md is the Assistant's own.
+ * `codexAuth`: the sign-in the Assistant's Codex shares, linked as its CODEX_HOME's auth.json. Codex writes a
+ * refreshed token through that link, so a rotated token does not sign the user's own Codex out.
+ */
+export function writeAgentFolder(folder: string, codexAuth?: string): void {
   mkdirSync(join(folder, ".claude"), { recursive: true, mode: 0o700 });
   mkdirSync(join(folder, ".codex", "rules"), { recursive: true, mode: 0o700 });
   writeFileSync(join(folder, "AGENTS.md"), INSTRUCTIONS);
@@ -142,6 +156,10 @@ export function writeAgentFolder(folder: string): void {
   writeFileSync(join(folder, ".claude", "settings.json"), JSON.stringify(CLAUDE_SETTINGS, null, 2) + "\n");
   writeFileSync(join(folder, ".codex", "config.toml"), CODEX_CONFIG);
   writeFileSync(join(folder, ".codex", "rules", "ovis-task.rules"), CODEX_RULES);
+  const auth = join(folder, ".codex", "auth.json");
+  if (codexAuth !== undefined && !lstatSync(auth, { throwIfNoEntry: false })) {
+    try { symlinkSync(codexAuth, auth); } catch (error) { console.error(`The Assistant's Codex cannot share your Codex sign-in: ${error instanceof Error ? error.message : String(error)}`); }
+  }
   if (!existsSync(join(folder, "notes.md"))) writeFileSync(join(folder, "notes.md"), "# Notes\n\nLasting facts about the user and their projects.\n");
 }
 
@@ -151,6 +169,8 @@ export interface AssistantPanes {
   /** the conversation as it stands, for the archive */
   read(paneId: string): Promise<Omit<AssistantTranscript, "name">>;
   close(workspaceId: string): Promise<void>;
+  /** whether herdr still has the pane; rejects when herdr cannot be asked */
+  alive(paneId: string): Promise<boolean>;
 }
 
 const textOf = (parts: readonly { kind: string; text?: string }[]) => parts.flatMap((part) => part.kind === "text" && part.text ? [part.text] : []).join("\n\n");
@@ -198,6 +218,10 @@ export const herdrPanes: AssistantPanes = {
     }
   },
   close: (workspaceId) => workspaceClose(workspaceId),
+  alive: (paneId) => paneGet(paneId).then(() => true, (error: unknown) => {
+    if (error instanceof HerdrError && error.code === "pane_not_found") return false;
+    throw error;
+  }),
 };
 
 type Stored = AssistantSession & { workspace_id: string | null };
@@ -209,6 +233,9 @@ export class AssistantSessions {
   private directory: string;
   readonly folder: string;
   private busy: Promise<unknown> = Promise.resolve();
+  /** the current session as last read or saved; undefined until read */
+  private current: Stored | null | undefined;
+  private reviving = false;
 
   constructor(stateDir: string, private agent: AssistantAgent, private env: () => Record<string, string>, private panes: AssistantPanes = herdrPanes, private now: () => Date = () => new Date()) {
     this.directory = join(stateDir, "assistant", "sessions");
@@ -227,7 +254,43 @@ export class AssistantSessions {
     return this.stored().map(({ workspace_id: _, ...session }) => session);
   }
 
-  private save(session: Stored): void { writePrivateState(join(this.directory, session.name, "session.json"), session); }
+  private save(session: Stored): void { writePrivateState(join(this.directory, session.name, "session.json"), session); this.current = undefined; }
+
+  private currentSession(): Stored | null {
+    return this.current ??= this.stored().find((session) => session.archived_at === undefined) ?? null;
+  }
+
+  private open(name: string): Promise<{ paneId: string; workspaceId: string }> {
+    const codex = this.agent === "codex";
+    writeAgentFolder(this.folder, codex ? userCodexAuth() : undefined);
+    return this.panes.open({
+      cwd: this.folder, label: `Assistant ${name}`, agent: this.agent, args: codex ? CODEX_ARGS : [],
+      env: { ...this.env(), ...(codex ? { CODEX_HOME: join(this.folder, ".codex") } : {}) },
+    });
+  }
+
+  /**
+   * herdr's panes as it lists them now: a current session whose pane is not among them gets a fresh
+   * one under the same name, once herdr itself says that pane is gone. herdr's focus never moves.
+   */
+  revive(live: ReadonlySet<string>): Promise<void> {
+    const current = this.currentSession();
+    if (this.reviving || current === null || current.pane_id === null || live.has(current.pane_id)) return this.busy.then(() => undefined);
+    this.reviving = true;
+    const run = this.busy.then(() => this.reviveNow()).finally(() => { this.reviving = false; });
+    this.busy = run.catch(() => undefined);
+    return this.busy.then(() => undefined);
+  }
+
+  private async reviveNow(): Promise<void> {
+    const current = this.currentSession();
+    // a New chat meanwhile, or a herdr that cannot say (alive rejects): left as it is
+    if (current === null || current.pane_id === null || await this.panes.alive(current.pane_id)) return;
+    // a workspace herdr restored without the pane goes, so the session keeps one
+    if (current.workspace_id !== null) await this.panes.close(current.workspace_id).catch(() => undefined);
+    const { paneId, workspaceId } = await this.open(current.name);
+    this.save({ ...current, pane_id: paneId, workspace_id: workspaceId });
+  }
 
   /** New session: a fresh pane first, then every session before it archived. One at a time. */
   start(): Promise<AssistantSession> {
@@ -237,14 +300,11 @@ export class AssistantSessions {
   }
 
   private async startNow(): Promise<AssistantSession> {
-    writeAgentFolder(this.folder);
     const at = this.now();
     const taken = new Set(this.stored().map((session) => session.name));
     let name = sessionName(at);
     for (let n = 2; taken.has(name); n += 1) name = `${sessionName(at)}-${n}`;
-    const { paneId, workspaceId } = await this.panes.open({
-      cwd: this.folder, label: `Assistant ${name}`, env: this.env(), agent: this.agent, args: this.agent === "codex" ? CODEX_ARGS : [],
-    });
+    const { paneId, workspaceId } = await this.open(name);
     for (const previous of this.stored()) if (previous.archived_at === undefined) await this.archive(previous);
     const session: Stored = { name, agent: this.agent, started_at: at.getTime(), pane_id: paneId, workspace_id: workspaceId };
     this.save(session);

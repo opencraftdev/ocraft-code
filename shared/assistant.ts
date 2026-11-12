@@ -19,9 +19,10 @@ export interface AssistantProject {
 
 /**
  * What the watcher found wrong on a machine. `not_connected`: Remote PCs has not been allowed to
- * connect to it yet; `unreachable`: SSH failed; the rest come from a check that ran there.
+ * connect to it yet; `unreachable`: SSH failed; `windows`: a Windows PC, which the Assistant leaves
+ * out (no checks, projects or tasks there yet); the rest come from a check that ran there.
  */
-export type AssistantProblem = "not_connected" | "unreachable" | "herdr_stopped" | "no_agent" | "gh_signed_out";
+export type AssistantProblem = "not_connected" | "unreachable" | "windows" | "herdr_stopped" | "no_agent" | "gh_signed_out";
 /** A fix runs only on the user's click (POST /api/assistant/machines/:id/fix), never by itself. */
 export type AssistantFix = "start_herdr";
 
@@ -180,4 +181,4 @@ export interface AddProjectRequest { machine: string; path: string; defaultAgent
 export interface ProjectChange { mergeMode?: MergeMode; defaultAgent?: AssistantAgent }
 
 /** Why a folder was refused as a project (the error code of POST /api/assistant/projects). */
-export type ProjectRefusal = "invalid_path" | "missing" | "not_git" | "root" | "home" | "home_parent" | "duplicate" | "unknown_machine";
+export type ProjectRefusal = "invalid_path" | "missing" | "not_git" | "root" | "home" | "home_parent" | "duplicate" | "unknown_machine" | "windows";

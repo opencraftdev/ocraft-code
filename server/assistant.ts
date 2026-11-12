@@ -8,8 +8,8 @@
  * Tasks (phase 4) are server/assistant-tasks.ts; the watcher checks their panes too.
  */
 import { join } from "node:path";
-import { ASSISTANT_AGENTS, type AddProjectRequest, type AssistantAgent, type AssistantMachine, type AssistantProblem, type AssistantProject, type AssistantState, type MachineHealth, type MergeMode, type ProjectRefusal } from "../shared/assistant.ts";
-import type { Machine, MachineEvent } from "../shared/machines.ts";
+import { ASSISTANT_AGENTS, type AddProjectRequest, type AssistantAgent, type AssistantMachine, type AssistantProblem, type AssistantProject, type AssistantState, type AssistantTask, type MachineHealth, type MergeMode, type ProjectRefusal } from "../shared/assistant.ts";
+import { LOCAL_MACHINE, type Machine, type MachineEvent } from "../shared/machines.ts";
 import type { AssistantSessions } from "./assistant-sessions.ts";
 import { AssistantTasks, type TaskBridge } from "./assistant-tasks.ts";
 import { isJsonObject, jsonResponse, setRequestRoute } from "./http.ts";
@@ -27,6 +27,8 @@ export interface AssistantMachines {
   list(): Machine[];
   subscribe(listener: (event: MachineEvent) => void): () => void;
   retryNow(id: string): void;
+  /** whether the machine's last connection found Windows (MachineManager.windows) */
+  windows?(id: string): boolean;
 }
 
 export const HEALTH_INTERVAL_MS = 30_000;
@@ -114,6 +116,7 @@ const REFUSALS: Record<ProjectRefusal, string> = {
   home_parent: "A folder that holds the home folder cannot be a project",
   duplicate: "That folder is already a project",
   unknown_machine: "That machine is not one of herdr's saved machines",
+  windows: "Windows isn't supported by the Assistant yet",
 };
 const refuse = (refusal: ProjectRefusal, status = 400) => new AssistantError(refusal, REFUSALS[refusal], status);
 
@@ -166,7 +169,8 @@ export class Assistant {
       && Object.values(value).every((entry) => isJsonObject(entry) && validMaxRunning(entry.maxRunning)), {});
     this.tasks = new AssistantTasks(join(directory, "tasks.json"), {
       project: (id) => this.projects.find((project) => project.id === id),
-      machine: (id) => this.watchable().find((machine) => machine.id === id),
+      // a Windows machine is none the queue can start a task on: its tasks stay Queued
+      machine: (id) => this.isWindows(id) ? undefined : this.watchable().find((machine) => machine.id === id),
       maxRunning: (id) => this.settings[id]?.maxRunning ?? DEFAULT_MAX_RUNNING,
       bridge: options.bridge ?? (() => Promise.reject(new AssistantError("machine_offline", "This server reaches no machines", 503))),
       run: (machine, script, timeoutMs) => this.run(machine, script, timeoutMs),
@@ -174,7 +178,12 @@ export class Assistant {
     });
     this.unsubscribe = machines.subscribe((event) => {
       // a machine connected again resumes its queue by itself (decision 16)
-      if (event.type === "machines") { this.sync(); void this.tasks.runQueue(); }
+      if (event.type === "machines") {
+        this.sync(); void this.tasks.runQueue();
+        // herdr here came back (or this server started): an Assistant pane it lost is started again
+        const local = event.machines.find((machine) => machine.id === LOCAL_MACHINE);
+        if (local?.state === "connected" && local.snapshot) void this.sessions?.revive(new Set(local.snapshot.panes.map((pane) => pane.pane_id)));
+      }
       if (event.type === "machine-message") this.tasks.heard(event.machine_id, event.message);
     });
     // a restart catches up at once: a cron slot missed while down fires once
@@ -188,11 +197,25 @@ export class Assistant {
     if (!machine) throw refuse("unknown_machine", 404);
     return machine;
   }
+  // ponytail: Windows is left out (its checks are POSIX sh); PowerShell variants when the Assistant supports it
+  private isWindows(id: string): boolean { return this.machines.windows?.(id) === true; }
+  private windowsHealth(): MachineHealth { return { checked_at: this.now(), problems: ["windows"], agents: [] }; }
+  /** a project on a Windows machine is refused before anything runs there */
+  private refuseWindows(projectId: unknown): void {
+    const project = this.projects.find((candidate) => candidate.id === projectId);
+    if (project && this.isWindows(project.machine)) throw refuse("windows");
+  }
+
+  /** ovis-task create */
+  async createTask(body: unknown): Promise<AssistantTask> {
+    if (isJsonObject(body)) this.refuseWindows(body.project);
+    return this.tasks.create(body);
+  }
 
   state(): AssistantState {
     const machines: AssistantMachine[] = this.watchable().map((machine) => ({
       id: machine.id, name: machine.name, state: machine.state,
-      health: this.watched.get(machine.id)?.health ?? null,
+      health: this.isWindows(machine.id) ? this.windowsHealth() : this.watched.get(machine.id)?.health ?? null,
       maxRunning: this.settings[machine.id]?.maxRunning ?? DEFAULT_MAX_RUNNING,
     }));
     return { machines, projects: [...this.projects], sessions: this.sessions?.list() ?? [], tasks: this.tasks.list() };
@@ -207,6 +230,7 @@ export class Assistant {
     if (!project) return Promise.reject(new AssistantError("unknown_project", "No project has that name; `ovis-task projects` lists them", 404));
     const machine = this.watchable().find((candidate) => candidate.id === project.machine);
     if (!machine) return Promise.reject(new AssistantError("unknown_machine", "That project's machine is not one of herdr's saved machines", 404));
+    if (this.isWindows(machine.id)) return Promise.reject(refuse("windows"));
     return this.run(machine, script(project.path));
   }
 
@@ -240,6 +264,7 @@ export class Assistant {
   }
 
   private async inspect(machine: Machine): Promise<MachineHealth> {
+    if (this.isWindows(machine.id)) return this.windowsHealth();
     const gh = this.projects.some((project) => project.machine === machine.id && project.mergeMode === "pr");
     try {
       return readHealth(await this.run(machine, healthScript(machine.target?.session, gh)), gh, this.now());
@@ -256,7 +281,8 @@ export class Assistant {
     if (!path || path.length > 4096 || /[\0\r\n]/.test(path) || !(path.startsWith("/") || path === "~" || path.startsWith("~/"))) throw refuse("invalid_path");
     if (request.defaultAgent !== undefined && !validAgent(request.defaultAgent)) throw new AssistantError("invalid_agent", "Choose Claude Code or Codex");
     const machine = this.machine(body.machine);
-    const judged = judgeProject(await this.run(machine, projectScript(path)));
+    if (this.isWindows(machine.id)) throw refuse("windows");
+    const judged =judgeProject(await this.run(machine, projectScript(path)));
     if ("refusal" in judged) throw refuse(judged.refusal);
     if (this.projects.some((project) => project.machine === machine.id && project.path === judged.path)) throw refuse("duplicate", 409);
     const project: AssistantProject = { id: this.newId(judged.path), machine: machine.id, path: judged.path, mergeMode: judged.mergeMode, defaultAgent: request.defaultAgent ?? "claude" };
