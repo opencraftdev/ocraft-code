@@ -1,25 +1,26 @@
 /**
- * The Assistant itself (docs/plan/20261111-2112-assistant.md, phase 3): a Claude Code or Codex
- * agent in a herdr pane on the VM, started in stateDir/assistant/agent/, which holds its
- * instructions, its notes and its permission settings. The Assistant is not full auto: its
- * settings allow `ovis-task` and its own folder, and deny ssh, scp, herdr and curl (decision 11).
+ * The Assistant itself (docs/plan/20261112-1622-assistant-delegation.md): one long-lived Claude
+ * Code or Codex agent in a herdr pane on the VM, started in stateDir/assistant/agent/, which holds
+ * its instructions, its notes and its permission settings. The Assistant is not full auto: its
+ * settings allow `ovis-task` and its own folder, and deny ssh, scp, herdr and curl.
  *
- * Each session is stateDir/assistant/sessions/<YYYYMMDD-HHMM>/ (decision 18). New session opens a
- * fresh pane, then archives the one before: its conversation is saved there as it stands and its
- * pane closed. herdr's focus is never moved and nothing takes over a pane.
- *
- * A current session whose pane is gone (herdr or the VM restarted) gets a fresh pane under the same
- * name (revive). Its conversation before that cannot be read once the pane is gone (herdr reads it
- * through the pane), so nothing is archived: the agent starts again from ovis-task and notes.md.
+ * There is one session, forever (stateDir/assistant/session.json): no New chat, no archive. A
+ * keep-alive checks it every minute, at this server's start and when the VM's herdr comes back:
+ * a pane gone is opened again in the same folder and an agent that exited is started again in its
+ * pane, both resuming the same conversation (`claude --continue`, `codex resume --last`); an agent
+ * waiting on a prompt is left as it is. A compaction watchdog asks an idle agent whose context is
+ * over 70% full to save lasting facts to notes.md, then sends `/compact`. Restart Assistant (the
+ * user's only) starts a fresh conversation. herdr's focus is never moved and nothing takes over a pane.
  */
 import { existsSync, lstatSync, mkdirSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { ASSISTANT_AGENTS, type AssistantAgent, type AssistantSession, type AssistantTranscript } from "../shared/assistant.ts";
+import { ASSISTANT_AGENTS, type AssistantAgent, type AssistantSessionInfo, type AssistantSessionState } from "../shared/assistant.ts";
+import type { AgentStatus } from "../shared/protocol.ts";
 import { freeAgentName } from "./agent-name.ts";
-import { AssistantError } from "./assistant.ts";
+import type { Timer } from "./assistant.ts";
 import { paneConversation } from "./conversation.ts";
-import { agentStart, HerdrError, paneGet, paneRead, sessionSnapshot, workspaceClose, workspaceCreate } from "./herdr/client.ts";
+import { agentPrompt, agentStart, HerdrError, sessionSnapshot, workspaceClose, workspaceCreate } from "./herdr/client.ts";
 import { isJsonObject } from "./http.ts";
 import { launchedAgents } from "./launched-agents.ts";
 import { writePrivateState } from "./private-state.ts";
@@ -29,95 +30,51 @@ import { trustNewFolder } from "./trust-new-folder.ts";
 /** where bin/ovis-task is: put first on the pane's PATH */
 export const OVIS_TASK_BIN = join(import.meta.dir, "..", "bin");
 
-/** The session's name: its start in the VM's local time, `YYYYMMDD-HHMM`. */
-export function sessionName(at: Date): string {
-  const two = (value: number) => String(value).padStart(2, "0");
-  return `${at.getFullYear()}${two(at.getMonth() + 1)}${two(at.getDate())}-${two(at.getHours())}${two(at.getMinutes())}`;
-}
-const NAME = /^\d{8}-\d{4}(-\d+)?$/;
-
 export const INSTRUCTIONS = `# The Assistant
 
-You are the Assistant: one coordinator for every project on every machine in this tailnet. The
-user messages you; you read their projects, turn what they write into tasks, and report back.
+You are the Assistant: one long-lived coordinator for the herdr sessions on every machine in this
+tailnet. The user messages you; you delegate their work to coding agents in those sessions, watch
+them, and report back. You do not write code yourself.
 
-## Start of every session
+## Start of every conversation, and after a compaction
 
-1. Run \`ovis-task list\` to see the tasks, \`ovis-task projects\` to see the projects,
-   \`ovis-task machines\` to see the machines, and \`ovis-task sessions\` to see every herdr
-   session open on them.
-2. Read \`notes.md\` in this folder.
+1. Read \`notes.md\` in this folder.
+2. Run \`ovis-task machines\` and \`ovis-task sessions\` to see what is open where.
 
 ## Rules
 
-- The state lives in \`ovis-task\`, not in your memory of an earlier session. Ask it again rather
-  than trust what you remember.
-- Write lasting facts (preferences, how a project is built, who owns what) to \`notes.md\`. It is
-  the only file you edit.
-- You reach machines and projects only through \`ovis-task\`. Never try ssh, scp, herdr, curl or
-  any other way to another machine: they are denied, and a task is how work gets done there.
-- You read files only inside registered projects: \`ovis-task read <project> <path>\`,
-  \`ovis-task grep <project> <pattern> [path]\` and \`ovis-task git <project> log|diff|status|show
-  [args]\`. Paths are relative to the project folder.
-- You coordinate every herdr session on the connected machines, not only your tasks:
-  \`ovis-task sessions\` lists them, \`ovis-task peek <machine> <pane>\` reads one, and
-  \`ovis-task send <machine> <pane> <message>\` hands work to the agent already open there. Send
-  only what the user asked for or agreed to, say in your reply what you sent where, and check back
-  with \`peek\`. New work in a registered project goes as a task instead.
-- Only the user adds projects, in the app. You can list them, never add one. Asked what is on a
-  machine, run \`ovis-task machines\`: it shows the folders open in that machine's herdr
-  workspaces. Name the one that fits and ask the user to add it with Add project.
-- All work on a project is a task. A task is queued and starts on the project's machine as soon as
-  that machine is connected and runs fewer tasks than its Max running setting: a coding agent
-  in a new git worktree (branch \`assistant/<id>-<slug>\`), running full auto, with the brief as its
-  first prompt. Write the brief so it stands alone: the task's agent sees nothing of this chat,
-  and it has no \`ovis-task\`, so never tell it to call \`ovis-task\` or to report back.
-- A task's status comes from its agent: \`working\`, \`needs_you\` (it asks something), \`ready\`
-  (it finished its turn), \`failed\` or \`cancelled\`. When one needs the user, say so; answer it
-  only with what the user told you. After \`ready\` come \`reviewing\` (a second agent reviews the
-  branch, when the task has review on), \`merging\` and \`done\`. A \`needs_you\` task with a
-  \`reason\` (a merge that failed or conflicted, or a review that kept finding problems) waits for
-  the user in the app, not for an answer from you; tell the user that reason.
-- You never merge or approve a task, and \`ovis-task\` has no way to: only the user does, with
-  Approve on the task's card in the app. When a task is \`ready\`, tell the user to approve it there
-  (a \`pr\` project's task shows its PR, \`prUrl\`). Only a task created with \`--auto-merge\` merges
-  without that, once its review passed.
+- The state lives in \`ovis-task\`, not in your memory. Ask it again rather than trust what you
+  remember from earlier in this conversation.
+- This conversation is long-lived and is compacted from time to time. Write lasting facts to
+  \`notes.md\` as you learn them: the user's preferences, which folder on which machine holds which
+  project, what you delegated where and why. It is the only file you edit.
+- You reach machines only through \`ovis-task\`. Never try ssh, scp, herdr, curl or any other way to
+  another machine: they are denied.
+- Send or open only what the user asked for or agreed to. Say in your reply what you sent or opened,
+  on which machine and pane, and check back with \`peek\`.
+- A delegated agent sees nothing of this chat and has no \`ovis-task\`. Write each brief and message
+  so it stands alone: the goal, the folder's context that matters, what done looks like. The agent
+  does its own branching, commits and PRs; never tell it to call \`ovis-task\` or to report back.
+- Asked what is on a machine, run \`ovis-task machines\`: it shows the folders its herdr workspaces
+  have open.
 
 ## ovis-task
 
-- \`ovis-task projects\`: the projects, their machine and folder
 - \`ovis-task machines\`: the machines, whether each is connected, its agent CLIs, and the folders
   its herdr workspaces have open
 - \`ovis-task sessions [machine]\`: every herdr workspace and pane on the machines: its pane id,
-  agent, state (working, idle, done, blocked), title and folder
+  agent, state (working, idle, done, blocked), title and folder; \`assistant: true\` marks a session
+  you opened
 - \`ovis-task peek <machine> <pane>\`: an agent's last turns, or a shell's last screen lines
 - \`ovis-task send <machine> <pane> <message>\`: sends the message to that pane's agent, as if the
-  user typed it. Refused for a shell, a working agent, or a task's own pane
-- \`ovis-task read <project> <path>\`
-- \`ovis-task grep <project> <pattern> [path]\`
-- \`ovis-task git <project> log|diff|status|show [args]\`
-- \`ovis-task create <project> --title <title> --brief <brief> [--agent claude|codex]\`: queues a
-  task (the project's default agent unless \`--agent\` says). A machine that is down keeps it
-  \`queued\` until it comes back.
-  - \`--review\`: at \`ready\`, a fresh agent reviews the branch; its findings go back to the task's
-    agent, up to 3 rounds, then to the user.
-  - \`--auto-merge\`: it merges without the user's Approve once it is \`ready\` (and its review
-    passed). Use it only when the user asked for it.
-  - \`--after <id>\`: it starts only once task \`<id>\` is \`done\`; it fails if that one fails or is
-    cancelled.
-  - \`--at <time>\`: \`scheduled\` until then. \`HH:MM\` is the next time the VM's clock shows it
-    (today, or tomorrow when it has passed); or a date and time, such as \`2026-11-12T09:00\`.
-  - \`--cron "<min> <hour> <day> <month> <weekday>"\`: a repeating task, in the VM's local time
-    (\`*\`, lists \`1,15\`, ranges \`1-5\`, steps \`*/15\`; weekday 0 or 7 is Sunday). It stays
-    \`scheduled\` as a template and queues a new task (\`fromCron\` its id) at each fire time;
-    cancelling the template stops it. It takes neither \`--after\` nor \`--at\`.
-- \`ovis-task list [--status <status>]\`: the tasks, newest first
-- \`ovis-task show <id>\`: one task and the last lines of its agent's pane
-- \`ovis-task answer <id> <choice>\`: answers the question a \`needs_you\` task shows, by the
-  option's number or label (or the text, where the question takes typed text)
-- \`ovis-task cancel <id>\`: stops the task and closes its agent's pane (its worktree stays), or
-  takes a \`queued\` or \`scheduled\` task or a cron template off the queue
+  user typed it. Refused for a shell and for a working agent: wait until it is idle or done
+- \`ovis-task open <machine> <folder> [--agent claude|codex] [--create] <brief>\`: opens a new
+  session in that folder (absolute, or \`~/...\`; under the machine's home, not home itself) with an
+  agent running full auto, and sends the brief as its first message. \`--create\` makes the folder
+  and runs \`git init\` there when it is not a repository yet. At most a few sessions you opened
+  work at once on one machine (its Max running setting); past that it is refused until one is idle.
 `;
+
 
 /**
  * Claude Code's project settings. `dontAsk` refuses every tool the allow list does not name, so
@@ -179,168 +136,237 @@ export function writeAgentFolder(folder: string, codexAuth?: string): void {
   if (!existsSync(join(folder, "notes.md"))) writeFileSync(join(folder, "notes.md"), "# Notes\n\nLasting facts about the user and their projects.\n");
 }
 
-/** What the sessions ask of herdr; tests pass their own. */
-export interface AssistantPanes {
-  open(options: { cwd: string; label: string; env: Record<string, string>; agent: AssistantAgent; args: string[] }): Promise<{ paneId: string; workspaceId: string }>;
-  /** the conversation as it stands, for the archive */
-  read(paneId: string): Promise<Omit<AssistantTranscript, "name">>;
-  close(workspaceId: string): Promise<void>;
-  /** whether herdr still has the pane; rejects when herdr cannot be asked */
-  alive(paneId: string): Promise<boolean>;
+
+/** the keep-alive's interval */
+export const KEEP_ALIVE_MS = 60_000;
+/** the share of the context window past which an idle Assistant is compacted */
+export const COMPACT_AT = 0.7;
+/** ponytail: a fixed pause between compactions, so a usage figure not yet updated after /compact cannot fire another; read the post-compact usage if it ever matters */
+export const COMPACT_COOLDOWN_MS = 30 * 60_000;
+/** the notes request before /compact: how long an agent that was never seen working is waited for */
+const NOTES_WAIT_MS = 2 * KEEP_ALIVE_MS;
+export const NOTES_REQUEST = "Your context is nearly full and will be compacted next. First write to notes.md every lasting fact from this conversation that is not there yet: the user's preferences, open delegations (machine, pane, what was asked), and what each session is doing. Reply with one line when done.";
+/** what the agent is told to keep through a compaction (Claude Code's /compact takes it; Codex's takes none) */
+export const compactCommand = (agent: AssistantAgent): string =>
+  agent === "claude" ? "/compact keep: open delegations, user preferences, what each session is doing" : "/compact";
+
+/** The agent's arguments: its permission settings, and with `resume` the conversation it had in this folder. */
+export function agentArgs(agent: AssistantAgent, resume: boolean): string[] {
+  if (agent === "codex") return resume ? ["resume", "--last", ...CODEX_ARGS] : [...CODEX_ARGS];
+  return resume ? ["--continue"] : [];
 }
 
-const textOf = (parts: readonly { kind: string; text?: string }[]) => parts.flatMap((part) => part.kind === "text" && part.text ? [part.text] : []).join("\n\n");
+/** What the session asks of the VM's herdr; tests pass their own. */
+export interface AssistantPanes {
+  /** a new workspace in `cwd` with the agent started in its pane */
+  open(options: { cwd: string; label: string; env: Record<string, string>; agent: AssistantAgent; args: string[] }): Promise<{ paneId: string; workspaceId: string }>;
+  /** starts the agent again in a pane whose agent exited (its shell keeps the workspace's environment) */
+  start(paneId: string, agent: AssistantAgent, args: string[]): Promise<void>;
+  /** the pane as herdr has it now: null when it is gone; rejects when herdr cannot be asked */
+  pane(paneId: string): Promise<{ agent: string | null; status: AgentStatus | null } | null>;
+  /** how much of its context the agent's last request filled; null when its transcript does not say */
+  context(paneId: string, codexHome?: string): Promise<{ used: number; window: number | null } | null>;
+  /** types a message into the agent and sends it (herdr's agent.prompt, refused while it waits on a prompt) */
+  send(paneId: string, text: string): Promise<void>;
+  close(workspaceId: string): Promise<void>;
+}
+
+async function startAgent(paneId: string, agent: AssistantAgent, args: string[]): Promise<void> {
+  // a pane made a moment ago can still be starting its shell (agent_pane_busy), as agent-launch.ts waits for
+  const deadline = Date.now() + 10_000;
+  for (;;) {
+    try {
+      const name = freeAgentName("assistant", (await sessionSnapshot()).agents.map((running) => running.name));
+      await agentStart({ name, kind: agent, paneId, args, timeoutMs: 60_000 });
+      break;
+    } catch (error) {
+      if (!(error instanceof HerdrError) || error.code !== "agent_pane_busy" || Date.now() >= deadline) throw error;
+      await Bun.sleep(100);
+    }
+  }
+  launchedAgents.launched(paneId, agent);
+  if (agent === "claude") void trustNewFolder(paneId).catch(() => undefined);
+}
 
 export const herdrPanes: AssistantPanes = {
   async open({ cwd, label, env, agent, args }) {
     // focus: false (workspaceCreate), so herdr's own focus stays where it is
     const created = await workspaceCreate({ cwd, label, env });
-    const paneId = created.root_pane.pane_id;
-    try {
-      // a pane made a moment ago can still be starting its shell (agent_pane_busy), as agent-launch.ts waits for
-      const deadline = Date.now() + 10_000;
-      for (;;) {
-        try {
-          const name = freeAgentName("assistant", (await sessionSnapshot()).agents.map((running) => running.name));
-          await agentStart({ name, kind: agent, paneId, args, timeoutMs: 60_000 });
-          break;
-        } catch (error) {
-          if (!(error instanceof HerdrError) || error.code !== "agent_pane_busy" || Date.now() >= deadline) throw error;
-          await Bun.sleep(100);
-        }
-      }
-    } catch (error) {
+    try { await startAgent(created.root_pane.pane_id, agent, args); } catch (error) {
       await workspaceClose(created.tab.workspace_id).catch(() => undefined);
       throw error;
     }
-    launchedAgents.launched(paneId, agent);
-    if (agent === "claude") void trustNewFolder(paneId).catch(() => undefined);
-    return { paneId, workspaceId: created.tab.workspace_id };
+    return { paneId: created.root_pane.pane_id, workspaceId: created.tab.workspace_id };
   },
-  async read(paneId) {
-    try {
-      // every page, oldest first, up to a bound
-      let page = await paneConversation(paneId);
-      const turns = [...page.turns];
-      for (let pages = 1; page.cursor !== null && pages < 50; pages += 1) {
-        page = await paneConversation(paneId, undefined, { before: page.cursor });
-        turns.unshift(...page.turns);
-      }
-      return { turns: turns.flatMap((turn) => { const text = textOf(turn.parts); return text ? [{ role: turn.role, text }] : []; }) };
-    } catch {
-      // no transcript recognized (or the read failed): what the pane shows
-      const text = await paneRead({ paneId, source: "recent", format: "text", timeoutMs: 5_000 }).then((read) => read.text, () => "");
-      return { turns: [], text };
-    }
+  start: startAgent,
+  async pane(paneId) {
+    const pane = (await sessionSnapshot()).panes.find((candidate) => candidate.pane_id === paneId);
+    return pane ? { agent: pane.agent ?? null, status: pane.agent_status ?? null } : null;
   },
+  context: (paneId, codexHome) => paneConversation(paneId, codexHome).then((read) => read.metadata?.context ?? null),
+  send: (paneId, text) => agentPrompt(paneId, text),
   close: (workspaceId) => workspaceClose(workspaceId),
-  alive: (paneId) => paneGet(paneId).then(() => true, (error: unknown) => {
-    if (error instanceof HerdrError && error.code === "pane_not_found") return false;
-    throw error;
-  }),
 };
 
-type Stored = AssistantSession & { workspace_id: string | null };
-const validStored = (value: unknown): value is Stored => isJsonObject(value) && typeof value.name === "string" && NAME.test(value.name)
-  && (ASSISTANT_AGENTS as readonly unknown[]).includes(value.agent) && typeof value.started_at === "number"
-  && (value.pane_id === null || typeof value.pane_id === "string");
+interface Stored { agent: AssistantAgent; started_at: number; pane_id: string | null; workspace_id: string | null; last_compaction: number | null }
+const validStored = (value: unknown): value is Stored => isJsonObject(value) && (ASSISTANT_AGENTS as readonly unknown[]).includes(value.agent)
+  && typeof value.started_at === "number" && (value.pane_id === null || typeof value.pane_id === "string")
+  && (value.workspace_id === null || typeof value.workspace_id === "string") && (value.last_compaction === null || typeof value.last_compaction === "number");
+const AT_REST: readonly (AgentStatus | null)[] = ["idle", "done"];
+const defaultTimer: Timer = (run, ms) => { const timer = setTimeout(run, ms); timer.unref(); return () => clearTimeout(timer); };
 
-export class AssistantSessions {
-  private directory: string;
+export class AssistantSession {
+  private path: string;
   readonly folder: string;
-  private busy: Promise<unknown> = Promise.resolve();
-  /** the current session as last read or saved; undefined until read */
-  private current: Stored | null | undefined;
-  private reviving = false;
+  private stored: Stored | null;
+  private state: AssistantSessionState = "restarting";
+  private queue: Promise<void> = Promise.resolve();
+  private checking: Promise<void> | null = null;
+  private cancel: (() => void) | undefined;
+  private stopped = false;
+  /** the last start of the agent the keep-alive made: a resume whose agent is gone again at the next check starts fresh */
+  private launched: "resume" | "fresh" | null = null;
+  /** a notes request sent, waiting for the agent to work on it and come to rest */
+  private compaction: { notesAt: number; worked: boolean } | null = null;
+  private now: () => number;
+  private timer: Timer;
 
-  constructor(stateDir: string, private agent: AssistantAgent, private env: () => Record<string, string>, private panes: AssistantPanes = herdrPanes, private now: () => Date = () => new Date()) {
-    this.directory = join(stateDir, "assistant", "sessions");
+  constructor(stateDir: string, private agent: AssistantAgent, private env: () => Record<string, string>, private panes: AssistantPanes = herdrPanes, options: { now?: () => number; timer?: Timer } = {}) {
+    this.path = join(stateDir, "assistant", "session.json");
     this.folder = join(stateDir, "assistant", "agent");
+    this.now = options.now ?? Date.now;
+    this.timer = options.timer ?? defaultTimer;
+    const read = readStateDocument(this.path);
+    this.stored = read.kind === "json" && validStored(read.value) ? read.value : earlierSession(join(stateDir, "assistant", "sessions"));
   }
 
-  private stored(): Stored[] {
-    if (!existsSync(this.directory)) return [];
-    return readdirSync(this.directory).filter((name) => NAME.test(name)).flatMap((name) => {
-      const read = readStateDocument(join(this.directory, name, "session.json"));
-      return read.kind === "json" && validStored(read.value) && read.value.name === name ? [read.value] : [];
-    }).sort((a, b) => b.started_at - a.started_at || b.name.localeCompare(a.name));
+  info(): AssistantSessionInfo | null {
+    const stored = this.stored;
+    return stored && { agent: stored.agent, pane_id: stored.pane_id, started_at: stored.started_at, last_compaction: stored.last_compaction, state: this.state };
   }
 
-  list(): AssistantSession[] {
-    return this.stored().map(({ workspace_id: _, ...session }) => session);
+  /** the keep-alive: a check now, then one every KEEP_ALIVE_MS until stop() */
+  start(): void {
+    if (this.stopped) return;
+    this.cancel?.();
+    void this.check().finally(() => { if (!this.stopped) this.cancel = this.timer(() => this.start(), KEEP_ALIVE_MS); });
   }
 
-  private save(session: Stored): void { writePrivateState(join(this.directory, session.name, "session.json"), session); this.current = undefined; }
+  stop(): void { this.stopped = true; this.cancel?.(); }
 
-  private currentSession(): Stored | null {
-    return this.current ??= this.stored().find((session) => session.archived_at === undefined) ?? null;
+  private save(stored: Stored): void { writePrivateState(this.path, stored); this.stored = stored; }
+
+  /** one at a time, after a restart in progress; a check asked for while one waits or runs is that one */
+  check(): Promise<void> {
+    this.checking ??= this.queue = this.queue.then(() => this.checkNow()).catch((error: unknown) => {
+      console.error(`Assistant keep-alive: ${error instanceof Error ? error.message : String(error)}`);
+    }).finally(() => { this.checking = null; });
+    return this.checking;
   }
 
-  private open(name: string): Promise<{ paneId: string; workspaceId: string }> {
-    const codex = this.agent === "codex";
-    writeAgentFolder(this.folder, codex ? userCodexAuth() : undefined);
-    return this.panes.open({
-      cwd: this.folder, label: `Assistant ${name}`, agent: this.agent, args: codex ? CODEX_ARGS : [],
-      env: { ...this.env(), ...(codex ? { CODEX_HOME: join(this.folder, ".codex") } : {}) },
-    });
-  }
-
-  /**
-   * herdr's panes as it lists them now: a current session whose pane is not among them gets a fresh
-   * one under the same name, once herdr itself says that pane is gone. herdr's focus never moves.
-   */
-  revive(live: ReadonlySet<string>): Promise<void> {
-    const current = this.currentSession();
-    if (this.reviving || current === null || current.pane_id === null || live.has(current.pane_id)) return this.busy.then(() => undefined);
-    this.reviving = true;
-    const run = this.busy.then(() => this.reviveNow()).finally(() => { this.reviving = false; });
-    this.busy = run.catch(() => undefined);
-    return this.busy.then(() => undefined);
-  }
-
-  private async reviveNow(): Promise<void> {
-    const current = this.currentSession();
-    // a New chat meanwhile, or a herdr that cannot say (alive rejects): left as it is
-    if (current === null || current.pane_id === null || await this.panes.alive(current.pane_id)) return;
-    // a workspace herdr restored without the pane goes, so the session keeps one
-    if (current.workspace_id !== null) await this.panes.close(current.workspace_id).catch(() => undefined);
-    const { paneId, workspaceId } = await this.open(current.name);
-    this.save({ ...current, pane_id: paneId, workspace_id: workspaceId });
-  }
-
-  /** New session: a fresh pane first, then every session before it archived. One at a time. */
-  start(): Promise<AssistantSession> {
-    const run = this.busy.then(() => this.startNow());
-    this.busy = run.catch(() => undefined);
+  /** Restart Assistant, only on the user's click: the pane closed and a fresh conversation opened. */
+  restart(): Promise<void> {
+    const run = this.queue.then(() => this.restartNow());
+    this.queue = run.catch(() => undefined);
     return run;
   }
 
-  private async startNow(): Promise<AssistantSession> {
-    const at = this.now();
-    const taken = new Set(this.stored().map((session) => session.name));
-    let name = sessionName(at);
-    for (let n = 2; taken.has(name); n += 1) name = `${sessionName(at)}-${n}`;
-    const { paneId, workspaceId } = await this.open(name);
-    for (const previous of this.stored()) if (previous.archived_at === undefined) await this.archive(previous);
-    const session: Stored = { name, agent: this.agent, started_at: at.getTime(), pane_id: paneId, workspace_id: workspaceId };
-    this.save(session);
-    const { workspace_id: _, ...shown } = session;
-    return shown;
+  private async restartNow(): Promise<void> {
+    const old = this.stored;
+    this.state = "restarting";
+    this.compaction = null;
+    this.launched = null;
+    if (old?.workspace_id) await this.panes.close(old.workspace_id).catch(() => undefined);
+    await this.openPane(false, this.now());
+    this.state = "running";
   }
 
-  private async archive(session: Stored): Promise<void> {
-    const transcript = session.pane_id === null ? { turns: [] } : await this.panes.read(session.pane_id).catch(() => ({ turns: [] }));
-    writePrivateState(join(this.directory, session.name, "transcript.json"), { name: session.name, ...transcript } satisfies AssistantTranscript);
-    // a pane already gone is archived all the same
-    if (session.workspace_id !== null) await this.panes.close(session.workspace_id).catch(() => undefined);
-    this.save({ ...session, pane_id: null, workspace_id: null, archived_at: this.now().getTime() });
+  private async openPane(resume: boolean, startedAt: number): Promise<void> {
+    const codex = this.agent === "codex";
+    writeAgentFolder(this.folder, codex ? userCodexAuth() : undefined);
+    const { paneId, workspaceId } = await this.panes.open({
+      cwd: this.folder, label: "Assistant", agent: this.agent, args: agentArgs(this.agent, resume),
+      env: { ...this.env(), ...(codex ? { CODEX_HOME: join(this.folder, ".codex") } : {}) },
+    });
+    this.save({ agent: this.agent, started_at: startedAt, pane_id: paneId, workspace_id: workspaceId, last_compaction: resume ? this.stored?.last_compaction ?? null : null });
   }
 
-  /** An archived session's saved conversation; the current one is read live in the chat. */
-  transcript(name: string): AssistantTranscript {
-    if (!NAME.test(name)) throw new AssistantError("not_found", "No session has that name", 404);
-    const read = readStateDocument(join(this.directory, name, "transcript.json"));
-    if (read.kind !== "json" || !isJsonObject(read.value) || !Array.isArray(read.value.turns)) throw new AssistantError("not_found", "That session is not archived", 404);
-    return read.value as unknown as AssistantTranscript;
+  private async checkNow(): Promise<void> {
+    const stored = this.stored;
+    if (stored === null || stored.pane_id === null) {
+      // the first session ever: a fresh conversation
+      this.state = "restarting";
+      await this.openPane(false, this.now());
+      this.state = "running";
+      return;
+    }
+    // herdr that cannot be asked: left as it is until it answers
+    const pane = await this.panes.pane(stored.pane_id);
+    const resume = this.launched !== "resume";
+    if (pane === null) {
+      this.state = "restarting";
+      this.compaction = null;
+      // a workspace herdr restored without the pane goes, so the session keeps one
+      if (stored.workspace_id !== null) await this.panes.close(stored.workspace_id).catch(() => undefined);
+      this.launched = resume ? "resume" : "fresh";
+      await this.openPane(resume, resume ? stored.started_at : this.now());
+      return;
+    }
+    if (!pane.agent) {
+      // the agent exited to the pane's shell
+      this.state = "restarting";
+      this.compaction = null;
+      this.launched = resume ? "resume" : "fresh";
+      await this.panes.start(stored.pane_id, this.agent, agentArgs(this.agent, resume));
+      if (!resume) this.save({ ...stored, started_at: this.now(), last_compaction: null });
+      return;
+    }
+    this.launched = null;
+    if (pane.status === "blocked") { this.state = "prompt"; return; }
+    this.state = "running";
+    await this.watchContext(stored.pane_id, pane.status);
   }
+
+  /** a pane's agent state as herdr reports it between checks: a notes request worked on and done goes on to /compact */
+  heard(paneId: string, status: AgentStatus): void {
+    if (paneId !== this.stored?.pane_id || !this.compaction) return;
+    if (status === "working") this.compaction.worked = true;
+    else if (AT_REST.includes(status) && this.compaction.worked) void this.check();
+  }
+
+  /** The compaction watchdog: never while the agent works; the notes request first, /compact once it is at rest again. */
+  private async watchContext(paneId: string, status: AgentStatus | null): Promise<void> {
+    if (status === "working") { if (this.compaction) this.compaction.worked = true; return; }
+    if (!AT_REST.includes(status)) return;
+    const now = this.now();
+    if (this.compaction) {
+      if (!this.compaction.worked && now - this.compaction.notesAt < NOTES_WAIT_MS) return;
+      this.compaction = null;
+      await this.panes.send(paneId, compactCommand(this.agent));
+      this.save({ ...this.stored!, last_compaction: now });
+      return;
+    }
+    const last = this.stored?.last_compaction;
+    if (last != null && now - last < COMPACT_COOLDOWN_MS) return;
+    const context = await this.panes.context(paneId, this.agent === "codex" ? join(this.folder, ".codex") : undefined).catch(() => null);
+    if (!context?.window || context.used / context.window <= COMPACT_AT) return;
+    await this.panes.send(paneId, NOTES_REQUEST);
+    this.compaction = { notesAt: now, worked: false };
+  }
+}
+
+/**
+ * The session an earlier build kept as stateDir/assistant/sessions/<YYYYMMDD-HHMM>/session.json:
+ * its current one (not archived) is taken over, so its pane and conversation carry on.
+ */
+function earlierSession(directory: string): Stored | null {
+  if (!existsSync(directory)) return null;
+  for (const name of readdirSync(directory).sort().reverse()) {
+    const read = readStateDocument(join(directory, name, "session.json"));
+    if (read.kind !== "json" || !isJsonObject(read.value) || read.value.archived_at !== undefined) continue;
+    const { agent, started_at, pane_id, workspace_id } = read.value;
+    const stored = { agent, started_at, pane_id: pane_id ?? null, workspace_id: workspace_id ?? null, last_compaction: null };
+    if (validStored(stored)) return stored;
+  }
+  return null;
 }

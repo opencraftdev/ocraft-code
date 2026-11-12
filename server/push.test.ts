@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import webpush from "web-push";
 
-import { paneAlertsMuted, paneNotificationTag, type AlertPrefs } from "../shared/notify-policy.ts";
+import { paneAlertsMuted, type AlertPrefs } from "../shared/notify-policy.ts";
 import { paneStorageId } from "../shared/machines.ts";
 import type { AgentStatus, HerdrPane, SessionSnapshot } from "../shared/protocol.ts";
 import { CompletionTracker } from "./completion.ts";
@@ -230,29 +230,6 @@ describe("push delivery", () => {
     expect(fake.received.map((r) => r.payload.title)).toEqual(["Work PC · alpha", "Home PC · beta"]);
     expect(fake.received[0]!.payload.tag).not.toBe(fake.received[1]!.payload.tag);
     expect(fake.received.every((r) => r.vapidValid)).toBe(true);
-  });
-
-  it("titles a task's pane by its task, in place of the pane's alert, and keeps the policy", async () => {
-    const push = subscribed();
-    push.describeTasks((machineId, paneId) => machineId === "pc-a" && paneId === "w1:p1" ? { id: "12", title: "Fix login" } : undefined);
-    push.seed([pane("w1:p1", "working", "alpha"), pane("w1:p2", "working", "beta")], "pc-a", "Work PC");
-    await push.onStatus("w1:p1", "blocked", "pc-a");
-    await push.onStatus("w1:p1", "working", "pc-a");
-    await push.onStatus("w1:p1", "done", "pc-a");
-    await push.onStatus("w1:p2", "blocked", "pc-a");
-    expect(fake.received.map((r) => [r.payload.title, r.payload.body])).toEqual([
-      ["Task #12 needs you: Fix login", "Work PC · alpha"],
-      ["Task #12 ready: Fix login", "Work PC · alpha"],
-      ["Work PC · beta", "waiting for your input"],
-    ]);
-    // one slot per pane: the task's alert replaces the pane's, never adds to it
-    expect(fake.received[0]!.payload.tag).toBe(paneNotificationTag("w1:p1", "pc-a"));
-    // a device that wants no finishes hears no task's either
-    fake.received.length = 0;
-    push.subscribe(fake.subscription, { input: true, done: "off" });
-    await push.onStatus("w1:p1", "working", "pc-a");
-    await push.onStatus("w1:p1", "done", "pc-a");
-    expect(fake.received).toHaveLength(0);
   });
 
   it("measures the first change after a restart against the seeded baseline", async () => {
