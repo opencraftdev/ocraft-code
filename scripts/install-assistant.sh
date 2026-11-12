@@ -78,7 +78,9 @@ main() {
   agent=$(ask "Assistant agent CLI, claude or codex" "${ASSISTANT_AGENT:-claude}")
   case "$agent" in claude | codex) ;; *) fail "the agent CLI is claude or codex, not $agent" ;; esac
 
-  export PATH="$BIN_DIR:$HOME/.bun/bin:$PATH"
+  # ~/.bun/bin first, as scripts/bun-path.sh orders it for the units: an older bun in ~/.local/bin
+  # (an npm or manual install) must not win over the Bun this script installs
+  export PATH="$HOME/.bun/bin:$BIN_DIR:$PATH"
 
   # 2. Tailscale, named and signed in
   if ! command -v tailscale >/dev/null 2>&1; then
