@@ -42,6 +42,17 @@ export function assistantLink(address: string): string | null {
   }
 }
 
+/**
+ * The VM's page to embed in Assistant mode: only an https tailnet address (`*.ts.net`), the one the
+ * install prints and the one this Ovis's policy may frame (server/static.ts withAssistantFraming).
+ */
+export function assistantEmbed(address: string): string | null {
+  const link = assistantLink(address);
+  if (link === null) return null;
+  const url = new URL(link);
+  return url.protocol === "https:" && url.hostname.endsWith(".ts.net") ? url.href : null;
+}
+
 /** The header's switch: the mode this device last chose, and the way to choose another. */
 export function useAppMode(): [AppMode, (mode: AppMode) => void] {
   const [mode, setMode] = useState<AppMode>(storedAppMode);

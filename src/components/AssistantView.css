@@ -6,6 +6,36 @@
   padding: var(--space-6) var(--space-4);
 }
 
+.assistant-embed {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.assistant-embed-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.assistant-embed-address {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.assistant-embed-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  border: 0;
+}
+
 .assistant-setup-inner {
   display: flex;
   flex-direction: column;
