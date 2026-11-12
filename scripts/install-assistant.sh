@@ -104,9 +104,15 @@ main() {
     say "installing herdr (https://herdr.dev) into $BIN_DIR"
     run sh -c 'curl -fsSL https://herdr.dev/install.sh | sh'
   fi
-  if ! command -v bun >/dev/null 2>&1; then
-    say "installing Bun (https://bun.sh) into ~/.bun"
+  # the checkout's bun.lock needs Bun 1.4 (package.json packageManager), as install.sh checks: an
+  # older Bun (a distro's or npm's) is replaced by Bun's own install into ~/.bun, first on PATH here
+  bun_version=$(bun --version 2>/dev/null || echo 0)
+  if [ "$(printf '%s\n' 1.4.0 "$bun_version" | sort -V | head -n1)" != 1.4.0 ]; then
+    say "installing Bun (https://bun.sh) into ~/.bun (found: $bun_version, needs 1.4 or newer)"
     run bash -c 'curl -fsSL https://bun.sh/install | bash'
+    hash -r
+    [ "$DRY" = 1 ] || [ "$(printf '%s\n' 1.4.0 "$(bun --version)" | sort -V | head -n1)" = 1.4.0 ] \
+      || { say "Bun $(bun --version) at $(command -v bun) is older than 1.4; remove it or put ~/.bun/bin first on PATH, then run this again"; exit 1; }
   fi
 
   # 4. the agent CLI, signed in (the commands Settings → Usage signs in with, server/usage-login.ts)
