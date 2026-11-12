@@ -162,7 +162,7 @@ export async function handleOvisTaskRequest(request: Request, pathname: string, 
     }
     if (name === "list") return jsonResponse(assistant.tasks.list(new URL(request.url).searchParams.get("status") ?? undefined));
     const body = await request.json().catch(() => null);
-    if (name === "create") return jsonResponse(await assistant.tasks.create(body), 201);
+    if (name === "create") return jsonResponse(await assistant.createTask(body), 201);
     const id = isJsonObject(body) ? body.id : undefined;
     if (name === "show") return jsonResponse(await assistant.tasks.show(id));
     if (name === "answer") return jsonResponse(await assistant.tasks.answer(id, isJsonObject(body) ? body.choice : undefined));

@@ -50,6 +50,8 @@ interface Runtime {
   verification?: SourceCheck;
   /** the user cancelled this PC's bridge update: it is not started again on its own until the PC connects */
   updateCancelled?: boolean;
+  /** its last connection found a Windows host (detectHost) */
+  windows?: boolean;
   /**
    * The SSH address (destination, port, session) whose socket the PC's own Ovis (an independently managed web
    * server) serves, as that PC last showed it: while none runs there, the PC waits for that server instead of
@@ -794,6 +796,7 @@ export class MachineManager {
       if (runtime.generation === generation && !moving) runtime.machine.remote_ovis = left;
     };
     const { host, inspection } = await detectHost(ssh, session);
+    runtime.windows = host.kind === "windows";
     if (job && host.kind === "windows") job.public.windows_startup = moving || !this.machines.has(runtime.machine.id);
     const { platform, expectedSocket } = inspection;
     // what the PC's own Ovis said is read anew on every try: it may have been updated or replaced since
@@ -1184,6 +1187,8 @@ export class MachineManager {
     const ssh = new SshConnection(runtime.machine.target, this.sshDir, join(this.sshDir, id));
     try { await ssh.start(); return await ssh.run(REMOTE_PATH + script, undefined, timeout); } finally { ssh.close(); }
   }
+  /** whether the PC's last connection found Windows (false until one did) */
+  windows(id: string): boolean { return this.machines.get(id)?.windows === true; }
   trackTerminal(id: string, close: () => void): () => void {
     const runtime = this.machines.get(id);
     runtime?.terminals.add(close);

@@ -172,6 +172,7 @@ const BASE: Record<string, string> = {
   "Checking…": "확인 중…",
   "Not connected yet: choose Connect on it in Settings > Remote PCs": "아직 연결되지 않음: 설정 > 원격 PC에서 연결을 선택하세요",
   "SSH cannot reach it": "SSH로 연결할 수 없음",
+  "Windows isn't supported by the Assistant yet": "어시스턴트는 아직 Windows를 지원하지 않습니다",
   "herdr is not running": "herdr가 실행 중이 아님",
   "Neither Claude Code nor Codex is installed": "Claude Code와 Codex 모두 설치되어 있지 않음",
   "GitHub CLI is not signed in (gh auth login)": "GitHub CLI에 로그인되어 있지 않음 (gh auth login)",

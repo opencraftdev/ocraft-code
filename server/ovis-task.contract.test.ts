@@ -23,7 +23,7 @@ const run: RunScript = async (_machine, script) => {
   if (child.exitCode !== 0) throw new Error(child.stderr.toString());
   return child.stdout.toString();
 };
-const panes: AssistantPanes = { open: async () => { throw new Error("no herdr in this test"); }, read: async () => ({ turns: [] }), close: async () => undefined };
+const panes: AssistantPanes = { open: async () => { throw new Error("no herdr in this test"); }, read: async () => ({ turns: [] }), close: async () => undefined, alive: async () => true };
 
 async function fixture(options: { assistant?: boolean; projects?: unknown } = {}) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "ovis-task-")));

@@ -177,6 +177,7 @@ const BASE: Record<string, string> = {
   "Checking…": "正在检查…",
   "Not connected yet: choose Connect on it in Settings > Remote PCs": "尚未连接：请在 设置 > 远程 PC 中选择“连接”",
   "SSH cannot reach it": "SSH 无法连接",
+  "Windows isn't supported by the Assistant yet": "助手暂不支持 Windows",
   "herdr is not running": "herdr 未运行",
   "Neither Claude Code nor Codex is installed": "Claude Code 和 Codex 都未安装",
   "GitHub CLI is not signed in (gh auth login)": "GitHub CLI 未登录 (gh auth login)",

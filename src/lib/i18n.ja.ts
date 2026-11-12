@@ -174,6 +174,7 @@ const BASE: Record<string, string> = {
   "Checking…": "確認中…",
   "Not connected yet: choose Connect on it in Settings > Remote PCs": "まだ接続されていません: 設定 > リモート PC で「接続」を選んでください",
   "SSH cannot reach it": "SSH で接続できません",
+  "Windows isn't supported by the Assistant yet": "アシスタントはまだ Windows に対応していません",
   "herdr is not running": "herdr が動いていません",
   "Neither Claude Code nor Codex is installed": "Claude Code も Codex もインストールされていません",
   "GitHub CLI is not signed in (gh auth login)": "GitHub CLI にサインインしていません (gh auth login)",

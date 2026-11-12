@@ -282,6 +282,7 @@ function problemText(t: Translate, problem: AssistantProblem): string {
   switch (problem) {
     case "not_connected": return t("Not connected yet: choose Connect on it in Settings > Remote PCs");
     case "unreachable": return t("SSH cannot reach it");
+    case "windows": return t("Windows isn't supported by the Assistant yet");
     case "herdr_stopped": return t("herdr is not running");
     case "no_agent": return t("Neither Claude Code nor Codex is installed");
     case "gh_signed_out": return t("GitHub CLI is not signed in (gh auth login)");
@@ -300,6 +301,7 @@ function refusalText(t: Translate, error: unknown): string {
     case "home_parent": return t("A folder that holds the home folder cannot be a project");
     case "duplicate": return t("That folder is already a project");
     case "unknown_machine": return t("That machine is not one of herdr's saved machines");
+    case "windows": return t("Windows isn't supported by the Assistant yet");
     default: return error instanceof ApiError ? error.detail : String(error);
   }
 }
