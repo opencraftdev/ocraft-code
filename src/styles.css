@@ -1538,7 +1538,7 @@ html:is(:lang(ja), :lang(zh)) body {
 /* Code, keys, the terminal and the two text boxes keep the browser's breaking, and their children
    inherit this reset: a path or a command is not a word, and xterm lays out its own cells.
    overflow-wrap is not part of this rule; the chat's and the composer's own rules keep it. */
-:is(pre, code, kbd, samp, .xterm, .composer-text, .composer-measure, .terminal-input-text) {
+:is(pre, code, kbd, samp, .xterm, .composer-text, .composer-measure, .composer-tag-layer, .terminal-input-text) {
   word-break: normal;
   line-break: auto;
 }
@@ -3122,7 +3122,7 @@ button, a, [role="button"] {
     box-shadow: none;
   }
   .composer .composer-surface:focus-within { border-color: var(--border-strong, var(--surface-edge)); box-shadow: none; }
-  .composer .composer-text { min-height: 0; }
+  .composer :is(.composer-text, .composer-tag-layer) { min-height: 0; }
   .composer .composer-controls { padding-block: 0; }
   .composer .composer-status {
     position: absolute;
@@ -3270,9 +3270,10 @@ button, a, [role="button"] {
   .composer .composer-send:not(:disabled):hover { background: var(--bg-hover); }
   /* the field and its hidden twin (the height it grows to) share every metric, or it scrolls instead of growing */
   .composer .composer-text,
+  .composer .composer-tag-layer,
   .composer .composer-measure { font-size: 15px; padding-block: 10px; max-height: 50vh; }
   /* the field scrolls by wheel and caret; a track beside the send button reads as a stray bar */
-  .composer .composer-text { scrollbar-width: none; }
+  .composer :is(.composer-text, .composer-tag-layer) { scrollbar-width: none; }
   .app-header .icon-button[aria-expanded="true"],
   .app-header .icon-button[aria-pressed="true"] { border-color: transparent; background: var(--bg-hover); color: var(--text-strong); }
   .composer .composer-status,

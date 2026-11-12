@@ -56,7 +56,6 @@ export const COMPOSER_KO: Record<string, string> = {
   "{count} characters left": "{count}자 남음",
   "Slash commands": "슬래시 명령",
   "Close suggestions": "추천 목록 닫기",
-  "Tagged sessions": "태그한 세션",
   "offline": "오프라인",
   "Built in": "기본",
   "User": "사용자",

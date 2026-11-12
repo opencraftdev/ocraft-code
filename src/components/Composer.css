@@ -482,7 +482,8 @@
 }
 
 .composer-text,
-.composer-measure {
+.composer-measure,
+.composer-tag-layer {
   grid-area: text;
   width: 100%;
   min-width: 0;
@@ -523,27 +524,32 @@
    by Settings → Chat font size, as ChatView.css scales the transcript's --chat-fs-body */
 @media (hover: hover) and (pointer: fine) {
   .composer-text,
-  .composer-measure {
+  .composer-measure,
+  .composer-tag-layer {
     font-size: calc(var(--fs-chat) * var(--chat-scale, 1));
     line-height: var(--lh-code);
   }
 
   /* T3's spacious drafting surface, with the toolbar on its own baseline. */
-  .composer-text { min-height: calc(2lh + var(--space-5)); }
+  .composer-text,
+  .composer-tag-layer { min-height: calc(2lh + var(--space-5)); }
   .terminal-stack:has(> .prompt-dock:not(:empty)) .composer-text { min-height: calc(1lh + var(--space-5)); }
 }
 
 .composer-text::-webkit-scrollbar,
+.composer-tag-layer::-webkit-scrollbar,
 .composer-measure::-webkit-scrollbar {
   width: var(--space-2);
 }
 
 .composer-text::-webkit-scrollbar-track,
+.composer-tag-layer::-webkit-scrollbar-track,
 .composer-measure::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .composer-text::-webkit-scrollbar-thumb,
+.composer-tag-layer::-webkit-scrollbar-thumb,
 .composer-measure::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   border-radius: var(--radius-pill);
@@ -1094,7 +1100,8 @@
   }
 
   .composer-text,
-  .composer-measure {
+  .composer-measure,
+  .composer-tag-layer {
     padding: var(--space-3) var(--space-3) 0;
   }
 
@@ -1592,56 +1599,19 @@
 .composer-session-dot.state-closed { background: transparent; box-shadow: inset 0 0 0 var(--hairline) var(--text-dim); }
 
 /* the message's tags under the card: neutral grays like the sidebar's Assistant card, no color */
-.composer-session-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  width: min(100%, var(--chat-w));
-  margin: var(--space-2) auto 0;
+/* the Assistant's session tags (@machine/folder): the same text behind the box, transparent, each tag
+   a soft neutral pill; no padding, so it sits exactly under the letters the box draws */
+.composer-tag-layer {
+  color: transparent;
+  white-space: pre-wrap;
+  overflow-y: hidden;
+  pointer-events: none;
+  user-select: none;
 }
 
-.composer-session-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  max-width: 100%;
-  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
-  border: var(--hairline) solid var(--surface-edge);
-  border-radius: var(--radius-pill);
-  background: var(--bg-hover);
-  color: var(--text-dim);
-  font-size: var(--fs-xs);
-}
-
-.composer-session-tag-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.composer-session-tag button {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-.composer-session-tag button svg {
-  width: 12px;
-  height: 12px;
-}
-
-@media (hover: hover) {
-  .composer-session-tag button:hover {
-    color: var(--text);
-  }
-}
-
-.composer-session-tag button:focus-visible {
-  outline: var(--ring);
+.composer-tag-layer mark {
+  color: transparent;
+  background: color-mix(in srgb, var(--text-strong) 12%, transparent);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-strong) 12%, transparent);
 }

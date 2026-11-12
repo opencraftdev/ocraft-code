@@ -155,27 +155,31 @@ try {
         await box.pressSequentially("a");
         await menu.getByRole("option").first().waitFor();
         await box.press("Enter");
-        assert.match(await box.inputValue(), /^Ask @\[muhammad-macbook wM:p1 · trina-ax · MCP progress report\] $/, "Enter tags the highlighted session");
+        assert.equal(await box.inputValue(), "Ask @muhammad-macbook/trina-ax ", "Enter tags the highlighted session");
 
         // a second tag by mouse, after arrowing; Tab would take it as Enter does
         await box.pressSequentially("and @harbor");
         await menu.getByRole("option").first().waitFor();
         await menu.getByRole("option").first().click();
         const tagged = await box.inputValue();
-        assert.equal(tagged, "Ask @[muhammad-macbook wM:p1 · trina-ax · MCP progress report] and @[macbook-pro wV:p1 · harbor-api · Rate limit the search e…] ");
-        const chips = page.locator(".composer-session-tag");
-        assert.deepEqual(await chips.locator(".composer-session-tag-text").allTextContents(), ["muhammad-macbook · trina-ax · MCP progress report", "macbook-pro · harbor-api · Rate limit the search e…"]);
+        assert.equal(tagged, "Ask @muhammad-macbook/trina-ax and @macbook-pro/harbor-api ");
+        // each tag a pill behind its own letters, shown once: no chip row under the box
+        const marks = page.locator(".composer-tag-layer mark");
+        assert.deepEqual(await marks.allTextContents(), ["@muhammad-macbook/trina-ax", "@macbook-pro/harbor-api"]);
+        assert.equal(await page.locator(".composer-session-tags").count(), 0, "no second copy of the tags");
+        const layer = await page.locator(".composer-tag-layer").boundingBox();
+        const text = await box.boundingBox();
+        assert.deepEqual([layer?.x, layer?.y, layer?.width], [text?.x, text?.y, text?.width], "the pills sit exactly under the box's text");
         await shot("tags");
 
-        // Backspace right after a tag takes it whole; × takes its tag out of the text
+        // Backspace right after a tag takes it whole
         await box.press("Backspace");
         await box.press("Backspace");
-        assert.equal(await box.inputValue(), "Ask @[muhammad-macbook wM:p1 · trina-ax · MCP progress report] and ");
+        assert.equal(await box.inputValue(), "Ask @muhammad-macbook/trina-ax and ");
         await box.pressSequentially("@garden");
         await menu.getByRole("option").first().waitFor();
         await box.press("Tab");
-        await chips.nth(0).getByRole("button").click();
-        assert.equal(await box.inputValue(), "Ask and @[macbook-pro wW:p1 · garden-app · Onboarding screens] ");
+        assert.equal(await box.inputValue(), "Ask @muhammad-macbook/trina-ax and @macbook-pro/garden-app ");
         await box.fill("");
 
         // what a send hands the Assistant: each tag as its exact session
@@ -195,7 +199,7 @@ try {
           .map((data) => JSON.parse(data) as { type: string; text?: string }).find((message) => message.text?.includes("@session("));
         assert.equal(submitted?.text, expected, "the send carries each tag as its exact session");
         assert.deepEqual(errors, []);
-        console.log(`PASS ${theme}: picker, filter, Esc, Enter/Tab/mouse, chips, Backspace, ×, and the expanded send`);
+        console.log(`PASS ${theme}: picker, filter, Esc, Enter/Tab/mouse, chips, Backspace, pills, and the expanded send`);
         if (theme === "dark") console.log(`sent: ${submitted?.text}`);
         await context.close();
       }

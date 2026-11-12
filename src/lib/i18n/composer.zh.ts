@@ -56,7 +56,6 @@ export const COMPOSER_ZH: Record<string, string> = {
   "{count} characters left": "还剩 {count} 个字符",
   "Slash commands": "斜杠命令",
   "Close suggestions": "关闭建议",
-  "Tagged sessions": "已标记的会话",
   "offline": "离线",
   "Built in": "内置",
   "User": "用户",
