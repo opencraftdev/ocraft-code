@@ -53,8 +53,34 @@ export function assistantEmbed(address: string): string | null {
   return url.protocol === "https:" && url.hostname.endsWith(".ts.net") ? url.href : null;
 }
 
-/** The header's switch: the mode this device last chose, and the way to choose another. */
-export function useAppMode(): [AppMode, (mode: AppMode) => void] {
-  const [mode, setMode] = useState<AppMode>(storedAppMode);
-  return [mode, (next) => { setMode(next); storeAppMode(next); }];
+/**
+ * The query flag the setup page's frame loads the VM with: that page shows its Assistant alone, with
+ * no header, mode switch or Code sidebar. It changes only the layout, and only for that load.
+ */
+export const ASSISTANT_EMBED_PARAM = "assistant-embed";
+
+export function embeddedAssistant(search: string): boolean {
+  return new URLSearchParams(search).get(ASSISTANT_EMBED_PARAM) === "1";
+}
+
+/** The address the frame loads: the VM's page with the embed flag. */
+export function assistantFrame(embed: string): string {
+  const url = new URL(embed);
+  url.searchParams.set(ASSISTANT_EMBED_PARAM, "1");
+  return url.href;
+}
+
+/**
+ * The mode a page load starts in, without storing it: Assistant in the frame, Code for a link to a
+ * pane (a task opened from the frame's board), else the one this device last chose.
+ */
+export function initialAppMode(search: string): AppMode {
+  if (embeddedAssistant(search)) return "assistant";
+  return new URLSearchParams(search).has("pane") ? "code" : storedAppMode();
+}
+
+/** The header's switch: the mode this load starts in, the way to choose another, and whether this load is the frame. */
+export function useAppMode(): [AppMode, (mode: AppMode) => void, boolean] {
+  const [mode, setMode] = useState<AppMode>(() => initialAppMode(window.location.search));
+  return [mode, (next) => { setMode(next); storeAppMode(next); }, embeddedAssistant(window.location.search)];
 }

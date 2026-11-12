@@ -7,7 +7,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { ASSISTANT_AGENTS, type AssistantAgent, type AssistantSetupEvent, type AssistantSetupJob } from "../shared/assistant.ts";
+import { ASSISTANT_AGENTS, type AssistantAgent, type AssistantSetupEvent, type AssistantSetupJob, type AssistantSetupMachine } from "../shared/assistant.ts";
 import type { SshTarget } from "../shared/machines.ts";
 import { badRequest, conflictResponse, isJsonObject, jsonResponse, setRequestRoute } from "./http.ts";
 import { canSendSecret, sameOrigin, shellQuote, validateTarget } from "./machine-security.ts";
@@ -37,16 +37,29 @@ export function installCommand(revision: string | undefined, name: string, agent
   return `curl -fsSL ${shellQuote(installScriptUrl(revision))} | ASSISTANT_NAME=${shellQuote(name)} ASSISTANT_AGENT=${shellQuote(agent)} bash`;
 }
 
-/** A setup request's SSH target, name and agent, or the reason it is refused. */
-export function validateSetup(body: unknown): { target: SshTarget; name: string; agent: AssistantAgent; cols: number; rows: number } {
+/** A connected Linux PC of this Ovis, its SSH address and this app's key for it (MachineManager.linuxMachines). */
+export interface SetupMachine { id: string; name: string; target: SshTarget; keyPath?: string }
+
+/**
+ * A setup request's SSH target, name and agent, or the reason it is refused. With `machineId`, the
+ * target is that machine's own, looked up here among `machines`: never an address the page sent.
+ */
+export function validateSetup(body: unknown, machines: readonly SetupMachine[] = []): { target: SshTarget; keyPath?: string; name: string; agent: AssistantAgent; cols: number; rows: number } {
   if (!isJsonObject(body)) throw new Error("Expected a setup request");
-  const target = validateTarget({ destination: body["destination"], ...(body["port"] === undefined ? {} : { port: body["port"] }) });
+  let target: SshTarget;
+  let keyPath: string | undefined;
+  if (body["machineId"] !== undefined) {
+    if (body["destination"] !== undefined || body["port"] !== undefined) throw new Error("Choose a machine or enter an SSH address, not both");
+    const machine = machines.find((candidate) => candidate.id === body["machineId"]);
+    if (!machine) throw new Error("That machine is not a connected Linux machine of this Ovis");
+    ({ target, keyPath } = machine);
+  } else target = validateTarget({ destination: body["destination"], ...(body["port"] === undefined ? {} : { port: body["port"] }) });
   const name = body["name"];
   if (typeof name !== "string" || !ASSISTANT_NAME_RULE.test(name)) throw new Error("A machine name is lowercase letters, digits and inner hyphens");
   const agent = body["agent"];
   if (typeof agent !== "string" || !(ASSISTANT_AGENTS as readonly string[]).includes(agent)) throw new Error("The agent CLI is claude or codex");
   const size = (value: unknown, fallback: number) => Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 1000 ? Number(value) : fallback;
-  return { target, name, agent: agent as AssistantAgent, cols: size(body["cols"], 100), rows: size(body["rows"], 30) };
+  return { target, ...(keyPath === undefined ? {} : { keyPath }), name, agent: agent as AssistantAgent, cols: size(body["cols"], 100), rows: size(body["rows"], 30) };
 }
 
 /** What the setup needs of an SSH connection: Remote PCs' SshConnection. */
@@ -61,7 +74,9 @@ export interface AssistantSetupOptions {
   revision?: string;
   /** whether a PTY host can run here; unset, the server's own answer (server/pty/sidecar.ts) */
   ptyAvailable?: () => boolean;
-  connect?: (target: SshTarget, sshDir: string) => SetupConnection;
+  connect?: (target: SshTarget, sshDir: string, keyPath?: string) => SetupConnection;
+  /** the machines a setup may pick by id; unset, none */
+  machines?: () => SetupMachine[];
 }
 
 interface Running {
@@ -82,8 +97,13 @@ export class AssistantSetup {
 
   job(): AssistantSetupJob | null { return this.current?.public ?? null; }
 
+  /** the machines the page may offer, without their keys */
+  machines(): AssistantSetupMachine[] {
+    return (this.options.machines?.() ?? []).map(({ id, name, target }) => ({ id, name, destination: target.destination }));
+  }
+
   start(body: unknown): AssistantSetupJob {
-    const { target, name, agent, cols, rows } = validateSetup(body);
+    const { target, keyPath, name, agent, cols, rows } = validateSetup(body, this.options.machines?.() ?? []);
     if (this.current && ACTIVE.includes(this.current.public.phase)) throw new SetupBusy();
     const command = installCommand(this.options.revision ?? process.env["OVIS_REVISION"], name, agent);
     const job: Running = { public: { id: randomUUID(), phase: "connecting", destination: target.destination, challenge: null, command, address: null, error: null }, output: "", scan: "" };
@@ -94,7 +114,7 @@ export class AssistantSetup {
     }
     // Remote PCs' ssh directory: its known_hosts is the one a PC added there trusts
     const sshDir = join(this.stateDir, "ssh");
-    const ssh = job.ssh = (this.options.connect ?? ((t, dir) => new SshConnection(t, dir)))(target, sshDir);
+    const ssh = job.ssh = (this.options.connect ?? ((t, dir, key) => new SshConnection(t, dir, key)))(target, sshDir, keyPath);
     void (async () => {
       try {
         await ssh.start((prompt, hostKey) => {
@@ -227,7 +247,7 @@ export async function handleAssistantSetupRequest(request: Request, pathname: st
     return fail("not_found", "not found", 404);
   }
   if (action === "stream") return stream(request, setup);
-  if (get) return jsonResponse({ job: setup.job() });
+  if (get) return jsonResponse({ job: setup.job(), machines: setup.machines() });
   const body: unknown = action === "stop" ? null : await request.json().catch(() => undefined);
   if (body === undefined) return badRequest("invalid_json", "Request body must be JSON");
   try {

@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { AssistantSetupEvent, AssistantSetupJob } from "../shared/assistant.ts";
-import { installCommand, installScriptUrl, validateSetup } from "./assistant-setup.ts";
+import { installCommand, installScriptUrl, validateSetup, type SetupMachine } from "./assistant-setup.ts";
+import type { CompletionTracker } from "./completion.ts";
+import { MachineManager } from "./machines.ts";
+import type { PushService } from "./push.ts";
 import { createServer } from "./index.ts";
 import { shellQuote } from "./machine-security.ts";
 import { sidecarAvailable } from "./pty/sidecar.ts";
@@ -24,6 +27,36 @@ describe("what a VM setup runs", () => {
       expect(() => validateSetup({ destination: "vm", name, agent: "claude" })).toThrow();
     }
     for (const agent of ["gemini", "claude;id", "", null]) expect(() => validateSetup({ destination: "vm", name: "vm", agent })).toThrow();
+  });
+
+  it("takes a connected machine by id, with its own SSH address and never one the page sent", () => {
+    const machines: SetupMachine[] = [{ id: "m1", name: "raka-devs", target: { destination: "opencraft@raka-devs.example", port: 2200 }, keyPath: "/state/ssh/m1" }];
+    expect(validateSetup({ machineId: "m1", name: "raka-devs", agent: "claude" }, machines))
+      .toEqual({ target: { destination: "opencraft@raka-devs.example", port: 2200 }, keyPath: "/state/ssh/m1", name: "raka-devs", agent: "claude", cols: 100, rows: 30 });
+    expect(() => validateSetup({ machineId: "m2", name: "vm", agent: "claude" }, machines)).toThrow("not a connected Linux machine");
+    expect(() => validateSetup({ machineId: "m1", name: "vm", agent: "claude" })).toThrow("not a connected Linux machine");
+    expect(() => validateSetup({ machineId: "m1", destination: "evil@elsewhere", name: "vm", agent: "claude" }, machines)).toThrow("not both");
+    expect(() => validateSetup({ machineId: "m1", port: 22, name: "vm", agent: "claude" }, machines)).toThrow("not both");
+  });
+
+  it("offers only connected Linux machines of the PC manager", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ovis-setup-machines-"));
+    const manager = new MachineManager(dir, {} as PushService, {} as CompletionTracker, async () => { throw new Error("local offline"); });
+    try {
+      type Row = { machine: { id: string; name: string; state: string; enabled: boolean }; linux?: boolean; windows?: boolean };
+      const internals = manager as unknown as { machines: Map<string, Row>; runtime(machine: unknown): Row };
+      const add = (id: string, state: string, host: "linux" | "windows" | "mac", enabled = true) => {
+        const row = internals.runtime({ id, name: `pc ${id}`, kind: "ssh", enabled, state, target: { destination: `user@${id}` }, snapshot: null, error: null });
+        row.linux = host === "linux"; row.windows = host === "windows";
+        internals.machines.set(id, row);
+      };
+      add("linux-on", "connected", "linux");
+      add("linux-off", "reconnecting", "linux");
+      add("linux-disabled", "connected", "linux", false);
+      add("windows", "connected", "windows");
+      add("mac", "connected", "mac");
+      expect(manager.linuxMachines()).toEqual([{ id: "linux-on", name: "pc linux-on", target: { destination: "user@linux-on" }, keyPath: join(dir, "ssh", "linux-on") }]);
+    } finally { manager.stop(); rmSync(dir, { recursive: true, force: true }); }
   });
 
   it("fetches the script at the server's own commit, or main when it is unknown", () => {
@@ -78,11 +111,11 @@ describe.skipIf(process.platform === "win32")("POST /api/assistant-setup", () =>
     rmSync(root, { recursive: true, force: true });
   });
 
-  const server = (options: { token?: string; pty?: boolean; assistant?: boolean } = {}) => {
+  const server = (options: { token?: string; pty?: boolean; assistant?: boolean; machines?: SetupMachine[] } = {}) => {
     const stateDir = mkdtempSync(join(root, "state-"));
     for (const file of ["calls", "mode", "remote", "pid"]) rmSync(join(root, file), { force: true });
     const app = createServer({ port: 0, hostname: "127.0.0.1", token: options.token ?? "", stateDir, tailscaleOwner: null, assistant: options.assistant ?? false,
-      assistantSetup: { revision: REVISION, ...(options.pty === false ? { ptyAvailable: () => false } : {}) } });
+      assistantSetup: { revision: REVISION, ...(options.pty === false ? { ptyAvailable: () => false } : {}), ...(options.machines ? { machines: () => options.machines! } : {}) } });
     const base = `http://127.0.0.1:${app.port}`;
     const call = (path: string, body?: unknown, headers: Record<string, string> = {}) => fetch(`${base}/api/assistant-setup${path}`, body === undefined ? { headers: { origin: base, ...headers } }
       : { method: "POST", headers: { "content-type": "application/json", origin: base, "x-herdr-machine": "1", ...headers }, body: JSON.stringify(body) });
@@ -131,6 +164,22 @@ describe.skipIf(process.platform === "win32")("POST /api/assistant-setup", () =>
       const job = (await response.json()) as AssistantSetupJob;
       expect(job.phase).toBe("unsupported");
       expect(job.command).toBe(installCommand(REVISION, "my-vm", "claude"));
+      expect(existsSync(join(root, "calls"))).toBe(false);
+    } finally { app.close(); }
+  });
+
+  it("sets up a connected machine by id over its own SSH address, and refuses any other", async () => {
+    const machines: SetupMachine[] = [{ id: "m1", name: "raka-devs", target: { destination: "opencraft@raka-devs.example" }, keyPath: join(root, "no-key") }];
+    const app = server({ pty: false, machines });
+    try {
+      const listed = (await (await app.call("")).json()) as { machines: unknown };
+      expect(listed.machines).toEqual([{ id: "m1", name: "raka-devs", destination: "opencraft@raka-devs.example" }]);
+      expect((await app.call("", { machineId: "m1", destination: "evil@elsewhere", name: "raka-devs", agent: "claude" })).status).toBe(400);
+      expect((await app.call("", { machineId: "unknown", name: "raka-devs", agent: "claude" })).status).toBe(400);
+      expect((await app.call("", { machineId: "m1", name: "raka-devs", agent: "claude" }, { origin: "https://evil.example" })).status).toBe(403);
+      const response = await app.call("", { machineId: "m1", name: "raka-devs", agent: "claude" });
+      expect(response.status).toBe(202);
+      expect((await response.json()) as AssistantSetupJob).toMatchObject({ phase: "unsupported", destination: "opencraft@raka-devs.example", command: installCommand(REVISION, "raka-devs", "claude") });
       expect(existsSync(join(root, "calls"))).toBe(false);
     } finally { app.close(); }
   });

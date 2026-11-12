@@ -124,6 +124,8 @@ export const MACHINES_JA: Record<string, string> = {
   "Tailscale machine name": "Tailscale のマシン名",
   "Agent CLI": "エージェント CLI",
   "Runs the Assistant install script on a fresh Linux VM over SSH, with this server's SSH config and ssh-agent. Answer its questions in the terminal below.": "SSH 経由で新しい Linux VM にアシスタントのインストールスクリプトを実行します。このサーバーの SSH 設定と ssh-agent を使います。質問には下のターミナルで答えてください。",
+  "Runs the Assistant install script on this machine over the SSH that Remote PCs already uses. Answer its questions in the terminal below.": "Remote PCs が使っている SSH でこのマシンにアシスタントのインストールスクリプトを実行します。質問には下のターミナルで答えてください。",
+  "Another computer…": "別のコンピューター…",
   "This server cannot run the setup: it has no PTY host. Run this on the VM instead:": "このサーバーにはセットアップを実行できません (PTY ホストがありません)。代わりに VM で次を実行してください:",
   "Stop the setup? The install on the VM ends where it is.": "セットアップを停止しますか? VM でのインストールはその時点で終了します。",
   "Keep running": "続行する",
