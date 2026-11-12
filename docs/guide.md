@@ -414,7 +414,9 @@ More in [remote PCs](remote-pcs.md).
 
 ## Assistant
 
-The Assistant is a coding agent that runs all day on a Linux VM you own, in your tailnet: one coordinator for every project on every PC. It lives in Code mode. Add the VM as a remote PC and save its address; its row in the sidebar is tagged **Assistant**, and its Assistant workspace is a chat like any other. Beside that chat, the right panel shows the Assistant's controls in place of Environment, Context and Changes: **New chat**, the tasks (with Approve, Cancel, Restart agent), the earlier chats, the projects and the machines. New chat there opens the new chat.
+The Assistant is a coding agent that runs all day on a Linux VM you own, in your tailnet: one coordinator for every project on every PC. It lives in Code mode. Add the VM as a remote PC and save its address; its row in the sidebar is tagged **Assistant**, and its Assistant workspace is a chat like any other. Beside that chat, the right panel shows the Assistant's controls in place of Environment, Context and Changes: **New chat**, the tasks (with Approve, Cancel, Restart agent), the earlier chats, the projects and the machines. New chat there opens the new chat. The VM's row comes first in the sidebar, in a tinted card.
+
+The Assistant coordinates every herdr session on the connected PCs, not only its own tasks: it lists them (`ovis-task sessions`), reads one (`ovis-task peek <machine> <pane>`: an agent's last turns, or a shell's screen), and hands work to the agent already open in one (`ovis-task send <machine> <pane> <message>`, typed in as you would). It sends only to an agent at rest: never to a working agent, a shell, or a task's own pane. New work in a project still goes as a task.
 
 Until you have a VM, **⋯ → Assistant VM…** opens the setup page: the install command to paste on a fresh VM, and a field for the VM's address once it runs. `bun run check:assistant <vm-address>` checks a running VM end to end.
 

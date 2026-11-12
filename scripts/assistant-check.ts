@@ -132,7 +132,10 @@ async function main(): Promise<number> {
         check("chat page", !failed, failed ? "Couldn't load the conversation" : "drawn without an error in 15 s");
       }
       if (withBold !== null) {
-        await panel.locator(`.assistant-item[title="${withBold}"]`).click();
+        // the panel lists the newest few earlier chats first
+        const showAll = panel.getByRole("button", { name: /^Show all/ });
+        if (await showAll.count()) await showAll.click();
+        await panel.locator(`.assistant-row[title="${withBold}"]`).click();
         await page.locator(".assistant-transcript").waitFor({ timeout: 15_000 });
         const raw = await page.locator(".assistant-transcript .assistant-turn").evaluateAll((turns) => turns.some((turn) => /\*\*[^*\n]+\*\*/.test(turn.textContent ?? "")));
         await page.screenshot({ path: join(out, "archived.png") });
