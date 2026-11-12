@@ -11,3 +11,6 @@
   PROFILE.md and project files, and rereads them at start and after a compaction. It may edit only
   its own profile. An existing notes.md is copied unchanged to the profile's logs (and kept as
   notes.md.migrated), and the Assistant is asked once, while at rest, to distill it.
+- A session tag in the Assistant's message box is short, `@muhammad-macbook/ovis`, named as the
+  VM's `ovis-task` names the PC, and drawn as a soft pill in the box instead of a second chip row
+  under it. A send still hands the Assistant the exact session.

@@ -1,6 +1,6 @@
 # Assistant: clean session tags, a session graph, a profile folder
 
-Status: approved
+Status: done
 Created: 2026-11-12 19:00
 Follows: [Assistant session mentions](20261112-1728-assistant-session-mentions.md),
 [Assistant delegation](20261112-1622-assistant-delegation.md)
@@ -95,3 +95,19 @@ Follows: [Assistant session mentions](20261112-1728-assistant-session-mentions.m
 - 1.1: `@muhammad-macbook/ovis` OK, or the title too? Resolved (2026-11-12): `@muhammad-macbook/ovis`.
 - 2.4: touched files: edited/written only, or reads too? Resolved: edited/written only (plus uncommitted changes).
 - 3.1: the long-lived session's profile name? Resolved: `assistant`.
+
+## As built
+
+- Tags: `src/lib/sessionTags.ts` (`sessionTag`, `parseSessionTags`/`knownTags`, `resolveTag`,
+  `expandSessionTags`, `machineNamesOf`). A tag of a PC this Ovis does not list stays plain text.
+  The label is the VM's name from graph.json, else this Ovis's name for a remote PC, else this PC's
+  host; a tag written under any of those names still resolves. The pill layer is
+  `.composer-tag-layer` (its own class: app code finds the box by `.composer-text`).
+  A tag naming several sessions sends the first with `(ambiguous, also: …)`.
+- Graph: `server/assistant-graph.ts`, written with temp + rename at 0600 (not writePrivateState: it is
+  rewritten often and rebuilt from snapshots). `roots` keeps the first root per machine; each session
+  has its own `repo_root`. `seen_at` is the last good detailed read. Touched files reuse
+  `shared/patch.ts`, so Codex `apply_patch` and deletes count. `ovis-task graph` builds it fresh.
+- Profile: `instructions(profile)`, `claudeSettings(profile)`, `notesRequest(profile)`; the agent folder
+  is also written at the server's first keep-alive check, so a deploy migrates notes.md without the
+  pane restarting. The running agent reads the new AGENTS.md after a restart or compaction.
