@@ -41,6 +41,18 @@
 /* a PC the sidebar's filter hides stays in the list, hidden: the gap is between the groups that show */
 .machine-group:not([hidden]) ~ .machine-group { margin-top: var(--space-4); }
 
+/* the Assistant VM, first in the list: a tinted card, so the coordinator reads apart from the PCs */
+.machine-group.is-assistant {
+  margin: 0 var(--space-2);
+  padding-bottom: var(--space-2);
+  border: var(--hairline) solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius-lg);
+  background: var(--accent-tint);
+}
+
+.machine-group.is-assistant > .machine-header { padding-inline: calc(var(--side-gutter) - var(--space-2)); }
+.machine-group.is-assistant .sidebar-mark { color: var(--accent); }
+
 .machine-header {
   display: flex;
   align-items: center;

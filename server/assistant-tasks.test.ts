@@ -802,3 +802,73 @@ describe("a task's alerts", () => {
     } finally { fx.done(); }
   });
 });
+
+describe("the herdr sessions the Assistant coordinates", () => {
+  const sessions = (fx: ReturnType<typeof fixture>) => {
+    fx.machine.snapshot = snapshot([
+      { pane_id: "a1", agent_status: "idle", agent: "claude", workspace_id: "w1", cwd: "/home/me/web", terminal_title_stripped: "Fix nav" },
+      { pane_id: "a2", agent_status: "working", agent: "codex", workspace_id: "w1", cwd: "/home/me/web" },
+      { pane_id: "s1", agent_status: "unknown", agent: null, workspace_id: "w3", cwd: "/home/me" },
+    ] as never, [{ workspace_id: "w1", label: "web" }, { workspace_id: "w3", label: "shell" }]);
+    fx.machinesChanged();
+  };
+
+  it("lists every workspace and pane on the machines, by machine name", () => {
+    const fx = fixture();
+    try {
+      sessions(fx);
+      expect(fx.assistant.herdrSessions()).toEqual([{ machine: "Laptop", state: "connected", workspaces: [
+        { workspace: "web", panes: [
+          { pane: "a1", agent: "claude", status: "idle", title: "Fix nav", folder: "/home/me/web" },
+          { pane: "a2", agent: "codex", status: "working", title: null, folder: "/home/me/web" },
+        ] },
+        { workspace: "shell", panes: [{ pane: "s1", agent: null, status: "unknown", title: null, folder: "/home/me" }] },
+      ] }]);
+      expect(fx.assistant.herdrSessions("Laptop")).toHaveLength(1);
+      expect(() => fx.assistant.herdrSessions("Desktop")).toThrow(AssistantError);
+    } finally { fx.done(); }
+  });
+
+  it("reads an agent's last turns, and a shell's screen", async () => {
+    const fx = fixture();
+    try {
+      sessions(fx);
+      fx.answers["pane/conversation"] = () => ({ source: "claude-transcript", turns: [
+        { role: "user", ts: null, parts: [{ kind: "text", text: "fix the nav" }] },
+        { role: "assistant", ts: null, parts: [{ kind: "text", text: "Done: the nav wraps now." }] },
+      ] });
+      expect(await fx.assistant.peekSession({ machine: "Laptop", pane: "a1" })).toEqual({ machine: "Laptop", pane: "a1", agent: "claude", status: "idle",
+        turns: [{ role: "user", text: "fix the nav" }, { role: "assistant", text: "Done: the nav wraps now." }] });
+      expect(await fx.assistant.peekSession({ machine: "Laptop", pane: "s1" })).toMatchObject({ screen: "line one\nline two" });
+      expect(await refusal(fx.assistant.peekSession({ machine: "Laptop", pane: "zz" }))).toBe("unknown_pane");
+      // reading writes nothing
+      expect(fx.calls.some((call) => call.method === "POST")).toBe(false);
+    } finally { fx.done(); }
+  });
+
+  it("sends a message to an agent at rest, as a paste and Enter, and refuses a working agent, a shell and a task's pane", async () => {
+    const fx = fixture();
+    try {
+      sessions(fx);
+      expect(await fx.assistant.sendToSession({ machine: "Laptop", pane: "a1", message: "Also fix the footer.\nThanks" })).toEqual({ ok: true, machine: "Laptop", pane: "a1" });
+      expect(fx.calls.map((call) => [call.path, call.body])).toEqual([
+        ["pane/input", { pane_id: "a1", text: "\u001b[200~Also fix the footer.\rThanks\u001b[201~" }],
+        ["pane/keys", { pane_id: "a1", keys: ["Enter"] }],
+      ]);
+      expect(await refusal(fx.assistant.sendToSession({ machine: "Laptop", pane: "a2", message: "hi" }))).toBe("pane_busy");
+      expect(await refusal(fx.assistant.sendToSession({ machine: "Laptop", pane: "s1", message: "ls" }))).toBe("no_agent");
+      expect(await refusal(fx.assistant.sendToSession({ machine: "Laptop", pane: "a1", message: " " }))).toBe("invalid_message");
+      const task = await create(fx.assistant);
+      fx.machine.snapshot!.panes.push({ ...fx.machine.snapshot!.panes[0]!, pane_id: task.paneId!, agent_status: "idle" });
+      expect(await refusal(fx.assistant.sendToSession({ machine: "Laptop", pane: task.paneId, message: "hi" }))).toBe("task_pane");
+    } finally { fx.done(); }
+  });
+
+  it("makes ovis-task's command lines for them", () => {
+    expect(cliRequest(["sessions"])).toEqual({ path: "sessions" });
+    expect(cliRequest(["sessions", "macbook pro"])).toEqual({ path: "sessions?machine=macbook%20pro" });
+    expect(cliRequest(["peek", "Laptop", "a1"])).toEqual({ path: "peek", body: { machine: "Laptop", pane: "a1" } });
+    expect(cliRequest(["send", "Laptop", "a1", "fix", "the", "footer"])).toEqual({ path: "send", body: { machine: "Laptop", pane: "a1", message: "fix the footer" } });
+    expect("usage" in cliRequest(["send", "Laptop", "a1"])).toBe(true);
+  });
+});

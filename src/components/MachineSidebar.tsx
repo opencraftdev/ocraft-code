@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
-import { ChevronDown, ChevronRight, Download, Monitor, Plus, Search, Settings, SlidersHorizontal, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Monitor, Plus, Search, Settings, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { OWN_UPDATE_OFFER, type Machine, type MachineState, type MachineUpdate, type RemoteOvis } from "../../shared/machines.ts";
 import { copyText } from "../lib/clipboard.ts";
 import { MachineContext } from "../lib/machineContext.tsx";
@@ -188,7 +188,8 @@ export function MachineSidebar(props: Props) {
     <div className="sidebar-navigation-scroll">
       <div className="machine-list" aria-label={t("PCs and workspaces")}>
         <p className={noMatchWords === null ? "visually-hidden" : "tree-state sidebar-filter-empty"} role="status">{noMatchWords}</p>
-        {props.machines.map((machine) => <MachineGroup key={machine.id} {...props} machine={machine} headerless={machine.id === loneHost} />)}
+        {/* the Assistant VM first: the coordinator above the PCs it coordinates */}
+        {[...props.machines].sort((a, b) => Number(assistantPc(b)) - Number(assistantPc(a))).map((machine) => <MachineGroup key={machine.id} {...props} machine={machine} headerless={machine.id === loneHost} />)}
         <p className={loadingWords === null ? "visually-hidden" : "tree-state"} role="status">{loadingWords}</p>
         {/* a PC kept out on this device is said, with the way to show it again */}
         {hiddenCount > 0 && <button type="button" className="machine-hidden-note" title={t("Choose the PCs this device shows")} onClick={() => { requestSettingsPage({ page: "remote", section: "sidebar-pcs" }); props.actions.openSettings(); }}>{hiddenCount === 1 ? t("1 PC hidden on this device") : t("{n} PCs hidden on this device", { n: hiddenCount })}</button>}
@@ -210,6 +211,9 @@ export function MachineSidebar(props: Props) {
 /** `headerless`: the sidebar's lone Host, drawn without its header. What the header held is elsewhere: the state
  *  and its notice are lines of their own, the + is the New workspace row under the workspaces, and nothing is
  *  folded with no caret to open it. A Host has no manage panel; Add PC is in Settings and the palette. */
+/** the Assistant VM's row: a remote PC whose host is the saved Assistant address (lib/assistantMode.ts) */
+const assistantPc = (machine: Machine): boolean => machine.kind === "ssh" && isAssistantMachine(machine.target?.destination);
+
 function MachineGroup({ machine, headerless = false, ...props }: Props & { machine: Machine; headerless?: boolean }) {
   const t = useT();
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem(`ovis:pc-collapsed:${machine.id}`) === "1"; } catch { return false; } });
@@ -267,14 +271,15 @@ function MachineGroup({ machine, headerless = false, ...props }: Props & { machi
     try { localStorage.setItem(`ovis:pc-collapsed:${machine.id}`, collapsed ? "0" : "1"); } catch {}
   };
   // the PC's name is the head of its workspaces, and the caret beside its + the one fold over them
-  return <section className={`machine-group${props.selectedMachineId === machine.id ? " is-current" : ""}${online ? "" : " is-offline"}${context ? " is-filter-context" : ""}${headerless ? " is-headerless" : ""}`} hidden={hidden} aria-label={t("PC {name}", { name: machine.name })}>
+  const assistant = assistantPc(machine);
+  return <section className={`machine-group${assistant ? " is-assistant" : ""}${props.selectedMachineId === machine.id ? " is-current" : ""}${online ? "" : " is-offline"}${context ? " is-filter-context" : ""}${headerless ? " is-headerless" : ""}`} hidden={hidden} aria-label={t("PC {name}", { name: machine.name })}>
     {!headerless && <header className="machine-header">
       <div className="machine-title">
-        <span className="sidebar-mark" aria-hidden="true"><Monitor /></span>
+        <span className="sidebar-mark" aria-hidden="true">{assistant ? <Sparkles /> : <Monitor />}</span>
         <span className="machine-name">{machine.name}</span>
         {/* the computer this app's server runs on; on a phone "this PC" read as the phone */}
         {machine.kind === "local" && <span className="machine-kind" title={t("The computer this app runs on")}>{t("Host")}</span>}
-        {machine.kind === "ssh" && isAssistantMachine(machine.target?.destination) && <span className="machine-kind is-assistant" title={t("The Assistant VM")}>{t("Assistant")}</span>}
+        {assistant && <span className="machine-kind is-assistant" title={t("The Assistant VM")}>{t("Assistant")}</span>}
         <span className={`machine-dot is-${machine.action_required === "setup" ? "setup" : machine.state}`} title={machine.action_required === "setup" ? t("Setup needed") : t(STATE_WORD[machine.state])} aria-hidden="true" />
       </div>
       {machine.kind === "ssh" && <button className="sidebar-row-action machine-manage" aria-label={t("Manage {name}", { name: machine.name })} title={t("Manage PC")} aria-expanded={editing} onClick={() => { setEditing(!editing); setConfirmDelete(false); }}><SlidersHorizontal aria-hidden="true" /></button>}

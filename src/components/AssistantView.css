@@ -147,41 +147,25 @@
 .assistant-inline .input[type="number"] { width: 5em; }
 
 /* Code mode's right panel beside the Assistant's chat (App.tsx agentDetails): the panel itself on
-   the VM, the VM's panel page in a frame elsewhere; Code mode's panel width (AgentPanel.css) */
+   the VM, the VM's panel page in a frame elsewhere. Its sections and rows are the agent panel's
+   (AgentPanel.css: Environment, Context, Changes); only what they lack is here. */
 .assistant-agent-panel { display: flex; flex-direction: column; }
-
-.assistant-panel {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 0 var(--space-3) var(--space-4);
-  scrollbar-width: thin;
-}
-
-.assistant-panel-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--header-h);
-}
-
-.assistant-panel-head h2 { flex: 1 1 auto; margin: 0; color: var(--text-strong); font-size: var(--fs-md); font-weight: var(--fw-medium); }
-.assistant-panel-head .sidebar-nav-item { width: auto; }
-.assistant-panel .assistant-lists { padding: 0; }
-.assistant-panel .assistant-section { margin-top: var(--space-4); }
-.assistant-panel .assistant-board { margin-bottom: var(--space-1); }
+.assistant-panel { flex: 1 1 auto; }
+.assistant-panel .agent-panel-section-head .icon-button { color: var(--text-dim); }
+.assistant-row { width: 100%; border: 0; border-radius: var(--radius-sm); background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.assistant-row:hover { background: var(--bg-hover); }
+.assistant-row > span:not(.machine-dot) { flex: 1 1 auto; }
+.assistant-row-arrow { width: var(--space-3); height: var(--space-3); color: var(--text-dim); }
+.assistant-panel p.agent-panel-environment-row { margin: 0; }
 .assistant-panel .assistant-transcript { padding: 0; overflow: visible; }
+.assistant-panel .assistant-task-group .agent-panel-section-label { margin-inline: var(--space-1); }
 
 .assistant-panel-frame {
   flex: 1 1 auto;
   width: 100%;
   min-height: 0;
   border: 0;
-  border-radius: var(--radius-md);
-  background: var(--chat-canvas);
+  background: transparent;
 }
 
 /* the VM's panel page, alone in another Ovis's frame */
@@ -191,18 +175,15 @@
   background: var(--chat-canvas);
 }
 
-.assistant-board-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--header-h);
-  padding-left: var(--space-1);
-  background: var(--chat-canvas);
-}
+/* the frame is narrower than 769px, where the agent panel turns into a floating sheet of cards: the
+   page keeps the desktop panel's flat column (styles.css "Claude desktop look: right panel") */
+.assistant-panel-page > .agent-panel { position: static; flex: 1 1 auto; width: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.assistant-panel-page .agent-panel-card { gap: 0; padding: var(--space-3) var(--space-4); }
+.assistant-panel-page .agent-panel-section { border: 0; border-bottom: var(--hairline) solid var(--border); border-radius: 0; background: transparent; box-shadow: none; padding-block: var(--space-2); }
+.assistant-panel-page .agent-panel-section:last-child { border-bottom: 0; }
+.assistant-panel-page .assistant-panel { max-height: 100%; }
+.assistant-more { color: var(--text-dim); }
 
-.assistant-board-head h2 { margin: 0; color: var(--text-strong); font-size: var(--fs-sm); font-weight: var(--fw-medium); }
-.assistant-board-head .agent-panel-count { margin-left: 0; }
-.assistant-board-head .icon-button { margin-left: auto; color: var(--text-dim); }
 .assistant-board-empty { padding-inline: var(--space-1); }
 .assistant-task-group .agent-panel-section-label { margin-inline: var(--space-1); }
 
