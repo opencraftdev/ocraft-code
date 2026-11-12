@@ -2105,23 +2105,6 @@ button {
     flex: 1 1 auto;
     padding-inline: var(--space-2);
   }
-
-  /* Assistant mode over the VM's page: that page draws its own sidebar under the header, so the
-     header is one bar on the sidebar's surface, with no column of its own to misalign with it */
-  .app:not(.sidebar-collapsed) .app-header.is-zoned.is-assistant-page {
-    padding-left: calc(var(--space-3) + env(safe-area-inset-left, 0px));
-    border-bottom-color: var(--surface-edge);
-    background: var(--sidebar-surface);
-  }
-
-  .app:not(.sidebar-collapsed) .app-header.is-assistant-page .header-side {
-    flex: 0 0 auto;
-    gap: var(--space-2);
-    margin: 0;
-    padding: 0;
-    border-right: 0;
-    background: none;
-  }
 }
 
 /* Installed desktop app with the title bar folded away (manifest display_override): the header

@@ -1,14 +1,12 @@
-import { ChevronRight, Folder, Menu, Monitor, PanelRight, PanelRightClose, Plus, Settings, SquarePen, X } from "lucide-react";
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { ChevronLeft, Folder, Monitor, PanelRightClose, Plus, SquarePen } from "lucide-react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import type { AssistantAgent, AssistantMachine, AssistantProblem, AssistantProject, AssistantState, AssistantTask, AssistantTranscript, MergeMode, ProjectChange, TaskStatus } from "../../shared/assistant.ts";
 import type { InteractivePrompt } from "../../shared/protocol.ts";
 import { addAssistantProject, ApiError, approveAssistantTask, cancelAssistantTask, changeAssistantProject, fetchAssistant, fetchAssistantTranscript, fetchPanePrompt, fixAssistantMachine, dismissAssistantTask, removeAssistantProject, restartAssistantTask, setAssistantMaxRunning, startAssistantSession } from "../lib/api.ts";
-import { ASSISTANT_INSTALL_COMMAND, assistantEmbed, assistantFrame, assistantLink, storeAssistantAddress, storedAssistantAddress } from "../lib/assistantMode.ts";
+import { ASSISTANT_INSTALL_COMMAND, assistantLink, isAssistantPanelMessage, storeAssistantAddress, storedAssistantAddress } from "../lib/assistantMode.ts";
 import { useLocale, useT, type Translate } from "../lib/i18n.ts";
 import { MachineContext } from "../lib/machineContext.tsx";
-import { startingRetry } from "../lib/startingChat.ts";
-import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { AssistantSetupDialog } from "./AssistantSetupDialog.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { Markdown } from "./Markdown.tsx";
@@ -18,37 +16,19 @@ import { PromptCard } from "./PromptCard.tsx";
 import "./AssistantView.css";
 
 /**
- * Assistant mode, in place of Code mode's panes. On the Assistant VM (the server says so, /api/health
- * `web_ui.assistant`) the layout later phases fill; on any other Ovis the setup page. The switch
- * between the two modes is the Claude app's Chat | Code one.
+ * The Assistant in Code mode: its chat is an ordinary pane (the VM's Assistant workspace, tagged on
+ * the machine's sidebar row), and beside it, in place of the agent panel, AssistantPanel: New chat,
+ * the tasks, the earlier chats, the projects and the machines. On the VM itself the panel is drawn
+ * here; on another Ovis it is the VM's own panel page in a frame (?assistant-panel=1).
+ * Assistant mode is only the setup page, opened from the ⋯ menu of an Ovis that is not the VM.
  */
-export function AssistantView({ vm, embedded = false, initial = null, renderChat, onOpenTask, onOpenSettings, editing = false, onEditing }: { vm: boolean; embedded?: boolean; initial?: AssistantState | null; renderChat?: RenderChat; onOpenTask?: OpenTask; onOpenSettings?: () => void; editing?: boolean; onEditing?: (editing: boolean) => void }) {
-  return vm ? <AssistantLayout embedded={embedded} initial={initial} renderChat={renderChat} onOpenTask={onOpenTask} onOpenSettings={onOpenSettings} /> : <AssistantSetup editing={editing} onEditing={onEditing} />;
-}
-
-/** a task's pane in Code mode's own pane view: the machine it runs on, and the pane */
-type OpenTask = (machineId: string, paneId: string) => void;
-
-/** what the Assistant's chat lens is told: its empty chat's greeting, and when its agent started (lib/startingChat.ts) */
-export interface AssistantChat { greeting: { title: string; where: string }; startedAt: number }
-type RenderChat = (paneId: string, chat: AssistantChat) => ReactNode;
-
-/** `editing`: the setup page over a saved address (the header's ⋯ menu, Change Assistant address) */
-function AssistantSetup({ editing, onEditing }: { editing: boolean; onEditing?: (editing: boolean) => void }) {
+export function AssistantSetup({ onBack }: { onBack?: () => void }) {
   const t = useT();
   const [address, setAddress] = useState(storedAssistantAddress);
   const [settingUp, setSettingUp] = useState(false);
   const link = assistantLink(address);
-  const embed = assistantEmbed(address);
   // the address the install printed: kept as one typed in the field is
   const found = useCallback((next: string) => { setAddress(next); storeAssistantAddress(next); }, []);
-  if (embed !== null && !editing) {
-    return (
-      <main className="assistant-embed" data-testid="assistant-embed">
-        <iframe className="assistant-embed-frame" src={assistantFrame(embed)} title={t("Assistant")} allow="clipboard-read; clipboard-write; microphone" />
-      </main>
-    );
-  }
   return (
     <main className="assistant-setup" data-testid="assistant-setup">
       <div className="assistant-setup-inner">
@@ -64,29 +44,28 @@ function AssistantSetup({ editing, onEditing }: { editing: boolean; onEditing?: 
             onChange={(event) => { setAddress(event.target.value); storeAssistantAddress(event.target.value); }} />
         </label>
         {link !== null && <a href={link} target="_blank" rel="noreferrer">{link}</a>}
-        {embed !== null && <div><button type="button" className="btn" onClick={() => onEditing?.(false)}>{t("Show the Assistant")}</button></div>}
+        <p className="assistant-dim">{t("Add the VM in Settings > Remote PCs: its Assistant chat shows in Code mode, with its tasks in the right panel.")}</p>
+        {onBack && <div><button type="button" className="btn" onClick={onBack}>{t("Back to Code")}</button></div>}
       </div>
     </main>
   );
 }
 
+/** a task's pane in Code mode's own pane view: the machine it runs on, and the pane */
+type OpenTask = (machineId: string, paneId: string) => void;
+
 /**
- * The VM's Assistant, laid out as Code mode is (the Claude app's): a sidebar with New chat over the
- * chats (Recents), the projects and the machines; the chat; and the tasks as a right panel. On a phone
- * the sidebar is a drawer and the tasks a sheet, each closed until asked for.
+ * Code mode's right panel beside the Assistant's chat: New chat, the tasks, the earlier chats (one
+ * opens read only in the panel), the projects and the machines. `onSession`: a New chat's pane, for
+ * the Ovis showing the chat to select.
  */
-function AssistantLayout({ embedded, initial, renderChat, onOpenTask, onOpenSettings }: { embedded: boolean; initial: AssistantState | null; renderChat?: RenderChat; onOpenTask?: OpenTask; onOpenSettings?: () => void }) {
+export function AssistantPanel({ initial = null, onOpenTask, onSession }: { initial?: AssistantState | null; onOpenTask?: OpenTask; onSession?: (paneId: string) => void }) {
   const t = useT();
   const locale = useLocale();
   // `initial`: what shows before the first read (a test's state)
   const [state, setState] = useState<AssistantState | null>(initial);
-  // the archived session shown read only; null: the current one, live
+  // an earlier chat, read only in the panel; null: the tasks and lists
   const [shown, setShown] = useState<string | null>(null);
-  const narrow = useMediaQuery("(max-width: 768px)");
-  const [drawer, setDrawer] = useState(false);
-  // null: the panel's own default, open beside the chat and closed over it on a phone
-  const [tasksPicked, setTasksPicked] = useState<boolean | null>(null);
-  const tasksOpen = tasksPicked ?? !narrow;
   const refresh = useCallback(() => fetchAssistant().then(setState, () => {}), []);
   // the server checks each machine every 30 s; this only reads what it found
   useEffect(() => {
@@ -96,76 +75,69 @@ function AssistantLayout({ embedded, initial, renderChat, onOpenTask, onOpenSett
   }, [refresh]);
   const machines = state?.machines ?? [];
   const projects = state?.projects ?? [];
-  const sessions = state?.sessions ?? [];
-  const current = sessions.find((session) => session.archived_at === undefined) ?? null;
-  const viewed = shown === null ? current : sessions.find((session) => session.name === shown) ?? null;
-  const greeting = {
-    title: t("What should the Assistant do?"),
-    where: `${machines.length === 1 ? t("1 machine") : t("{n} machines", { n: machines.length })} · ${projects.length === 1 ? t("1 project") : t("{n} projects", { n: projects.length })}`,
+  const archived = (state?.sessions ?? []).filter((session) => session.archived_at !== undefined);
+  const started = (next: AssistantState) => {
+    setState(next); setShown(null);
+    const pane = next.sessions.find((session) => session.archived_at === undefined)?.pane_id;
+    if (pane) onSession?.(pane);
   };
-  const started = (next: AssistantState) => { setState(next); setShown(null); setDrawer(false); };
-  const chat = current?.pane_id ? renderChat?.(current.pane_id, { greeting, startedAt: current.started_at }) : null;
-  return (
-    <div className="assistant-layout" data-testid="assistant-layout">
-      <aside id="assistant-drawer" className={`assistant-sidebar sidebar-shell${drawer ? " is-open" : ""}`} aria-label={t("Assistant")}>
-        <nav className="sidebar-nav"><NewChat onStarted={started} /></nav>
-        <div className="sidebar-navigation-scroll assistant-lists">
-          <section className="assistant-section" aria-label={t("Sessions")}>
-            <h2 className="sidebar-section-label">{t("Sessions")}</h2>
-            {state !== null && sessions.length === 0 && <p className="assistant-empty">{t("None yet")}</p>}
-            {sessions.map((session) => (
-              <button key={session.name} type="button" className="sidebar-nav-item assistant-item" title={session.name}
-                aria-current={viewed?.name === session.name ? "true" : undefined}
-                onClick={() => { setShown(session === current ? null : session.name); setDrawer(false); }}>
-                <span className="assistant-item-name">{clockTime(locale, session.started_at)}</span>
-                {session === current && <span className="assistant-item-meta">{t("Current")}</span>}
-              </button>
-            ))}
-          </section>
-          <Projects projects={projects} machines={machines} loaded={state !== null} refresh={refresh} />
-          <section className="assistant-section" aria-label={t("Machines")}>
-            <h2 className="sidebar-section-label">{t("Machines")}</h2>
-            {machines.map((machine) => <MachineRow key={machine.id} machine={machine} onChange={setState} refresh={refresh} />)}
-            {state !== null && machines.length === 0 && <>
-              <p className="assistant-empty">{t("None yet")}</p>
-              <details className="assistant-help">
-                <summary>{t("How to add")}</summary>
-                <p>{t("The Assistant uses herdr's saved machines. Add one on this VM with herdr machine add <alias> ssh://user@host, then Connect it in Settings > Remote PCs.")}</p>
-              </details>
-            </>}
-          </section>
-        </div>
-        {onOpenSettings && <footer className="sidebar-footer">
-          <button type="button" className="btn btn-ghost sidebar-footer-action" onClick={onOpenSettings}><Settings aria-hidden="true" /><span>{t("Settings")}</span></button>
-        </footer>}
-      </aside>
-      <div className={`assistant-scrim${drawer || (narrow && tasksOpen) ? " is-open" : ""}`} aria-hidden="true" onClick={() => { setDrawer(false); setTasksPicked(false); }} />
-      <main className="assistant-chat" aria-label={t("Chat")}>
-        <header className="assistant-chat-bar">
-          <button type="button" className="icon-button assistant-drawer-toggle" aria-label={t("Toggle sidebar")} aria-expanded={drawer} aria-controls="assistant-drawer" onClick={() => setDrawer((open) => !open)}>{drawer ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}</button>
-          <span className="assistant-crumb">
-            <span>{t("Assistant")}</span>
-            {viewed !== null && <><ChevronRight aria-hidden="true" /><span className="assistant-crumb-current" title={viewed.name}>{clockTime(locale, viewed.started_at)}</span></>}
-          </span>
-          {/* an open panel closes from its own head */}
-          {!tasksOpen && <button type="button" className="icon-button" aria-label={t("Show tasks")} title={t("Show tasks")} aria-expanded={false} aria-controls="assistant-tasks" onClick={() => setTasksPicked(true)}><PanelRight aria-hidden="true" /></button>}
-        </header>
-        {shown !== null ? <ArchivedSession key={shown} name={shown} />
-          : current === null ? (state === null ? <p className="assistant-chat-note">{t("Loading…")}</p> : (
-            <div className="assistant-start">
-              <h1 className="composer-greeting-title">{greeting.title}</h1>
-              <p className="composer-greeting-where">{greeting.where}</p>
-              <NewChat primary onStarted={started} />
-            </div>
-          ))
-          // a chat just started has no pane in the snapshot for a moment (lib/startingChat.ts)
-          : chat || <p className="assistant-chat-note">{startingRetry(current.started_at, Date.now()) !== null ? t("Starting…") : t("The Assistant's pane is not open. Start a new chat.")}</p>}
-      </main>
-      <aside id="assistant-tasks" className="assistant-board" hidden={!tasksOpen} aria-label={t("Tasks")}>
-        <TaskBoard tasks={state?.tasks ?? []} projects={projects} machines={machines} onChange={setState} onOpenTask={onOpenTask} onClose={() => setTasksPicked(false)} />
-      </aside>
+  if (shown !== null) return (
+    <div className="assistant-panel" data-testid="assistant-panel">
+      <header className="assistant-panel-head">
+        <button type="button" className="btn btn-ghost" onClick={() => setShown(null)}><ChevronLeft aria-hidden="true" /><span>{t("Back")}</span></button>
+        <span className="assistant-dim">{clockTime(locale, archived.find((session) => session.name === shown)?.started_at ?? 0)}</span>
+      </header>
+      <ArchivedSession key={shown} name={shown} />
     </div>
   );
+  return (
+    <div className="assistant-panel" data-testid="assistant-panel">
+      <header className="assistant-panel-head">
+        <h2>{t("Assistant")}</h2>
+        <NewChat onStarted={started} />
+      </header>
+      <section className="assistant-board" aria-label={t("Tasks")}>
+        <TaskBoard tasks={state?.tasks ?? []} projects={projects} machines={machines} onChange={setState} onOpenTask={onOpenTask} />
+      </section>
+      <div className="assistant-lists">
+        {archived.length > 0 && <section className="assistant-section" aria-label={t("Earlier chats")}>
+          <h2 className="sidebar-section-label">{t("Earlier chats")}</h2>
+          {archived.map((session) => (
+            <button key={session.name} type="button" className="sidebar-nav-item assistant-item" title={session.name} onClick={() => setShown(session.name)}>
+              <span className="assistant-item-name">{clockTime(locale, session.started_at)}</span>
+            </button>
+          ))}
+        </section>}
+        <Projects projects={projects} machines={machines} loaded={state !== null} refresh={refresh} />
+        <section className="assistant-section" aria-label={t("Machines")}>
+          <h2 className="sidebar-section-label">{t("Machines")}</h2>
+          {machines.map((machine) => <MachineRow key={machine.id} machine={machine} onChange={setState} refresh={refresh} />)}
+          {state !== null && machines.length === 0 && <>
+            <p className="assistant-empty">{t("None yet")}</p>
+            <details className="assistant-help">
+              <summary>{t("How to add")}</summary>
+              <p>{t("The Assistant uses herdr's saved machines. Add one on this VM with herdr machine add <alias> ssh://user@host, then Connect it in Settings > Remote PCs.")}</p>
+            </details>
+          </>}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The VM's panel in a frame, for an Ovis that is not the VM. A New chat there names its pane in a
+ * message; only one from the VM's own origin, well formed (lib/assistantMode.ts), is acted on.
+ */
+export function AssistantPanelFrame({ src, onSession }: { src: string; onSession(paneId: string): void }) {
+  const t = useT();
+  useEffect(() => {
+    const origin = new URL(src).origin;
+    const listen = (event: MessageEvent) => { if (event.origin === origin && isAssistantPanelMessage(event.data)) onSession(event.data.paneId); };
+    window.addEventListener("message", listen);
+    return () => window.removeEventListener("message", listen);
+  }, [src, onSession]);
+  return <iframe className="assistant-panel-frame" src={src} title={t("Assistant")} />;
 }
 
 /** New chat: only on this click. The pane before it is archived and stays readable in Sessions. */
@@ -189,8 +161,8 @@ function ArchivedSession({ name }: { name: string }) {
   const [transcript, setTranscript] = useState<AssistantTranscript | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { fetchAssistantTranscript(name).then(setTranscript, (failure: unknown) => setError(failure instanceof ApiError ? failure.detail : String(failure))); }, [name]);
-  if (error !== null) return <p className="assistant-error assistant-chat-note" role="alert">{error}</p>;
-  if (transcript === null) return <p className="assistant-dim assistant-chat-note">{t("Loading…")}</p>;
+  if (error !== null) return <p className="assistant-error" role="alert">{error}</p>;
+  if (transcript === null) return <p className="assistant-dim">{t("Loading…")}</p>;
   return (
     <div className="assistant-transcript" aria-label={t("Archived session")}>
       {transcript.turns.map((turn, index) => (
@@ -243,7 +215,7 @@ function statusTone(status: TaskStatus): string {
  * Needs you card answers its agent's question in place with the chat's own prompt card, through
  * the machine's prompt-answer route.
  */
-function TaskBoard({ tasks, projects, machines, onChange, onOpenTask, onClose }: { tasks: AssistantTask[]; projects: AssistantProject[]; machines: AssistantMachine[]; onChange(state: AssistantState): void; onOpenTask?: OpenTask; onClose(): void }) {
+function TaskBoard({ tasks, projects, machines, onChange, onOpenTask, onClose }: { tasks: AssistantTask[]; projects: AssistantProject[]; machines: AssistantMachine[]; onChange(state: AssistantState): void; onOpenTask?: OpenTask; onClose?: () => void }) {
   const t = useT();
   const locale = useLocale();
   const columns = COLUMNS.map((statuses) => ({ statuses, tasks: tasks.filter((task) => statuses.includes(task.status)) })).filter((column) => column.tasks.length > 0);
@@ -252,7 +224,7 @@ function TaskBoard({ tasks, projects, machines, onChange, onOpenTask, onClose }:
       <header className="assistant-board-head">
         <h2>{t("Tasks")}</h2>
         {tasks.length > 0 && <span className="agent-panel-count">{tasks.length}</span>}
-        <button type="button" className="icon-button" aria-label={t("Hide tasks")} title={t("Hide tasks")} onClick={onClose}><PanelRightClose aria-hidden="true" /></button>
+        {onClose && <button type="button" className="icon-button" aria-label={t("Hide tasks")} title={t("Hide tasks")} onClick={onClose}><PanelRightClose aria-hidden="true" /></button>}
       </header>
       {columns.length === 0 && <p className="assistant-empty assistant-board-empty">{t("No tasks yet")}</p>}
       {columns.map(({ statuses, tasks: shown }) => (
