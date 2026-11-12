@@ -654,7 +654,7 @@ export function App() {
       ...(sidebarWidth === null ? {} : { "--sidebar-user-w": `${sidebarWidth}px` }),
       ...(filePanelWidth === null ? {} : { "--file-panel-user-w": `${filePanelWidth}px` }),
     } as CSSProperties}>
-      {!embedded && <header className={`app-header is-zoned${chatShown ? " is-chat" : ""}`}>
+      {!embedded && <header className={`app-header is-zoned${chatShown ? " is-chat" : ""}${assistantPage !== null && !assistantEditing ? " is-assistant-page" : ""}`}>
         {/* is-zoned tells this header from the connecting shell's, which has no zones to draw.
             .header-side is the sidebar's own top row from 769px (styles.css); below that its
             buttons sit in the bar */}
