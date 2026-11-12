@@ -185,9 +185,11 @@ export type ProjectRefusal = "invalid_path" | "missing" | "not_git" | "root" | "
 
 /** POST /api/assistant-setup: set up a VM as the Assistant over SSH, from any Ovis but the VM itself */
 export interface AssistantSetupRequest {
-  /** an SSH alias or user@host, as Add PC takes it */
-  destination: string;
+  /** an SSH alias or user@host, as Add PC takes it; or, in its place, `machineId` */
+  destination?: string;
   port?: number;
+  /** one of GET /api/assistant-setup's `machines`: set up over that machine's own SSH, resolved by the server */
+  machineId?: string;
   /** the VM's Tailscale machine name (ASSISTANT_NAME) */
   name: string;
   agent: AssistantAgent;
@@ -211,6 +213,13 @@ export interface AssistantSetupJob {
   /** the https://….ts.net address the install printed */
   address: string | null;
   error: string | null;
+}
+
+/** A connected Linux machine of this Ovis that GET /api/assistant-setup offers to set up */
+export interface AssistantSetupMachine {
+  id: string;
+  name: string;
+  destination: string;
 }
 
 /** One event of GET /api/assistant-setup/stream: the terminal's output, or the setup's state */

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from
 import type { AssistantAgent, AssistantMachine, AssistantProblem, AssistantProject, AssistantState, AssistantTask, AssistantTranscript, MergeMode, ProjectChange, TaskStatus } from "../../shared/assistant.ts";
 import type { InteractivePrompt } from "../../shared/protocol.ts";
 import { addAssistantProject, ApiError, approveAssistantTask, cancelAssistantTask, changeAssistantProject, fetchAssistant, fetchAssistantTranscript, fetchPanePrompt, fixAssistantMachine, dismissAssistantTask, removeAssistantProject, restartAssistantTask, setAssistantMaxRunning, startAssistantSession } from "../lib/api.ts";
-import { ASSISTANT_INSTALL_COMMAND, assistantEmbed, assistantLink, storeAssistantAddress, storedAssistantAddress } from "../lib/assistantMode.ts";
+import { ASSISTANT_INSTALL_COMMAND, assistantEmbed, assistantFrame, assistantLink, storeAssistantAddress, storedAssistantAddress } from "../lib/assistantMode.ts";
 import { useLocale, useT, type Translate } from "../lib/i18n.ts";
 import { MachineContext } from "../lib/machineContext.tsx";
 import { AssistantSetupDialog } from "./AssistantSetupDialog.tsx";
@@ -43,7 +43,7 @@ function AssistantSetup() {
           <a className="btn" href={embed} target="_blank" rel="noreferrer">{t("Open in new tab")}</a>
           <button type="button" className="btn" onClick={() => setEditing(true)}>{t("Change address")}</button>
         </div>
-        <iframe className="assistant-embed-frame" src={embed} title={t("Assistant")} allow="clipboard-read; clipboard-write; microphone" />
+        <iframe className="assistant-embed-frame" src={assistantFrame(embed)} title={t("Assistant")} allow="clipboard-read; clipboard-write; microphone" />
       </main>
     );
   }

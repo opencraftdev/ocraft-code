@@ -52,6 +52,8 @@ interface Runtime {
   updateCancelled?: boolean;
   /** its last connection found a Windows host (detectHost) */
   windows?: boolean;
+  /** its last connection found a Linux host (detectHost) */
+  linux?: boolean;
   /**
    * The SSH address (destination, port, session) whose socket the PC's own Ovis (an independently managed web
    * server) serves, as that PC last showed it: while none runs there, the PC waits for that server instead of
@@ -799,6 +801,7 @@ export class MachineManager {
     runtime.windows = host.kind === "windows";
     if (job && host.kind === "windows") job.public.windows_startup = moving || !this.machines.has(runtime.machine.id);
     const { platform, expectedSocket } = inspection;
+    runtime.linux = platform.startsWith("linux");
     // what the PC's own Ovis said is read anew on every try: it may have been updated or replaced since
     if (!moving) runtime.machine.remote_ovis = null;
     let { herdrPath } = inspection;
@@ -1186,6 +1189,15 @@ export class MachineManager {
     if (runtime.ssh?.connected()) return runtime.ssh.run(REMOTE_PATH + script, undefined, timeout);
     const ssh = new SshConnection(runtime.machine.target, this.sshDir, join(this.sshDir, id));
     try { await ssh.start(); return await ssh.run(REMOTE_PATH + script, undefined, timeout); } finally { ssh.close(); }
+  }
+  /**
+   * The connected Linux PCs, each with its SSH address and this app's key for it: the ones the
+   * Assistant setup may install on (server/assistant-setup.ts), over the SSH Remote PCs already trusts.
+   */
+  linuxMachines(): { id: string; name: string; target: SshTarget; keyPath: string }[] {
+    return [...this.machines.values()]
+      .filter((runtime) => runtime.machine.enabled && runtime.machine.state === "connected" && runtime.linux === true && runtime.machine.target && this.mayConnect(runtime))
+      .map(({ machine }) => ({ id: machine.id, name: machine.name, target: machine.target!, keyPath: join(this.sshDir, machine.id) }));
   }
   /** whether the PC's last connection found Windows (false until one did) */
   windows(id: string): boolean { return this.machines.get(id)?.windows === true; }

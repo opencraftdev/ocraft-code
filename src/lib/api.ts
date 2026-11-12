@@ -1,7 +1,7 @@
 import { apiFetch as fetch } from "./api-request-id.ts";
 import type { PreferencesChange, SharedPreferences } from "../../shared/preferences.ts";
 import type { SeenFinish } from "../../shared/seen.ts";
-import type { AddProjectRequest, AssistantFix, AssistantProject, AssistantSetupJob, AssistantSetupRequest, AssistantState, AssistantTranscript, ProjectChange } from "../../shared/assistant.ts";
+import type { AddProjectRequest, AssistantFix, AssistantProject, AssistantSetupJob, AssistantSetupMachine, AssistantSetupRequest, AssistantState, AssistantTranscript, ProjectChange } from "../../shared/assistant.ts";
 import { resumeConnectionTraces } from "./connectionTrace.ts";
 import { machinePath, type BridgeHealth, type HerdrIdentity, type Machine, type MachineRoster, type SetupAction, type SetupJob, type SetupRequest } from "../../shared/machines.ts";
 import type {
@@ -574,6 +574,10 @@ export function fetchAssistantTranscript(name: string): Promise<AssistantTranscr
   return getJson<AssistantTranscript>(`/api/assistant/sessions/${encodeURIComponent(name)}`);
 }
 
+/** the connected Linux machines a VM setup may run on */
+export async function fetchAssistantSetupMachines(): Promise<AssistantSetupMachine[]> {
+  return (await getJson<{ machines?: AssistantSetupMachine[] }>("/api/assistant-setup")).machines ?? [];
+}
 /** Set up a VM (server/assistant-setup.ts): start, answer SSH's question, type into its terminal, resize it, stop it. */
 export async function startAssistantSetup(request: AssistantSetupRequest): Promise<AssistantSetupJob> {
   return (await sendJson("/api/assistant-setup", "POST", request)).json() as Promise<AssistantSetupJob>;

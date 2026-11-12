@@ -28,7 +28,7 @@ import { loadedOnSettingsEntry } from "./lib/settingsHistory.ts";
 import { useSettingsDialog } from "./lib/useSettingsDialog.ts";
 import { usePhoneSheetBack } from "./lib/sheetHistory.ts";
 import { peekFor, type PeekRequest } from "./lib/terminalPeek.ts";
-import { linksSomewhere, readLink } from "./lib/deepLink.ts";
+import { linkSearch, linksSomewhere, readLink } from "./lib/deepLink.ts";
 import { copyText } from "./lib/clipboard.ts";
 import { CommandPalette } from "./components/CommandPalette.tsx";
 import { MachineContext } from "./lib/machineContext.tsx";
@@ -180,7 +180,8 @@ export function App() {
   const { newSessionMachineId, setNewSessionMachineId } = useNewSessionMachine();
   const { health, localFreshness, shownHealth, readLocalHealth } = useLocalHealth();
   // the header's Assistant | Code switch, per device; Code mode is the app as it always was
-  const [appMode, chooseMode] = useAppMode();
+  // embedded: in the setup page's frame (another Ovis's Assistant mode), the Assistant alone, no header
+  const [appMode, chooseMode, embedded] = useAppMode();
   const codeMode = appMode === "code";
   const { error, setError } = useRosterError();
   const { layoutNotice, setLayoutNotice } = useLayoutNotice();
@@ -646,7 +647,7 @@ export function App() {
       ...(sidebarWidth === null ? {} : { "--sidebar-user-w": `${sidebarWidth}px` }),
       ...(filePanelWidth === null ? {} : { "--file-panel-user-w": `${filePanelWidth}px` }),
     } as CSSProperties}>
-      <header className={`app-header is-zoned${chatShown ? " is-chat" : ""}`}>
+      {!embedded && <header className={`app-header is-zoned${chatShown ? " is-chat" : ""}`}>
         {/* is-zoned tells this header from the connecting shell's, which has no zones to draw.
             .header-side is the sidebar's own top row from 769px (styles.css); below that its
             buttons sit in the bar */}
@@ -782,7 +783,7 @@ export function App() {
             onClose={closeMore}
           />
         )}
-      </header>
+      </header>}
 
       {!codeMode ? <div className="app-body"><AssistantView vm={health?.web_ui?.assistant === true} renderChat={(paneId) => {
         // the Assistant's pane is on this VM's own herdr: Code mode's chat lens over it, composer and all
@@ -800,6 +801,8 @@ export function App() {
           </MachineContext.Provider>
         );
       }} onOpenTask={(machineId, paneId) => {
+        // in the frame, the pane opens in a tab of this Ovis of its own, in Code mode there
+        if (embedded) { window.open(`/${linkSearch({ machine: machineId, workspace: null, pane: paneId, view: null, settings: null })}`, "_blank", "noopener"); return; }
         // a task's pane opens in Code mode's own pane view, as a sidebar pick does: herdr's focus stays where it is
         chooseMode("code");
         selectTarget(machineId, paneId);

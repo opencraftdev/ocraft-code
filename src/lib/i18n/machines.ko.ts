@@ -124,6 +124,8 @@ export const MACHINES_KO: Record<string, string> = {
   "Tailscale machine name": "Tailscale 머신 이름",
   "Agent CLI": "에이전트 CLI",
   "Runs the Assistant install script on a fresh Linux VM over SSH, with this server's SSH config and ssh-agent. Answer its questions in the terminal below.": "이 서버의 SSH 설정과 ssh-agent로 새 Linux VM에서 SSH를 통해 어시스턴트 설치 스크립트를 실행합니다. 질문에는 아래 터미널에서 답하세요.",
+  "Runs the Assistant install script on this machine over the SSH that Remote PCs already uses. Answer its questions in the terminal below.": "Remote PCs가 이미 쓰는 SSH로 이 머신에서 어시스턴트 설치 스크립트를 실행합니다. 질문에는 아래 터미널에서 답하세요.",
+  "Another computer…": "다른 컴퓨터…",
   "This server cannot run the setup: it has no PTY host. Run this on the VM instead:": "이 서버에는 PTY 호스트가 없어 설정을 실행할 수 없습니다. 대신 VM에서 다음을 실행하세요:",
   "Stop the setup? The install on the VM ends where it is.": "설정을 중지할까요? VM의 설치는 현재 단계에서 끝납니다.",
   "Keep running": "계속 실행",

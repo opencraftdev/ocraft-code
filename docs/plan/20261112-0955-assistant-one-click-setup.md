@@ -64,3 +64,12 @@ answer the few prompts there, and the VM's address fills itself in.
   `start()` authenticated, so the host-key and password questions are Add PC's own.
 - Client: `src/components/AssistantSetupDialog.tsx`, Add PC's dialog styles, its fingerprint
   question, and a small xterm of its own (`scrollback: 0`, web links), since PaneTerminal is a pane's.
+- The embedded page loads with `?assistant-embed=1` (`ASSISTANT_EMBED_PARAM`, src/lib/assistantMode.ts):
+  that load starts in Assistant mode without storing it and draws no header, so only the Assistant
+  shows; a task opened from its board opens the VM's normal page (`?pane=…`, which starts in Code
+  mode) in a new tab. Framing rules are unchanged.
+- **Set up a VM** first lists this Ovis's connected Linux machines (`MachineManager.linuxMachines`,
+  in GET `/api/assistant-setup`). Start takes `{ machineId }` in place of an address; the server
+  resolves its SSH target and key itself and refuses an unknown, disconnected or non-Linux one, or a
+  request that also sends an address. Its known host is already trusted, so no fingerprint question.
+  Telling whether that machine already is the Assistant was left out.

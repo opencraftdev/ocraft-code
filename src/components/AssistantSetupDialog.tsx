@@ -5,8 +5,8 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 
-import type { AssistantAgent, AssistantSetupEvent, AssistantSetupJob } from "../../shared/assistant.ts";
-import { answerAssistantSetup, ApiError, assistantSetupInput, resizeAssistantSetup, startAssistantSetup, stopAssistantSetup } from "../lib/api.ts";
+import type { AssistantAgent, AssistantSetupEvent, AssistantSetupJob, AssistantSetupMachine } from "../../shared/assistant.ts";
+import { answerAssistantSetup, ApiError, assistantSetupInput, fetchAssistantSetupMachines, resizeAssistantSetup, startAssistantSetup, stopAssistantSetup } from "../lib/api.ts";
 import { keepEventStream } from "../lib/eventStream.ts";
 import { TERMINAL_FONT_STACK } from "../lib/fontFamily.ts";
 import { useT } from "../lib/i18n.ts";
@@ -19,9 +19,14 @@ import "./AssistantView.css";
 
 const ACTIVE: readonly AssistantSetupJob["phase"][] = ["connecting", "authentication", "running"];
 const errorText = (error: unknown) => error instanceof ApiError ? error.detail : error instanceof Error ? error.message : String(error);
+/** a machine's label as a Tailscale machine name, by the install script's rule (lowercase letters, digits, inner hyphens) */
+export const machineSlug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "ovis-assistant";
+/** the machine choice that means the SSH address typed below */
+const OTHER = "";
 
 /**
- * Set up a VM: SSH address, machine name and agent, then the host-key and password questions Add PC
+ * Set up a VM: one of this Ovis's connected Linux machines (over the SSH Remote PCs already trusts)
+ * or another computer's SSH address, the machine name and agent, then the host-key and password questions Add PC
  * asks, then the install's own terminal (server/assistant-setup.ts). The address it prints goes to
  * `onAddress`. Closing while it runs asks first, and stops it.
  */
@@ -34,6 +39,17 @@ export function AssistantSetupDialog({ onClose, onAddress }: { onClose(): void; 
   const [confirmStop, setConfirmStop] = useState(false);
   const active = job !== null && ACTIVE.includes(job.phase);
   const showForm = job === null || job.phase === "failed" || job.phase === "stopped";
+  const [machines, setMachines] = useState<AssistantSetupMachine[]>([]);
+  const [choice, setChoice] = useState(OTHER);
+  const [name, setName] = useState("ovis-assistant");
+  const choose = (id: string, list = machines) => {
+    setChoice(id);
+    const machine = list.find((candidate) => candidate.id === id);
+    if (machine) setName(machineSlug(machine.name));
+  };
+  useEffect(() => {
+    fetchAssistantSetupMachines().then((list) => { setMachines(list); if (list[0]) choose(list[0].id, list); }, () => {});
+  }, []);
 
   useEffect(() => { dialog.current?.showModal(); }, []);
   useEffect(() => { if (job?.address) onAddress(job.address); }, [job?.address, onAddress]);
@@ -49,8 +65,8 @@ export function AssistantSetupDialog({ onClose, onAddress }: { onClose(): void; 
     const port = String(data.get("port") ?? "").trim();
     setPending(true); setError(null);
     try {
-      setJob(await startAssistantSetup({ destination: String(data.get("destination") ?? "").trim(), ...(port ? { port: Number(port) } : {}),
-        name: String(data.get("name") ?? "").trim(), agent: String(data.get("agent")) as AssistantAgent }));
+      const where = choice !== OTHER ? { machineId: choice } : { destination: String(data.get("destination") ?? "").trim(), ...(port ? { port: Number(port) } : {}) };
+      setJob(await startAssistantSetup({ ...where, name: name.trim(), agent: String(data.get("agent")) as AssistantAgent }));
     } catch (cause) { setError(errorText(cause)); }
     finally { setPending(false); }
   };
@@ -66,11 +82,17 @@ export function AssistantSetupDialog({ onClose, onAddress }: { onClose(): void; 
     <header className="modal-header"><h2 id="assistant-setup-title" className="modal-title"><Bot size={18} /> {t("Set up a VM")}</h2><button className="icon-button" aria-label={t("Close VM setup")} onClick={close}><X /></button></header>
     <div className="modal-body">
       {showForm && <form id="assistant-setup-form" onSubmit={(event) => { event.preventDefault(); void begin(event.currentTarget); }}>
-        <label className="field"><span className="field-label">{t("SSH alias or user@address")}</span><input name="destination" autoFocus className="input" required autoComplete="off" spellCheck={false} placeholder="ubuntu@203.0.113.10" /></label>
-        <label className="field"><span className="field-label">{t("SSH port")}</span><input name="port" className="input" type="number" min="1" max="65535" placeholder={t("From SSH config (default 22)")} /></label>
-        <label className="field"><span className="field-label">{t("Tailscale machine name")}</span><input name="name" className="input" required autoComplete="off" spellCheck={false} defaultValue="ovis-assistant" pattern="[a-z0-9]([a-z0-9\-]*[a-z0-9])?" /></label>
+        {machines.length > 0 && <label className="field"><span className="field-label">{t("Machine")}</span><select className="input" value={choice} onChange={(event) => choose(event.target.value)}>
+          {machines.map((machine) => <option key={machine.id} value={machine.id}>{machine.name} · {machine.destination}</option>)}
+          <option value={OTHER}>{t("Another computer…")}</option>
+        </select></label>}
+        {choice === OTHER && <>
+          <label className="field"><span className="field-label">{t("SSH alias or user@address")}</span><input name="destination" autoFocus className="input" required autoComplete="off" spellCheck={false} placeholder="ubuntu@203.0.113.10" /></label>
+          <label className="field"><span className="field-label">{t("SSH port")}</span><input name="port" className="input" type="number" min="1" max="65535" placeholder={t("From SSH config (default 22)")} /></label>
+        </>}
+        <label className="field"><span className="field-label">{t("Tailscale machine name")}</span><input name="name" className="input" required autoComplete="off" spellCheck={false} value={name} onChange={(event) => setName(event.target.value)} pattern="[a-z0-9]([a-z0-9\-]*[a-z0-9])?" /></label>
         <label className="field"><span className="field-label">{t("Agent CLI")}</span><select name="agent" className="input" defaultValue="claude"><option value="claude">Claude Code</option><option value="codex">Codex</option></select></label>
-        <p className="field-hint">{t("Runs the Assistant install script on a fresh Linux VM over SSH, with this server's SSH config and ssh-agent. Answer its questions in the terminal below.")}</p>
+        <p className="field-hint">{choice === OTHER ? t("Runs the Assistant install script on a fresh Linux VM over SSH, with this server's SSH config and ssh-agent. Answer its questions in the terminal below.") : t("Runs the Assistant install script on this machine over the SSH that Remote PCs already uses. Answer its questions in the terminal below.")}</p>
       </form>}
       {job?.phase === "unsupported" && <div className="machine-progress" role="status">
         <p>{t("This server cannot run the setup: it has no PTY host. Run this on the VM instead:")}</p>

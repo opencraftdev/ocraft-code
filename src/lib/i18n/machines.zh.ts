@@ -124,6 +124,8 @@ export const MACHINES_ZH: Record<string, string> = {
   "Tailscale machine name": "Tailscale 机器名",
   "Agent CLI": "Agent 命令行工具",
   "Runs the Assistant install script on a fresh Linux VM over SSH, with this server's SSH config and ssh-agent. Answer its questions in the terminal below.": "通过 SSH 在全新的 Linux VM 上运行助手安装脚本，使用此服务器的 SSH 配置和 ssh-agent。请在下方终端中回答它的问题。",
+  "Runs the Assistant install script on this machine over the SSH that Remote PCs already uses. Answer its questions in the terminal below.": "通过远程 PC 已在使用的 SSH 在这台机器上运行助手安装脚本。请在下方终端中回答它的问题。",
+  "Another computer…": "其他电脑…",
   "This server cannot run the setup: it has no PTY host. Run this on the VM instead:": "此服务器没有 PTY 主机，无法运行设置。请改为在 VM 上运行：",
   "Stop the setup? The install on the VM ends where it is.": "停止设置？VM 上的安装将停在当前步骤。",
   "Keep running": "继续运行",
