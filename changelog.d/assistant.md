@@ -12,8 +12,8 @@
   same conversation, within a minute of either going away (and after herdr or the VM restarts),
   and compacts its conversation when it is idle past 70% of its context, after it saves notes.
   An agent waiting on a prompt is left alone.
-- In Code mode the Assistant VM is a remote PC listed first, as a tinted card tagged
-  **Assistant**. Beside the Assistant's chat the agent panel shows Environment and Context and a
+- In Code mode the Assistant VM is a remote PC listed first, as a card tagged **Assistant** in the
+  sidebar's own grays, a shade lighter than the rows with a faint edge. Beside the Assistant's chat the agent panel shows Environment and Context and a
   **Sessions** section: every agent session on your PCs, working and blocked first, the rest
   folded, a click opening it. **Restart Assistant** in the ⋯ menu starts it on a fresh
   conversation. Its empty chat greets with "What should the Assistant do?".
