@@ -1,4 +1,4 @@
-/* Assistant mode: the setup page, or the VM's layout (sidebar, chat, task board) */
+/* Assistant mode: the setup page, or the VM's layout (sidebar, chat, task panel) */
 .assistant-setup {
   flex: 1 1 auto;
   min-width: 0;
@@ -60,24 +60,131 @@
   margin: var(--space-2) 0 0;
 }
 
+/* The VM's layout, as Code mode's (the Claude app's): sidebar, chat, and the tasks as a right panel */
 .assistant-layout {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
 }
 
-.assistant-sidebar,
-.assistant-board {
+/* the sidebar: Code mode's shell and rows (Sidebar.css, styles.css "Claude desktop look") */
+.assistant-sidebar {
   flex: 0 0 var(--sidebar-shown-w);
-  overflow-y: auto;
-  padding: var(--space-2) var(--space-3);
-  background: var(--sidebar-surface);
+  width: var(--sidebar-shown-w);
+  min-width: 0;
+  border-right: var(--hairline) solid var(--surface-edge);
 }
 
-.assistant-sidebar { border-right: var(--hairline) solid var(--surface-edge); }
-.assistant-board { border-left: var(--hairline) solid var(--surface-edge); }
+/* the app's name, in the frame where there is no app header */
+.assistant-brand {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--header-h);
+  padding: 0 var(--space-4);
+  color: var(--text-strong);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-tight);
+}
 
-/* the chat: a bar with New session over Code mode's chat lens of the Assistant's pane */
+.assistant-brand img {
+  display: block;
+  flex: none;
+  width: var(--mark-size);
+  height: var(--mark-size);
+}
+
+.assistant-lists { padding: 0 var(--space-2) var(--space-3); }
+.assistant-section { margin-top: var(--space-3); }
+.assistant-section .sidebar-section-label { min-height: var(--control-h); padding: 0 var(--space-2); font-size: var(--fs-xs); }
+
+.assistant-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.assistant-section-head .icon-button {
+  width: var(--space-6);
+  height: var(--space-6);
+  color: var(--text-dim);
+}
+
+.assistant-section-head .icon-button svg { width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); }
+
+.assistant-item { width: 100%; }
+.assistant-item[aria-current="true"] { background: var(--bg-hover); color: var(--text-strong); }
+.assistant-item[aria-expanded="true"] { background: var(--bg-hover); }
+
+.assistant-item-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-item-meta {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+}
+
+.assistant-item .machine-dot { margin: 0 var(--space-1); }
+
+/* what a row says under itself: indented to its title, past the icon */
+.assistant-item-detail {
+  padding: var(--space-1) var(--space-2) var(--space-2) calc(var(--space-5) + var(--icon-sm, 16px));
+  font-size: var(--fs-xs);
+}
+
+.assistant-path { flex-basis: 100%; }
+/* a machine's problem under its row: its red dot says it, the words stay quiet */
+.assistant-item-detail.assistant-problem { color: var(--text-dim); }
+
+.assistant-empty {
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+}
+
+.assistant-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.assistant-link:hover { text-decoration: underline; }
+
+/* a machine's how-to, folded under the empty line */
+.assistant-help {
+  padding: 0 var(--space-2);
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+}
+
+.assistant-help summary { width: fit-content; color: var(--text); cursor: pointer; }
+.assistant-help p { margin: var(--space-1) 0 0; line-height: var(--lh-base); overflow-wrap: anywhere; }
+
+.assistant-add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+
+/* the chat: a quiet bar (the place, the task panel's toggle) over Code mode's chat lens */
 .assistant-chat {
   display: flex;
   flex-direction: column;
@@ -93,28 +200,44 @@
   flex: none;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-bottom: var(--hairline) solid var(--surface-edge);
+  min-height: var(--header-h);
+  padding: 0 var(--space-3);
 }
 
-.assistant-chat-bar .btn { margin-left: auto; }
-.assistant-chat-note { margin: 0; padding: var(--space-4); color: var(--text-dim); }
-
-.assistant-session {
-  display: block;
-  width: 100%;
-  padding: var(--space-1) var(--space-2);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+.assistant-crumb {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
 }
 
-.assistant-session:hover { background: var(--bg-hover); }
-.assistant-session[aria-current="true"] { background: var(--bg-hover); color: var(--text-strong); }
+.assistant-crumb svg { flex: none; width: var(--space-3); height: var(--space-3); }
+
+.assistant-crumb-current {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-strong);
+}
+
+.assistant-chat-bar .icon-button { color: var(--text-dim); }
+.assistant-drawer-toggle { display: none; }
+.assistant-chat-note { margin: 0; padding: var(--space-6) var(--space-4); color: var(--text-dim); text-align: center; }
+
+/* no chat yet: the empty chat's greeting (Composer.css) over New chat, in the middle */
+.assistant-start {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+}
+
+.assistant-start .composer-greeting-where { margin-bottom: var(--space-5); }
 
 /* an archived session, read only */
 .assistant-transcript {
@@ -122,39 +245,15 @@
   padding: var(--space-3) var(--space-4);
 }
 
-.assistant-turn { margin-bottom: var(--space-3); }
+.assistant-turn { max-width: var(--content-w); margin: 0 auto var(--space-3); }
 .assistant-turn p { margin: var(--space-1) 0 0; color: var(--text); font-size: var(--fs-chat); white-space: pre-wrap; overflow-wrap: anywhere; }
 .assistant-screen { margin: 0; font-family: var(--font-mono); font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
-.assistant-findings { margin: 0; max-height: 12em; overflow: auto; font-family: var(--font-mono); font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-dim); }
-
-.assistant-section { margin-bottom: var(--space-3); }
-
-.assistant-empty {
-  margin: 0;
-  color: var(--text-dim);
-  font-size: var(--fs-sm);
-}
-
-/* a machine or project row, and the add-project form */
-.assistant-row,
-.assistant-add {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-2) 0;
-  border-bottom: var(--hairline) solid var(--surface-edge);
-}
-
-.assistant-row-name {
-  color: var(--text-strong);
-  font-weight: var(--fw-medium);
-  overflow-wrap: anywhere;
-}
+.assistant-findings { margin: 0; max-height: 12em; overflow: auto; font-family: var(--font-mono); font-size: var(--fs-xs); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-dim); }
 
 .assistant-dim,
 .assistant-error {
   margin: 0;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-xs);
   overflow-wrap: anywhere;
 }
 
@@ -167,27 +266,58 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-xs);
 }
 
 .assistant-problem { color: var(--status-blocked); }
 .assistant-inline .input[type="number"] { width: 5em; }
 
-/* a phone: the three regions stack, the chat between the lists */
-@media (max-width: 768px) {
-  .assistant-layout { flex-direction: column; overflow-y: auto; }
-  .assistant-sidebar,
-  .assistant-board { flex: none; border: 0; }
-  .assistant-chat { min-height: 40vh; }
+/* the tasks: Code mode's right panel width, a quiet head per status with its count (AgentPanel.css) */
+.assistant-board {
+  flex: 0 0 var(--agent-panel-w);
+  width: var(--agent-panel-w);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 var(--space-3) var(--space-4);
+  border-left: var(--hairline) solid var(--surface-edge);
+  background: var(--chat-canvas);
+  scrollbar-width: thin;
 }
 
-/* the task board: a column per status, a card per task */
-.assistant-column {
-  margin: 0 0 var(--space-1);
-  color: var(--text-strong);
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
+.assistant-board[hidden] { display: none; }
+
+.assistant-board-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--header-h);
+  padding-left: var(--space-1);
+  background: var(--chat-canvas);
 }
+
+.assistant-board-head h2 { margin: 0; color: var(--text-strong); font-size: var(--fs-sm); font-weight: var(--fw-medium); }
+.assistant-board-head .agent-panel-count { margin-left: 0; }
+.assistant-board-head .icon-button { margin-left: auto; color: var(--text-dim); }
+.assistant-board-empty { padding-inline: var(--space-1); }
+.assistant-task-group .agent-panel-section-label { margin-inline: var(--space-1); }
+
+.assistant-task {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  padding: var(--space-3);
+  border: var(--hairline) solid var(--surface-edge);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--composer-surface-bg) 85%, transparent);
+}
+
+.assistant-task p { margin: 0; }
+.assistant-task a { color: var(--accent); }
 
 .assistant-task-open {
   display: flex;
@@ -203,7 +333,89 @@
 }
 
 .assistant-task-open:disabled { cursor: default; }
-.assistant-task-open:not(:disabled):hover .assistant-row-name { text-decoration: underline; }
+.assistant-task-open:not(:disabled):hover .assistant-task-title { text-decoration: underline; }
+
+.assistant-task-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.assistant-task-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-strong);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  overflow-wrap: anywhere;
+}
+
+/* a task's status as a word, in its column's status color */
+.assistant-pill {
+  --tone: var(--status-idle);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: var(--chip-h);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  color: var(--tone);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+}
+
+.assistant-pill.is-blocked { --tone: var(--status-blocked); }
+.assistant-pill.is-working { --tone: var(--status-working); }
+.assistant-pill.is-done { --tone: var(--status-done); }
+
+/* a phone: the sidebar is Code mode's drawer and the tasks a sheet over the chat, each over a scrim */
+.assistant-scrim { display: none; }
+
+@media (max-width: 768px) {
+  .assistant-drawer-toggle { display: inline-flex; }
+  /* Code mode's own drawer toggle has nothing to open here: the chat's bar holds this one */
+  .app:has(.assistant-layout) .drawer-toggle { display: none; }
+
+  .assistant-sidebar,
+  .assistant-board {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: var(--z-drawer);
+    width: min(88vw, var(--sidebar-w));
+    box-shadow: var(--shadow-drawer);
+  }
+
+  .assistant-sidebar {
+    left: 0;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform var(--dur-base) var(--ease-out), visibility 0s linear var(--dur-base);
+  }
+
+  .assistant-sidebar.is-open { transform: translateX(0); visibility: visible; transition-delay: 0s; }
+  .assistant-board { right: 0; width: min(92vw, var(--agent-panel-w)); border-left: 0; }
+
+  .assistant-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: var(--z-scrim);
+    background: var(--scrim);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+
+  .assistant-scrim.is-open { opacity: 1; pointer-events: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-sidebar,
+  .assistant-scrim { transition: none; }
+}
 
 /* Set up a VM: Add PC's dialog, wider for the install's terminal */
 .machine-dialog.assistant-setup-dialog { width: min(760px, calc(100vw - 24px)); }

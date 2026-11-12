@@ -107,6 +107,10 @@ export interface PaneTerminalProps {
   /** that workspace is a linked worktree of this repository (its name, as herdr gives it); null: it is not one */
   worktreeRepo?: string | null;
   machineName?: string;
+  /** an empty chat's greeting in place of "What should {agent} do in {folder}?" (the Assistant's own) */
+  greeting?: { title: string; where: string };
+  /** when the pane's agent was started (ms): a chat this new may have no transcript yet (lib/startingChat.ts) */
+  startedAt?: number;
   /** the lens over the pane: the chat transcript, or the live xterm grid (App remembers it per pane) */
   view: PaneView;
   /** switches this pane to its terminal lens, and saves it (Keep Terminal, the rewind hint) */
@@ -176,6 +180,8 @@ export function PaneTerminal({
   workspaceId = null,
   worktreeRepo = null,
   machineName = "",
+  greeting,
+  startedAt,
   view,
   findRequest = 0,
   controls,
@@ -1149,6 +1155,7 @@ export function PaneTerminal({
             onMetadata={onChatMetadata}
             onRead={onChatRead}
             greeted={greeted}
+            startedAt={startedAt}
             onPrompt={onChatPrompt}
             onSuggestion={onChatSuggestion}
             onRestored={onChatRestored}
@@ -1295,9 +1302,9 @@ export function PaneTerminal({
           onOpenNewSession={onOpenNewSession}
           greeting={greetingDue ? (
             <div className={`composer-greeting${greeted ? "" : " is-out"}`} ref={greetingRef} aria-hidden={greeted ? undefined : true}>
-              <p className="composer-greeting-title">{t("What should {agent} do in {folder}?", { agent: agentDisplayLabel(agent), folder })}</p>
+              <p className="composer-greeting-title">{greeting?.title ?? t("What should {agent} do in {folder}?", { agent: agentDisplayLabel(agent), folder })}</p>
               {/* each part keeps its own direction: a right-to-left PC name does not reorder the path */}
-              <p className="composer-greeting-where">{machineName && <bdi>{machineName}</bdi>}{machineName && cwd ? " · " : ""}{cwd && <bdi>{cwd}</bdi>}</p>
+              <p className="composer-greeting-where">{greeting ? greeting.where : <>{machineName && <bdi>{machineName}</bdi>}{machineName && cwd ? " · " : ""}{cwd && <bdi>{cwd}</bdi>}</>}</p>
             </div>
           ) : null}
           waitingAnswer={waitingAnswer}

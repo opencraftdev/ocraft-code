@@ -45,6 +45,7 @@ import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { statusEdgeRead } from "../lib/status.ts";
 import { askedQuestions } from "../lib/askQuestions.ts";
 import { ConversationRefresh } from "../lib/conversationRefresh.ts";
+import { startingRetry } from "../lib/startingChat.ts";
 import { teammateMessageParts, type TeammateMessage } from "../lib/teammateMessage.ts";
 import { usePageVisible } from "../lib/visibility.ts";
 import { dismissKeyboardOn } from "../lib/keyboard.ts";
@@ -182,6 +183,8 @@ export interface ChatViewProps {
   onRead?: (paneId: string, read: ChatRead | null) => void;
   /** the composer shows its greeting: the chat's own "nothing yet" line stays out */
   greeted?: boolean;
+  /** when the pane's agent was started (ms): a failed read in its first seconds is retried quietly (lib/startingChat.ts) */
+  startedAt?: number;
   /** the agent's waiting prompt, for the composer to answer too */
   onPrompt?: (paneId: string, prompt: InteractivePrompt | null) => void;
   /** with no prompt waiting, the next prompt the agent suggests (Claude's grey input text) */
@@ -1219,7 +1222,7 @@ function TerminalFallback({ paneId, visible }: { paneId: string; visible: boolea
 }
 
 // the app re-renders on every pane-status and poll; an unchanged transcript sits those out
-export const ChatView = memo(function ChatView({ paneId, presentationKey, finishEpoch, finishId, active = true, visible: paneVisible = true, pageScroll, refreshKey, invalidationKey = 0, onConversationWatch, conversationPushes = false, onTerminalOutput, sentKey = 0, localSend, navigation, connected, ended, agent, agentStatus, onForked, onMetadata, onRead, greeted = false, onPrompt, onSuggestion, onRestored, promptRefreshKey = 0, pendingAnswer = null, onPendingAnswerDone, promptDock = null, onPromptAnswered, title = null, onOpenTerminal, covered = false, peek = null, onCommandScreenClosed, onOutcomes, interactive = false, onRewindInTerminal, cwd = null }: ChatViewProps) {
+export const ChatView = memo(function ChatView({ paneId, presentationKey, finishEpoch, finishId, active = true, visible: paneVisible = true, pageScroll, refreshKey, invalidationKey = 0, onConversationWatch, conversationPushes = false, onTerminalOutput, sentKey = 0, localSend, navigation, connected, ended, agent, agentStatus, onForked, onMetadata, onRead, greeted = false, startedAt, onPrompt, onSuggestion, onRestored, promptRefreshKey = 0, pendingAnswer = null, onPendingAnswerDone, promptDock = null, onPromptAnswered, title = null, onOpenTerminal, covered = false, peek = null, onCommandScreenClosed, onOutcomes, interactive = false, onRewindInTerminal, cwd = null }: ChatViewProps) {
   const t = useT();
   const { fetchPaneConversation, peekPaneConversation, fetchPanePromptState, fetchPaneTranscript } = useMachineApi();
   const { settings } = useSettings();
@@ -2238,8 +2241,17 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   // the chat's one wait is a live region in the footer from the view's first render, clipped while
   // empty (never display: none); its words land a frame after it (lib/useAnnouncedText.ts). The
   // connection's word is the header chip's alone; a slow PC is waited for quietly before it alarms
-  const waiting = error !== null && error.kind === "slow" && failures < SLOW_READS_BEFORE_ALARM;
-  const waitWords = useAnnouncedText(!loaded && error === null ? t("Loading conversation…") : waiting ? t("Waiting for the PC…") : null);
+  // a chat just started may have no transcript yet: its failed read is retried quietly for a while (lib/startingChat.ts)
+  const starting = error !== null && startingRetry(startedAt, Date.now()) !== null;
+  useEffect(() => {
+    const delay = error === null ? null : startingRetry(startedAt, Date.now());
+    if (delay === null) return;
+    const timer = window.setTimeout(() => conversationRefresh.refresh(), delay);
+    return () => window.clearTimeout(timer);
+  }, [error, failures, startedAt, conversationRefresh]);
+  const waiting = starting || (error !== null && error.kind === "slow" && failures < SLOW_READS_BEFORE_ALARM);
+  const waitWords = useAnnouncedText(starting || (!loaded && error === null && startingRetry(startedAt, Date.now()) !== null) ? t("Starting…")
+    : !loaded && error === null ? t("Loading conversation…") : waiting ? t("Waiting for the PC…") : null);
   const retryRead = useCallback(() => { setFailures(0); conversationRefresh.refresh(); }, [conversationRefresh]);
   const footer = <>
       <p className={waitWords === null ? "visually-hidden" : "chat-inline-state"} role="status">{waitWords}</p>
