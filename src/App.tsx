@@ -642,8 +642,8 @@ export function App() {
   const agentDetails = agentPanelShown && selectedPane?.agent && (assistantHere || assistantPanelSrc !== null) ? (
     <aside className="agent-panel assistant-agent-panel" id="agent-details-panel" tabIndex={-1} aria-label={t("Assistant")}>
       {assistantPanelSrc !== null
-        ? <AssistantPanelFrame src={assistantPanelSrc} onSession={(paneId) => selectTarget(selectedMachineId, paneId)} />
-        : <AssistantPanel onOpenTask={selectTarget} onSession={(paneId) => selectTarget("local", paneId)} />}
+        ? <AssistantPanelFrame src={assistantPanelSrc} onSession={(paneId) => selectTarget(selectedMachineId, paneId, "chat")} />
+        : <AssistantPanel onOpenTask={selectTarget} onSession={(paneId) => selectTarget("local", paneId, "chat")} />}
     </aside>
   ) : agentPanelShown && selectedPane?.agent && <MachineContext.Provider value={selectedMachineId}>
     <AgentPanel key={besideChat && split ? JSON.stringify(["pair", ...[`${selectedMachineId}:${selectedPane.pane_id}`, `${split.other.machineId}:${split.other.paneId}`].sort()]) : JSON.stringify([selectedMachineId, selectedPane.pane_id, selectedPane.terminal_id, selectedPane.agent_session?.value, selectedMachine?.snapshot?.finish_epoch])} pane={selectedPane} panes={snapshot?.panes ?? []} title={selectedTitle ?? selectedPane.agent} machineName={selectedMachine?.name ?? selectedMachineId} workspaceName={selectedWorkspace?.label ?? selectedPane.workspace_id}
