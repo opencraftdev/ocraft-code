@@ -357,6 +357,15 @@ export class SshConnection {
     return this.exec([...(this.multiplexed ? [...this.base(), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes"] : this.direct()), "-T", this.target.destination, "sh -c " + shellQuote(script)], input, timeout);
   }
   /**
+   * A script there on a terminal of its own (`ssh -tt`), through this connection once start() has
+   * authenticated: the argv and environment for a PTY host to run it with (server/assistant-setup.ts).
+   */
+  terminal(script: string): { argv: string[]; env: Record<string, string> } {
+    if (this.closed) throw new Error("SSH connection closed");
+    const argv = [...(this.multiplexed ? [...this.base(), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes"] : this.direct()), "-tt", this.target.destination, "sh -c " + shellQuote(script)];
+    return { argv, env: Object.fromEntries(Object.entries(this.askEnv()).filter((entry): entry is [string, string] => entry[1] !== undefined)) };
+  }
+  /**
    * A script for a Windows host. OpenSSH there hands the command to cmd or PowerShell,
    * whichever is the account's default shell, and the two quote differently; a base64
    * `-EncodedCommand` passes through both untouched. Output comes back as UTF-8 with Unix

@@ -1,6 +1,6 @@
 # Assistant one-click setup
 
-Status: approved
+Status: done
 Created: 2026-11-12 09:55
 Follows: [Assistant](20261111-2112-assistant.md) (deferred item "setup of the VM from the browser over SSH")
 
@@ -50,3 +50,17 @@ answer the few prompts there, and the VM's address fills itself in.
 
 - A VM reachable only by password: the first SSH login asks for it in the dialog; the script does
   not install a key. Should setup also add this Ovis's key to the VM? (Default: no.)
+  Resolved: no. The setup installs no key; a password VM asks again next time (docs/guide.md,
+  Assistant). Adding PCs with a key stays Add PC's job.
+
+## As built
+
+- Server: `server/assistant-setup.ts`, routes `/api/assistant-setup` (GET state, POST start),
+  `/stream` (Server-Sent Events: the job and the terminal's output, replayed whole to a page that
+  joins), `/answer`, `/input`, `/resize`, `/stop`. The terminal's output reaches the page over an
+  event stream and its input over POSTs, not the pane terminal WebSocket: that transport is bound
+  to herdr panes (attachments, observers, take-over), and this terminal is no pane.
+- `SshConnection.terminal()` (server/ssh.ts) gives the `ssh -tt` argv over the connection that
+  `start()` authenticated, so the host-key and password questions are Add PC's own.
+- Client: `src/components/AssistantSetupDialog.tsx`, Add PC's dialog styles, its fingerprint
+  question, and a small xterm of its own (`scrollback: 0`, web links), since PaneTerminal is a pane's.

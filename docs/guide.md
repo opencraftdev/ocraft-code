@@ -412,6 +412,23 @@ Open Settings → Remote PCs and choose **Add PC** (the command palette has it t
 
 More in [remote PCs](remote-pcs.md).
 
+## Assistant
+
+The header's **Assistant | Code** switch opens Assistant mode. The Assistant is a coding agent that runs all day on a Linux VM you own, in your tailnet. Until you have one, Assistant mode shows its setup page: the install command to paste on a fresh VM, and a field for the VM's address once it runs.
+
+To set the VM up from the page instead, choose **Set up a VM** and enter:
+
+- **SSH alias or user@address** of the VM, and its **SSH port** when it is not the one your SSH config gives (22 by default).
+- **Tailscale machine name**: the VM's name in your tailnet, `ovis-assistant` by default. Lowercase letters, digits and inner hyphens.
+- **Agent CLI**: Claude Code or Codex, the agent the Assistant runs as.
+
+**Set up** connects the way **Add PC** does, as this server's account with its OpenSSH configuration and agent: a VM it has never seen shows its fingerprint to trust or reject (a key that changed is refused), and a password or key passphrase is asked in the dialog, over HTTPS or localhost only. It then runs `scripts/install-assistant.sh` on the VM over `ssh -tt`, the same script as the pasted command, fetched at the commit this Ovis runs. Its terminal is in the dialog: type the VM's sudo password there, open the Tailscale sign-in link and the agent's sign-in, and answer what else it asks. When it prints the VM's `https://….ts.net` address, the address fills the **Assistant VM address** field and **Open** takes you there.
+
+- Only one setup runs at a time on an Ovis. Closing the dialog while it runs asks first, then stops the SSH session and the install with it. Run it again at any time: the script picks up where the VM is.
+- An Ovis without a PTY host (neither the Rust host nor Node) cannot show the terminal: the dialog gives the command to paste on the VM instead.
+- The script installs no SSH key: a VM you reach by password asks for it again next time.
+- The Assistant VM itself never offers **Set up a VM**.
+
 ## Access and safety
 
 Anyone who can reach the server can type into your terminals, so what matters is who gets in. It listens on `127.0.0.1` by default, which means only this computer. From anywhere else, a request gets in in one of three ways:

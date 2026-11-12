@@ -13,7 +13,8 @@
 #
 # Run it again at any time: what is installed stays, the checkout is fast-forwarded, the units are
 # rewritten and restarted. Without a terminal (CI), the answers come from the environment or their
-# defaults: ASSISTANT_NAME, TS_AUTHKEY, ASSISTANT_AGENT.
+# defaults: ASSISTANT_NAME, TS_AUTHKEY, ASSISTANT_AGENT. With one, a valid ASSISTANT_NAME or
+# ASSISTANT_AGENT (Ovis's Set up a VM passes both) is not asked again.
 #   OVIS_REPO=<owner/name>  OVIS_REF=<branch or tag>  OVIS_PORT=<port>   what to install and where it listens
 set -euo pipefail
 
@@ -68,14 +69,17 @@ main() {
 
   # 1. the questions, all before anything runs
   local name key="${TS_AUTHKEY:-}" agent
-  name=$(ask "Tailscale machine name" "${ASSISTANT_NAME:-ovis-assistant}")
+  # a name or agent already given and valid (Set up a VM on the setup page passes both) is not asked again
+  name="${ASSISTANT_NAME:-}"
+  [[ "$name" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]] || name=$(ask "Tailscale machine name" "${ASSISTANT_NAME:-ovis-assistant}")
   [[ "$name" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]] || fail "a machine name is lowercase letters, digits and inner hyphens: $name"
   if [ -z "$key" ] && has_tty; then
     # a secret: not echoed, and never printed (a dry run shows <auth key>)
     read -r -s -p "Tailscale auth key (Enter to sign in with a link instead): " key </dev/tty || true
     echo
   fi
-  agent=$(ask "Assistant agent CLI, claude or codex" "${ASSISTANT_AGENT:-claude}")
+  agent="${ASSISTANT_AGENT:-}"
+  case "$agent" in claude | codex) ;; *) agent=$(ask "Assistant agent CLI, claude or codex" "${ASSISTANT_AGENT:-claude}") ;; esac
   case "$agent" in claude | codex) ;; *) fail "the agent CLI is claude or codex, not $agent" ;; esac
 
   # ~/.bun/bin first, as scripts/bun-path.sh orders it for the units: an older bun in ~/.local/bin

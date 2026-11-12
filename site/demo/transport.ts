@@ -1856,6 +1856,15 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
     if (typeof body["first_message"] !== "string") return json(made);
     return json({ ...made, first_message: agent !== null ? { id: queueFirstMessage(pane.pane_id, body["first_message"], body["first_message_connection"]).id } : null });
   }
+  // Set up a VM: the demo has no SSH or PTY host, so it answers as a server without one does, with the command to paste
+  if (path.startsWith("/api/assistant-setup")) {
+    if (path !== "/api/assistant-setup") return error("demo", "the demo runs no VM setup", 409);
+    if (method !== "POST") return json({ job: null });
+    const body = JSON.parse(String(init?.body ?? "{}")) as { destination?: string; name?: string; agent?: string };
+    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(body.name ?? "") || !["claude", "codex"].includes(body.agent ?? "")) return error("invalid_setup", "A machine name is lowercase letters, digits and inner hyphens", 400);
+    return json({ id: "demo-setup", phase: "unsupported", destination: body.destination ?? "", challenge: null, address: null, error: null,
+      command: `curl -fsSL 'https://raw.githubusercontent.com/opencraftdev/ocraft-code/main/scripts/install-assistant.sh' | ASSISTANT_NAME='${body.name ?? "ovis-assistant"}' ASSISTANT_AGENT='${body.agent ?? "claude"}' bash` }, 202);
+  }
   // no key in the demo: the app falls back to the browser's own speech recognition
   if (path === "/api/voice") return json({ configured: false, source: null, ...VOICE_DEFAULTS } satisfies VoiceStatus, 200, { "cache-control": "no-store" });
   if (path === "/api/voice/config") return error("demo", "the demo saves no OpenAI key", 409);

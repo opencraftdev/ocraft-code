@@ -174,3 +174,20 @@
 
 .assistant-task-open:disabled { cursor: default; }
 .assistant-task-open:not(:disabled):hover .assistant-row-name { text-decoration: underline; }
+
+/* Set up a VM: Add PC's dialog, wider for the install's terminal */
+.machine-dialog.assistant-setup-dialog { width: min(760px, calc(100vw - 24px)); }
+
+.assistant-setup-dialog .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.assistant-setup-terminal {
+  height: min(360px, 45dvh);
+  min-height: 160px;
+  overflow: hidden;
+  border: var(--hairline) solid var(--surface-edge);
+  border-radius: var(--radius-sm);
+}

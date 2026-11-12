@@ -55,6 +55,7 @@ import { BRIDGE_PROTOCOL } from "../shared/machines.ts";
 import { bridgeIdentity, loopbackRelay, registerBridge, relayTarget } from "./bridge.ts";
 import { handleMachineRequest, nonCanonicalPath, slowMachinePath } from "./machine-api.ts";
 import { Assistant, handleAssistantRequest, type RunScript } from "./assistant.ts";
+import { AssistantSetup, handleAssistantSetupRequest, type AssistantSetupOptions } from "./assistant-setup.ts";
 import { AssistantSessions, OVIS_TASK_BIN, type AssistantPanes } from "./assistant-sessions.ts";
 import { machineBridge, type TaskBridge } from "./assistant-tasks.ts";
 import { cliToken, handleOvisTaskRequest } from "./ovis-task.ts";
@@ -221,6 +222,8 @@ export function createServer(
     assistantPanes?: AssistantPanes;
     /** how tasks reach a machine's bridge (server/assistant-tasks.ts); unset, through Remote PCs. Tests pass their own. */
     assistantBridge?: TaskBridge;
+    /** how a VM setup from the setup page runs (server/assistant-setup.ts); unset, over SSH on this server's PTY host. Tests pass their own. */
+    assistantSetup?: AssistantSetupOptions;
   } = {},
 ): ServerInstance {
   /**
@@ -284,6 +287,7 @@ export function createServer(
   }), options.assistantPanes);
   const assistantService = assistant && machines ? new Assistant(stateDir, machines, options.assistantRun ?? ((machine, script, timeoutMs) => machines.runScript(machine.id, script, timeoutMs)), { sessions: assistantSessions, bridge: options.assistantBridge ?? machineBridge(machines) }) : null;
   // a task's pane alerts under the task's title, in place of the pane's (same tag, same policy)
+  const assistantSetup = new AssistantSetup(stateDir, options.assistantSetup);
   if (assistantService) push.describeTasks((machineId, paneId) => assistantService.tasks.paneTask(machineId, paneId));
   // read finishes are kept for the herdr run each PC told this server it is in
   const seen = new SeenStore(stateDir, () => machines?.finishEpochs() ?? new Map());
@@ -424,6 +428,12 @@ export function createServer(
         setRequestRoute(pathname);
         if (token === "" && !bridgeAuthorized) return unauthorizedJson();
         try { return jsonResponse(await bridgeIdentity(sidecar)); } catch (error) { return errorResponse(error); }
+      }
+      // set up another VM as the Assistant: never offered on the Assistant VM itself
+      if (pathname === "/api/assistant-setup" || pathname.startsWith("/api/assistant-setup/")) {
+        if (assistant) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
+        if (pathname === "/api/assistant-setup/stream") bunServer.timeout(request, 0);
+        return handleAssistantSetupRequest(request, pathname, assistantSetup, readOnly);
       }
       if (pathname === "/api/assistant" || pathname.startsWith("/api/assistant/")) {
         if (!assistantService) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
@@ -717,6 +727,7 @@ export function createServer(
       core.stop(() => {
         clearInterval(draftTimer);
         assistantService?.stop();
+        assistantSetup.stop();
         openCodeState.clear();
         void options.portal?.shutdown();
         registration?.close();

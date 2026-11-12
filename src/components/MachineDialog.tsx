@@ -130,7 +130,7 @@ function SshOutput({ text }: { text: string }) {
  * a fold. No status box above it: the question is the state. The sentence is the announcement of
  * that state, so its words land a frame after the box (lib/useAnnouncedText.ts).
  */
-function HostKeyQuestion({ prompt, host, sshOutput }: { prompt: string; host: string; sshOutput: string | null }) {
+export function HostKeyQuestion({ prompt, host, sshOutput }: { prompt: string; host: string; sshOutput: string | null }) {
   const t = useT();
   const fingerprints = hostKeyFingerprints(prompt);
   const sentence = useAnnouncedText(t("Trust it only if it matches the fingerprint shown on the PC."));
