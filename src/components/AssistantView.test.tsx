@@ -2,18 +2,22 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import type { AssistantState, AssistantTask } from "../../shared/assistant.ts";
+import type { Machine } from "../../shared/machines.ts";
+import type { HerdrPane } from "../../shared/protocol.ts";
 import { SettingsProvider } from "../lib/settings.ts";
 import { chatRetry, LATER_RETRY_MS, STARTING_MS, startingRetry } from "../lib/startingChat.ts";
-import { AssistantPanel, AssistantSetup } from "./AssistantView.tsx";
+import { AgentPanel } from "./AgentPanel.tsx";
+import { AssistantSessions, assistantSessions } from "./AssistantSessions.tsx";
+import { AssistantSetup } from "./AssistantView.tsx";
 
 const wrap = (element: ReturnType<typeof createElement>) => renderToStaticMarkup(createElement(SettingsProvider, { children: element }));
-const panel = (initial: AssistantState) => wrap(createElement(AssistantPanel, { initial }));
 
-const empty: AssistantState = { machines: [], projects: [], sessions: [], tasks: [] };
-const task = (id: string, status: AssistantTask["status"], title: string): AssistantTask => ({
-  id, title, brief: "", project: "web", machine: "m1", agent: "claude", status, paneId: null, worktree: null, workspaceId: null,
-  branch: `task-${id}`, review: false, autoMerge: false, createdAt: Number(id),
+const pane = (id: string, agent_status: string, extra: Partial<HerdrPane> = {}): HerdrPane => ({
+  pane_id: id, terminal_id: `t-${id}`, tab_id: "t1", workspace_id: "w1", focused: false, revision: 0, agent: "claude", agent_status, label: id, cwd: "/home/me/code", ...extra,
+});
+const machine = (id: string, panes: HerdrPane[], extra: Partial<Machine> = {}): Machine => ({
+  id, name: id, kind: "ssh", target: { destination: `me@${id}` }, enabled: true, state: "connected", error: null,
+  snapshot: { panes, workspaces: [], tabs: [], focused_workspace_id: null, focused_tab_id: null, focused_pane_id: null, protocol: 1, version: "1" } as unknown as Machine["snapshot"], ...extra,
 });
 
 describe("the Assistant", () => {
@@ -33,40 +37,53 @@ describe("the Assistant", () => {
     expect(page).not.toContain("<iframe");
   });
 
-  it("puts New chat, the tasks, the projects and the machines in the right panel", () => {
-    const page = panel(empty);
-    expect(page).toContain("data-testid=\"assistant-panel\"");
-    expect(page).toContain("<span>New chat</span>");
-    for (const section of ["Projects", "Machines"]) expect(page).toContain(`>${section}</h2>`);
-    expect(page).toContain("No tasks yet");
-    expect(page).toContain("<summary>How to add</summary>");
-    // no earlier chats yet: no list for them, and the panel has no close of its own (the header's button toggles it)
-    expect(page).not.toContain("Earlier chats");
-    expect(page).not.toContain("Hide tasks");
+  it("lists every agent pane but the Assistant's own, per PC, working then blocked then the rest", () => {
+    const groups = assistantSessions([
+      machine("laptop", [pane("idle1", "idle"), pane("work1", "working"), pane("shell", "unknown", { agent: null }), pane("ask1", "blocked"), pane("done1", "done")]),
+      machine("empty", [pane("shell2", "idle", { agent: null })]),
+      // the VM's own Assistant pane, when this Ovis is the VM
+      machine("local", [pane("assistant", "working", { cwd: "/home/me/.config/ovis/assistant/agent" }), pane("vmwork", "working")], { kind: "local", target: undefined }),
+    ]);
+    expect(groups.map((group) => [group.machine.id, group.panes.map((item) => item.pane_id)])).toEqual([
+      ["laptop", ["work1", "ask1", "idle1", "done1"]],
+      ["local", ["vmwork"]],
+    ]);
   });
 
-  it("lists only the earlier chats, the current one being the pane beside it", () => {
-    const started = Date.parse("2026-11-12T09:14:00");
-    const page = panel({ ...empty, sessions: [
-      { name: "20261112-0914", agent: "claude", started_at: started, pane_id: "p2" },
-      { name: "20261112-0402", agent: "claude", started_at: started - 5 * 3_600_000, pane_id: null, archived_at: started },
-    ] });
-    expect(page).toContain(">Earlier chats</h2>");
-    const rows = [...page.matchAll(/<button[^>]*title="(\d{8}-\d{4})"[^>]*>/g)].map((row) => row[1]);
-    expect(rows).toEqual(["20261112-0402"]);
+  it("shows what works or waits under each PC's header, and folds the rest into N finished", () => {
+    const page = wrap(createElement(AssistantSessions, { onOpen: () => {}, machines: [
+      machine("laptop", [pane("Fix login", "idle"), pane("Add tests", "working"), pane("Pick a font", "blocked")]),
+      machine("desk", [pane("Bump deps", "done")], { state: "reconnecting" }),
+    ] }));
+    expect(page).toContain(">Sessions<");
+    const rows = [...page.matchAll(/class="agent-panel-row state-(\w+)" title="([^"]+)"/g)].map((match) => [match[2], match[1]]);
+    expect(rows).toEqual([["Add tests", "working"], ["Pick a font", "blocked"]]);
+    expect(page).toContain("laptop · claude");
+    // only a PC with a row shown gets its header, with its connection dot
+    expect(page).toContain("machine-dot is-connected");
+    expect(page).not.toContain("machine-dot is-reconnecting");
+    expect(page).toContain("<span>2 finished</span>");
   });
 
-  it("groups the tasks by status, what needs the user first, each head with its count", () => {
-    const page = panel({ ...empty,
-      machines: [{ id: "m1", name: "laptop", state: "connected", health: { checked_at: 0, problems: [], agents: ["claude"] }, maxRunning: 3 }],
-      projects: [{ id: "web", machine: "m1", path: "/code/web", mergeMode: "pr", defaultAgent: "claude" }],
-      tasks: [task("5", "working", "Fix login"), task("4", "needs_you", "Pick a font"), task("3", "working", "Add tests"), task("2", "done", "Bump deps")],
-    });
-    const groups = [...page.matchAll(/data-column="(\w+)"><h3 class="agent-panel-section-label">([^<]+)<span>(\d+)<\/span>/g)].map((match) => [match[1], match[2], match[3]]);
-    expect(groups).toEqual([["needs_you", "Needs you", "1"], ["working", "Working", "2"], ["done", "Done", "1"]]);
-    expect(page).toContain("#5 · web · laptop");
-    expect(page).toContain("class=\"assistant-pill is-blocked\">Needs you</span>");
-    expect(page).not.toContain("No tasks yet");
+  it("says so when nothing works", () => {
+    const page = wrap(createElement(AssistantSessions, { onOpen: () => {}, machines: [machine("laptop", [pane("Fix login", "idle")])] }));
+    expect(page).toContain("No sessions working.");
+    expect(page).toContain("<span>1 finished</span>");
+    expect(wrap(createElement(AssistantSessions, { onOpen: () => {}, machines: [] }))).toContain("No agent sessions on your PCs.");
+  });
+
+  it("draws the agent panel without Changes, with the Sessions section, for the Assistant's pane", () => {
+    const props = {
+      contextKey: null, pane: pane("assistant", "idle"), panes: [], machineName: "vm", workspaceName: "Assistant", title: "Assistant", online: false, watching: false,
+      tab: "agents" as const, drawerOpen: false, onOpenView: () => {}, onCloseView: () => {}, onClose: () => {}, onSelectPane: () => {}, onBrowseFiles: () => {}, onOpenDiff: () => {}, onNewAgent: () => {}, pinned: true,
+    };
+    const normal = wrap(createElement(AgentPanel, props));
+    expect(normal).toContain("aria-label=\"Changes\"");
+    const assistant = wrap(createElement(AgentPanel, { ...props, hideChanges: true, extraSections: createElement(AssistantSessions, { onOpen: () => {}, machines: [machine("laptop", [pane("Add tests", "working")])] }) }));
+    expect(assistant).toContain("aria-label=\"Environment\"");
+    expect(assistant).toContain("aria-label=\"Context\"");
+    expect(assistant).not.toContain("aria-label=\"Changes\"");
+    expect(assistant).toContain("aria-label=\"Sessions\"");
   });
 });
 

@@ -141,4 +141,5 @@ export const MACHINES_JA: Record<string, string> = {
   "The install finished.": "インストールが完了しました。",
   "The setup failed": "セットアップに失敗しました",
   "The setup was stopped": "セットアップを停止しました",
+  "Machine": "マシン",
 };

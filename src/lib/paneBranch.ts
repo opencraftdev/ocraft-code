@@ -42,5 +42,6 @@ function subscribe(listener: () => void): () => void {
 }
 
 export function usePaneBranch(machineId: string, workspaceId: string | null): string | null {
-  return useSyncExternalStore(subscribe, () => publishedBranch(machineId, workspaceId));
+  const read = () => publishedBranch(machineId, workspaceId);
+  return useSyncExternalStore(subscribe, read, read);
 }

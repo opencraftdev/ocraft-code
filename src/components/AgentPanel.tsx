@@ -52,6 +52,10 @@ export interface AgentPanelProps {
   /** with two chats side by side: this chat's screen number, and the other chat */
   screen?: number;
   beside?: PanelChat | null;
+  /** the Assistant's pane: its folder is no git repository, so no Changes */
+  hideChanges?: boolean;
+  /** sections drawn after Context and Changes (the Assistant's Sessions) */
+  extraSections?: ReactNode;
 }
 
 /** One chat's place in the panel. */
@@ -69,7 +73,7 @@ export interface PanelChat {
 }
 
 /** Reference-style environment and agent sections, using existing read-only bridge APIs. */
-export function AgentPanel({ contextKey, pane, machineName, workspaceName, title, online, watching, tab, drawerOpen, onOpenView, onCloseView, onClose, onBrowseFiles, onOpenDiff, pinned = false, focusAgent = null, onFocusedAgent, screen, beside = null }: AgentPanelProps) {
+export function AgentPanel({ contextKey, pane, machineName, workspaceName, title, online, watching, tab, drawerOpen, onOpenView, onCloseView, onClose, onBrowseFiles, onOpenDiff, pinned = false, focusAgent = null, onFocusedAgent, screen, beside = null, hideChanges = false, extraSections = null }: AgentPanelProps) {
   const t = useT();
   const machineId = useMachineId();
   const [refresh, setRefresh] = useState(0);
@@ -167,7 +171,7 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
         {chats.length > 1 && <header className="agent-panel-section-head"><h2>{t("Context")}</h2></header>}
         {chats.map((chat) => <ContextRow key={chat.screen} chat={chat} label={chats.length > 1 ? tag(chat) : t("Context")} open={contextOpen} onToggle={() => setContextOpen(value => !value)} detailsId={`${id}-context-${chat.screen}`} />)}
       </section>
-      <section className="agent-panel-section agent-panel-changes" data-expanded={changesOpen} aria-label={t("Changes")}>
+      {!hideChanges && <section className="agent-panel-section agent-panel-changes" data-expanded={changesOpen} aria-label={t("Changes")}>
         <header className="agent-panel-section-head">
           <h2><button type="button" className="agent-panel-disclosure" aria-expanded={changesOpen} aria-controls={`${id}-changes`} onClick={() => setChangesOpen(value => !value)}>{t("Changes")}<ChevronDown aria-hidden="true" />{changeCount !== null && <span className="agent-panel-count">{changeCount}</span>}</button></h2>
           <button type="button" className="icon-button" disabled={!online} aria-label={t("Refresh changes")} title={t("Refresh changes")} onClick={() => setChangesRefresh((value) => value + 1)}><RefreshCw aria-hidden="true" /></button>
@@ -175,7 +179,8 @@ export function AgentPanel({ contextKey, pane, machineName, workspaceName, title
         <div id={`${id}-changes`} className="agent-panel-launchers" hidden={!changesOpen}>
           {chats.map((chat) => <MachineContext.Provider key={chat.screen} value={chat.machineId}>{tag(chat)}<ChangesBody chat={chat} refresh={changesRefresh} onCount={chats.length === 1 ? setChangeCount : undefined} /></MachineContext.Provider>)}
         </div>
-      </section>
+      </section>}
+      {extraSections}
       {/* shown only while work runs: what ended is in the drawer, opened from the chat's strip and chip */}
       {(runningTasks.length > 0 || activity.runs.some(runGoing)) && <section className="agent-panel-section agent-panel-tasks" data-expanded={tasksOpen} aria-label={t("Background tasks")}>
         <header className="agent-panel-section-head"><h2><button type="button" className="agent-panel-disclosure" aria-expanded={tasksOpen} aria-controls={`${id}-tasks`} onClick={() => setTasksOpen(value => !value)}>{t("Background tasks")}<ChevronDown aria-hidden="true" /></button></h2></header>

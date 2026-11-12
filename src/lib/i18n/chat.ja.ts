@@ -189,4 +189,5 @@ export const CHAT_JA: Record<string, string> = {
   "Open link": "リンクを開く",
   "Share link": "リンクを共有",
   "terminal ended": "ターミナルが終了しました",
+  "Needs you": "応答が必要",
 };

@@ -189,4 +189,5 @@ export const CHAT_ZH: Record<string, string> = {
   "Open link": "打开链接",
   "Share link": "分享链接",
   "terminal ended": "终端已结束",
+  "Needs you": "需要你回应",
 };

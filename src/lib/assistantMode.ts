@@ -35,17 +35,6 @@ export function assistantLink(address: string): string | null {
 }
 
 /**
- * The VM's page to embed in Assistant mode: only an https tailnet address (`*.ts.net`), the one the
- * install prints and the one this Ovis's policy may frame (server/static.ts withAssistantFraming).
- */
-export function assistantEmbed(address: string): string | null {
-  const link = assistantLink(address);
-  if (link === null) return null;
-  const url = new URL(link);
-  return url.protocol === "https:" && url.hostname.endsWith(".ts.net") ? url.href : null;
-}
-
-/**
  * Whether a remote PC's SSH destination (`user@host`, `host:port`, or a short tailnet name) is the
  * Assistant VM saved on this device: its host is the saved address's host, or that host's first label.
  * ponytail: matched by name on this device only; the VM could say so itself over its bridge if
@@ -59,36 +48,9 @@ export function isAssistantMachine(destination: string | undefined, address = st
   return host === vm || host === vm.split(".")[0];
 }
 
-/**
- * The query flag of the VM's tasks panel page: the Assistant's tasks, projects, machines and New
- * chat, drawn alone, for Code mode's right panel beside the Assistant's chat on another Ovis.
- */
-export const ASSISTANT_PANEL_PARAM = "assistant-panel";
-
-export function assistantPanelOnly(search: string): boolean {
-  return new URLSearchParams(search).get(ASSISTANT_PANEL_PARAM) === "1";
-}
-
-/** The VM's tasks panel page, for a frame: null without a saved https tailnet address. */
-export function assistantPanelFrame(address = storedAssistantAddress()): string | null {
-  const embed = assistantEmbed(address);
-  if (embed === null) return null;
-  const url = new URL(embed);
-  url.searchParams.set(ASSISTANT_PANEL_PARAM, "1");
-  return url.href;
-}
-
 /** The Assistant's own pane: its agent runs in the Assistant's folder on the VM (server/assistant-sessions.ts). */
 export function isAssistantPane(cwd: string | null | undefined): boolean {
   return typeof cwd === "string" && /\/ovis\/assistant\/agent\/?$/.test(cwd);
-}
-
-/** what the tasks panel frame tells the Ovis that shows it: a New chat's pane, to select */
-export interface AssistantPanelMessage { type: "ovis-assistant-session"; paneId: string }
-
-export function isAssistantPanelMessage(data: unknown): data is AssistantPanelMessage {
-  return typeof data === "object" && data !== null && (data as { type?: unknown }).type === "ovis-assistant-session"
-    && typeof (data as { paneId?: unknown }).paneId === "string" && /^[\w:-]{1,64}$/.test((data as { paneId: string }).paneId);
 }
 
 /** Assistant mode (the setup page, from the ⋯ menu) or Code mode: every visit starts in Code. */
