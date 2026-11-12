@@ -79,7 +79,7 @@ describe("OVIS_APP_NAME", () => {
   it("lets only loopback pages frame the Assistant VM, and nothing frame any other Ovis", () => {
     expect(contentSecurityPolicy(undefined, false)).toContain("frame-ancestors 'none'");
     const vm = contentSecurityPolicy("https://vm.tailnet.ts.net", true);
-    expect(vm).toContain("frame-ancestors http://127.0.0.1:* http://localhost:* http://[::1]:*");
+    expect(vm).toMatch(/frame-ancestors http:\/\/127\.0\.0\.1:\* http:\/\/localhost:\*(;|$)/);
     expect(vm).not.toContain("frame-ancestors 'none'");
     expect(vm).not.toMatch(/frame-ancestors[^;]*(https:|\*\.ts\.net|\s\*(;|$))/);
   });

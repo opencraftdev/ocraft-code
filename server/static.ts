@@ -145,7 +145,7 @@ export function contentSecurityPolicy(origin?: string, assistantVm = process.env
  * per-origin allow list set from the VM's settings, if that matters.
  */
 function withAssistantFraming(policy: string, assistantVm: boolean): string {
-  return assistantVm ? policy.replace("frame-ancestors 'none'", "frame-ancestors http://127.0.0.1:* http://localhost:* http://[::1]:*") : policy;
+  return assistantVm ? policy.replace("frame-ancestors 'none'", "frame-ancestors http://127.0.0.1:* http://localhost:*") : policy;
 }
 
 /**
