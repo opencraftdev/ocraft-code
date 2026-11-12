@@ -224,7 +224,7 @@ describe("the long-lived Assistant session", () => {
       writeAgentFolder(folder, undefined, "second");
       expect(readFileSync(join(own, "SOUL.md"), "utf8")).toBe("refined by the agent");
       const { allow, deny } = claudeSettings("second").permissions;
-      expect(allow.filter((rule) => /^(Edit|Write)\(/.test(rule))).toEqual(["Edit(./profiles/second/**)", "Write(./profiles/second/**)"]);
+      expect(allow.filter((rule) => /^(Edit|Write)\(/.test(rule))).toEqual(["Edit(./profiles/second/**)"]);
       expect(deny).toContain("Edit(./graph.json)");
       expect(JSON.parse(readFileSync(join(folder, ".claude", "settings.json"), "utf8"))).toEqual(claudeSettings("second"));
       expect(readFileSync(join(folder, "AGENTS.md"), "utf8")).toContain("profiles/second/");
