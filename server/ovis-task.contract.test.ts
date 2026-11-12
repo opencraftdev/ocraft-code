@@ -92,6 +92,10 @@ describe("ovis-task routes", () => {
     try {
       expect(await (await task("projects")).json()).toEqual([{ id: "repo", path: project, mergeMode: "local", defaultAgent: "claude", machine: "Test PC" }]);
       expect(await (await task("list")).json()).toEqual([]);
+      const [listed] = await (await task("machines")).json() as { name: string; folders: string[] }[];
+      expect(listed?.name).toBe("Test PC");
+      expect(Array.isArray(listed?.folders)).toBe(true);
+      expect((await task("machines", {})).status).toBe(405);
       expect((await task("projects", { id: "x", path: "/" })).status).toBe(405);
       expect(await code(await task("create", {}))).toEqual({ status: 404, code: "unknown_project" });
       expect(await code(await task("create", { project: "repo", title: "Fix it", brief: "" }))).toEqual({ status: 400, code: "invalid_brief" });
@@ -205,6 +209,8 @@ describe("ovis-task routes", () => {
 describe("ovis-task's command line and git checks", () => {
   it("makes a request of each command, and a usage line of anything else", () => {
     expect(cliRequest(["projects"])).toEqual({ path: "projects" });
+    expect(cliRequest(["machines"])).toEqual({ path: "machines" });
+    expect("usage" in cliRequest(["machines", "x"])).toBe(true);
     expect(cliRequest(["grep", "repo", "TODO", "src"])).toEqual({ path: "grep", body: { project: "repo", pattern: "TODO", path: "src" } });
     expect(cliRequest(["git", "repo", "log", "-5"])).toEqual({ path: "git", body: { project: "repo", command: "log", args: ["-5"] } });
     expect("usage" in cliRequest(["read", "repo"])).toBe(true);

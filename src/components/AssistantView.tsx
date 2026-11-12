@@ -11,6 +11,7 @@ import { startingRetry } from "../lib/startingChat.ts";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { AssistantSetupDialog } from "./AssistantSetupDialog.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
+import { Markdown } from "./Markdown.tsx";
 import { Command } from "./PhonePanel.tsx";
 import { PromptCard } from "./PromptCard.tsx";
 
@@ -195,7 +196,8 @@ function ArchivedSession({ name }: { name: string }) {
       {transcript.turns.map((turn, index) => (
         <div key={index} className={`assistant-turn is-${turn.role}`}>
           <span className="assistant-dim">{turn.role === "user" ? t("You") : t("Assistant")}</span>
-          <p>{turn.text}</p>
+          {/* the chat lens draws answers as Markdown: an archived one reads the same */}
+          <Markdown className="assistant-turn-text">{turn.text}</Markdown>
         </div>
       ))}
       {transcript.turns.length === 0 && (transcript.text ? <pre className="assistant-screen">{transcript.text}</pre> : <p className="assistant-dim">{t("Nothing was said in this session.")}</p>)}

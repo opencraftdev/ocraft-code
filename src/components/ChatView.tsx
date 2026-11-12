@@ -45,7 +45,7 @@ import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { statusEdgeRead } from "../lib/status.ts";
 import { askedQuestions } from "../lib/askQuestions.ts";
 import { ConversationRefresh } from "../lib/conversationRefresh.ts";
-import { startingRetry } from "../lib/startingChat.ts";
+import { chatRetry, startingRetry } from "../lib/startingChat.ts";
 import { teammateMessageParts, type TeammateMessage } from "../lib/teammateMessage.ts";
 import { usePageVisible } from "../lib/visibility.ts";
 import { dismissKeyboardOn } from "../lib/keyboard.ts";
@@ -2244,7 +2244,7 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   // a chat just started may have no transcript yet: its failed read is retried quietly for a while (lib/startingChat.ts)
   const starting = error !== null && startingRetry(startedAt, Date.now()) !== null;
   useEffect(() => {
-    const delay = error === null ? null : startingRetry(startedAt, Date.now());
+    const delay = error === null ? null : chatRetry(startedAt, Date.now());
     if (delay === null) return;
     const timer = window.setTimeout(() => conversationRefresh.refresh(), delay);
     return () => window.clearTimeout(timer);

@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import type { AssistantState, AssistantTask } from "../../shared/assistant.ts";
 import { SettingsProvider } from "../lib/settings.ts";
-import { STARTING_MS, startingRetry } from "../lib/startingChat.ts";
+import { chatRetry, LATER_RETRY_MS, STARTING_MS, startingRetry } from "../lib/startingChat.ts";
 import { AssistantView, type AssistantChat } from "./AssistantView.tsx";
 
 type Props = Parameters<typeof AssistantView>[0];
@@ -100,5 +100,12 @@ describe("a chat that just started", () => {
     expect(startingRetry(started, started + STARTING_MS - 300)).toBe(300);
     expect(startingRetry(started, started + STARTING_MS)).toBeNull();
     expect(startingRetry(undefined, started)).toBeNull();
+  });
+
+  it("keeps retrying a failed read after the quiet time, every few seconds, so it recovers by itself", () => {
+    const started = 1_000_000;
+    expect(chatRetry(started, started)).toBe(1000);
+    expect(chatRetry(started, started + STARTING_MS + 60_000)).toBe(LATER_RETRY_MS);
+    expect(chatRetry(undefined, started)).toBeNull();
   });
 });
