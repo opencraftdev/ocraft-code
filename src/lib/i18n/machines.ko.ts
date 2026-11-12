@@ -141,4 +141,5 @@ export const MACHINES_KO: Record<string, string> = {
   "The install finished.": "설치가 끝났습니다.",
   "The setup failed": "설정에 실패했습니다",
   "The setup was stopped": "설정이 중지되었습니다",
+  "Machine": "머신",
 };

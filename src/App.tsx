@@ -69,8 +69,9 @@ import { RepoDiffViewer } from "./components/RepoDiffViewer.tsx";
 import { OpenFileContext } from "./lib/filePaths.ts";
 import { useAccessState, useLockedRef } from "./lib/useAccess.ts";
 import { useLocalHealth } from "./lib/useLocalHealth.ts";
-import { assistantPanelFrame, assistantPanelOnly, isAssistantMachine, isAssistantPane, useAppMode } from "./lib/assistantMode.ts";
-import { AssistantPanel, AssistantPanelFrame, AssistantSetup } from "./components/AssistantView.tsx";
+import { isAssistantMachine, isAssistantPane, useAppMode } from "./lib/assistantMode.ts";
+import { AssistantSetup } from "./components/AssistantView.tsx";
+import { AssistantSessions, useRestartAssistant } from "./components/AssistantSessions.tsx";
 import { useMachinesRef, useRecentFolderMemory, useRefetchTimer, useRosterError, useRosterEvents, useRosterLoader, useRosterState } from "./lib/useMachineRoster.ts";
 import { useMachineDialog } from "./lib/useMachineDialog.ts";
 import { useNewSessionMachine, useNewSessionState, useSessionHistoryList } from "./lib/useNewSessionDialog.ts";
@@ -555,12 +556,17 @@ export function App() {
   const keyboardLikely = useMediaQuery("(hover: hover) and (pointer: fine)");
   const paletteKeys = keyboardLikely ? formatKeys(shortcutDisplayKeys("palette", settings.shortcutOverrides)).join("+") : "";
   const assistantVm = health?.web_ui?.assistant === true;
+  // the Assistant's own chat: on the VM itself its local pane, elsewhere its pane on the VM's remote PC
+  const assistantChat = Boolean(selectedPane?.agent) && isAssistantPane(selectedPane?.cwd)
+    && (selectedMachineId === "local" ? assistantVm : isAssistantMachine(selectedMachine?.target?.destination));
+  const restartAssistant = useRestartAssistant(selectedMachineId, assistantChat ? selectedPane ?? null : null);
   const moreItems: RowMenuItem[] = [
     // the title's menu (the header has no tab strip): the pane's tab is renamed in the strip, drawn only while it edits
     ...(selectedPane && !selectedPane.restore_error ? [
       { id: "rename", label: t("Rename"), icon: Pencil, run: actions.renameTab },
       { id: "new-agent", label: t("New tab with agent…"), icon: Bot, run: () => actions.openNewTab() },
     ] : []),
+    ...(restartAssistant.item ? [restartAssistant.item] : []),
     // first at every width: a phone's header has no palette button, and a touch screen no shortcut
     { id: "palette", label: t("Search panes and actions"), icon: Search, ...(paletteKeys ? { hint: paletteKeys } : {}), run: () => openPalette() },
     ...(selectedPane && !selectedPane.restore_error ? [{ id: "find", label: t("Find in terminal"), icon: Search, run: actions.openFind }] : []),
@@ -602,11 +608,6 @@ export function App() {
     );
   }
 
-  // the Assistant VM's tasks panel, alone, for another Ovis's right panel beside the Assistant's chat
-  if (assistantPanelOnly(window.location.search)) {
-    // inside the agent panel's own box, so its sections take the agent panel's look (styles.css)
-    return <div className="assistant-panel-page"><aside className="agent-panel"><AssistantPanel onSession={(paneId) => window.parent.postMessage({ type: "ovis-assistant-session", paneId }, "*")} /></aside></div>;
-  }
   if (locked) return <AccessGate reason={lockReason} initialCode={pairCode} onUnlocked={unlock} />;
 
   // the right side holds one surface at a time, as Claude's does: the Terminal panel, Files or Changes
@@ -636,23 +637,20 @@ export function App() {
   // two chats side by side are screens 1 (left) and 2 (right): the panel and the sidebar number them alike
   const screenOf = (slot: SplitSlot): number => split && slotSide(split, slot) === "right" ? 2 : 1;
   const screens = new Map<string, number>(splitOn && split && selectedPaneId && selectedPane?.agent && otherPane?.agent ? [[`${selectedMachineId}:${selectedPaneId}`, screenOf(split.active)], [`${split.other.machineId}:${split.other.paneId}`, screenOf(besideSlot)]] : []);
-  // the Assistant's own chat: its tasks and controls take the agent panel's place (on the VM itself
-  // drawn here, on another Ovis the VM's panel page in a frame), and nothing else changes
-  const assistantPanelSrc = selectedMachineId !== "local" && selectedPane && isAssistantPane(selectedPane.cwd) && isAssistantMachine(selectedMachine?.target?.destination) ? assistantPanelFrame() : null;
-  const assistantHere = selectedMachineId === "local" && assistantVm && isAssistantPane(selectedPane?.cwd);
-  const agentDetails = agentPanelShown && selectedPane?.agent && (assistantHere || assistantPanelSrc !== null) ? (
-    <aside className="agent-panel assistant-agent-panel" id="agent-details-panel" tabIndex={-1} aria-label={t("Assistant")}>
-      {assistantPanelSrc !== null
-        ? <AssistantPanelFrame src={assistantPanelSrc} onSession={(paneId) => selectTarget(selectedMachineId, paneId, "chat")} />
-        : <AssistantPanel onOpenTask={selectTarget} onSession={(paneId) => selectTarget("local", paneId, "chat")} />}
-    </aside>
-  ) : agentPanelShown && selectedPane?.agent && <MachineContext.Provider value={selectedMachineId}>
+  // the Assistant's own chat keeps the agent panel, without Changes (its folder is no repository) and
+  // with the sessions it can delegate to; a session opens in Code mode, the panel's sheet closing on a phone
+  const openSession = (machineId: string, paneId: string): void => {
+    selectTarget(machineId, paneId, "chat");
+    if (!pinnedAgentPanel && window.matchMedia("(max-width: 979px)").matches) closeAgentPanel();
+  };
+  const agentDetails = agentPanelShown && selectedPane?.agent && <MachineContext.Provider value={selectedMachineId}>
     <AgentPanel key={besideChat && split ? JSON.stringify(["pair", ...[`${selectedMachineId}:${selectedPane.pane_id}`, `${split.other.machineId}:${split.other.paneId}`].sort()]) : JSON.stringify([selectedMachineId, selectedPane.pane_id, selectedPane.terminal_id, selectedPane.agent_session?.value, selectedMachine?.snapshot?.finish_epoch])} pane={selectedPane} panes={snapshot?.panes ?? []} title={selectedTitle ?? selectedPane.agent} machineName={selectedMachine?.name ?? selectedMachineId} workspaceName={selectedWorkspace?.label ?? selectedPane.workspace_id}
       online={selectedMachine?.state === "connected"} watching={auth?.role === "watch"} tab={agentPanelTab} drawerOpen={agentDrawerOpen} onOpenView={openAgentView} onCloseView={closeAgentView} onClose={closeAgentPanel} pinned={pinnedAgentPanel} focusAgent={focusAgent} onFocusedAgent={clearFocusAgent}
       contextKey={conversationContextKey(selectedMachineId, selectedPane, selectedMachine?.snapshot?.finish_epoch)}
       onSelectPane={id => { closeAgentView(); selectPane(id); }} onBrowseFiles={showWorkspaceFiles} onOpenDiff={(comparison, file) => { showWorkspaceFiles("changes"); openDiff({ machineId: selectedMachineId, paneId: selectedPane.pane_id, directory: selectedPane.foreground_cwd ?? selectedPane.cwd ?? null, ...comparison, path: file.path, oldPath: file.old_path }); }} onNewAgent={() => actions.openNewTab()} screen={besideChat ? screenOf(split!.active) : undefined} beside={besideChat && otherPane && split ? { screen: screenOf(besideSlot), title: displayPaneTitle(otherPane) ?? otherPane.agent!, pane: otherPane, machineId: split.other.machineId, machineName: otherMachine?.name ?? split.other.machineId, workspaceName: otherWorkspace?.label ?? otherPane.workspace_id,
       online: otherMachine?.state === "connected", contextKey: conversationContextKey(split.other.machineId, otherPane, otherMachine?.snapshot?.finish_epoch),
-      onBrowseFiles: (tab) => { activateSlot(besideSlot); showWorkspaceFiles(tab); }, onOpenDiff: () => { activateSlot(besideSlot); showWorkspaceFiles("changes"); } } : null} />
+      onBrowseFiles: (tab) => { activateSlot(besideSlot); showWorkspaceFiles(tab); }, onOpenDiff: () => { activateSlot(besideSlot); showWorkspaceFiles("changes"); } } : null}
+      hideChanges={assistantChat} extraSections={assistantChat ? <AssistantSessions machines={machines} onOpen={openSession} /> : null} />
   </MachineContext.Provider>;
   const fileSurface = filesBrowser
     || (viewing !== null && fileDocked && !filesOpen ? <MachineContext.Provider value={viewing.machineId}>
@@ -1070,6 +1068,7 @@ export function App() {
       {viewing !== null && !fileDocked && <MachineContext.Provider value={viewing.machineId}>
         <FileViewer key={viewing.path} path={viewing.path} paneId={viewing.paneId} onClose={closeFile} onOpen={(path) => openFile({ ...viewing, path, presentation })} onKind={reportFileKind} onTogglePresentation={toggleFilePresentation} keyboardActive={!settingsOpen} />
       </MachineContext.Provider>}
+      {restartAssistant.dialog}
       {unsentFor && <UnsentTextDialog machines={machines} canRecover={unsentFor.pane.agent != null} onClose={closeUnsent} onRecover={recover} />}
       <CommandPalette key={selectedMachineId} machines={sidebarMachines} onSelect={selectTarget} open={paletteOpen} initialQuery={paletteQuery} onClose={() => setPaletteOpen(false)} snapshot={snapshot} online={selectedMachine?.state === "connected"} selectedPaneId={selectedPaneId}
         // a peek shows the terminal: its toggle says Switch to chat, which ends the peek
