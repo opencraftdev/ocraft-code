@@ -160,6 +160,7 @@ const BASE: Record<string, string> = {
   "Settings": "설정",
   "Chat": "채팅",
   "Assistant": "어시스턴트",
+  "What should the Assistant do?": "어시스턴트가 무엇을 할까요?",
   "Add the VM in Settings > Remote PCs: its Assistant chat shows in Code mode, with its tasks in the right panel.": "설정 > 원격 PC에서 VM을 추가하세요. 어시스턴트 채팅은 코드 모드에, 작업은 오른쪽 패널에 표시됩니다.",
   "Assistant VM…": "어시스턴트 VM…",
   "Back to Code": "코드로 돌아가기",

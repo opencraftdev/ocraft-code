@@ -171,6 +171,8 @@
 .assistant-panel-head h2 { flex: 1 1 auto; margin: 0; color: var(--text-strong); font-size: var(--fs-md); font-weight: var(--fw-medium); }
 .assistant-panel-head .sidebar-nav-item { width: auto; }
 .assistant-panel .assistant-lists { padding: 0; }
+.assistant-panel .assistant-section { margin-top: var(--space-4); }
+.assistant-panel .assistant-board { margin-bottom: var(--space-1); }
 .assistant-panel .assistant-transcript { padding: 0; overflow: visible; }
 
 .assistant-panel-frame {

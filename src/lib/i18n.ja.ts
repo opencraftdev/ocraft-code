@@ -162,6 +162,7 @@ const BASE: Record<string, string> = {
   "Settings": "設定",
   "Chat": "チャット",
   "Assistant": "アシスタント",
+  "What should the Assistant do?": "アシスタントに何をさせますか？",
   "Add the VM in Settings > Remote PCs: its Assistant chat shows in Code mode, with its tasks in the right panel.": "設定 > リモート PC で VM を追加してください。アシスタントのチャットはコードモードに、タスクは右パネルに表示されます。",
   "Assistant VM…": "アシスタント VM…",
   "Back to Code": "コードに戻る",

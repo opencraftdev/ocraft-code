@@ -958,6 +958,8 @@ export function App() {
                         // the agent strip opens details in the panel, which shows the selected pane alone
                         onOpenAgent={active && item?.pane_id === selectedPaneId && machineId === selectedMachineId ? openAgentDetails : undefined}
                         cwd={item?.cwd ?? null}
+                        // the Assistant's own chat greets as the Assistant, not as an agent in its folder
+                        greeting={isAssistantPane(item?.cwd) ? { title: t("What should the Assistant do?"), where: machine?.name ?? machineId } : undefined}
                         workspaceId={item?.workspace_id ?? null}
                         worktreeRepo={worktreeRepoName(item === null ? undefined : slotSnapshot?.workspaces.find((workspace) => workspace.workspace_id === item.workspace_id))}
                         machineName={machine?.name ?? machineId}

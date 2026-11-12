@@ -165,6 +165,7 @@ const BASE: Record<string, string> = {
   "Settings": "设置",
   "Chat": "聊天",
   "Assistant": "助手",
+  "What should the Assistant do?": "助手应该做什么？",
   "Add the VM in Settings > Remote PCs: its Assistant chat shows in Code mode, with its tasks in the right panel.": "在 设置 > 远程 PC 中添加 VM：助手的聊天显示在代码模式中，任务显示在右侧面板。",
   "Assistant VM…": "助手 VM…",
   "Back to Code": "返回代码",
