@@ -785,7 +785,7 @@ export function App() {
         )}
       </header>}
 
-      {!codeMode ? <div className="app-body"><AssistantView vm={health?.web_ui?.assistant === true} renderChat={(paneId) => {
+      {!codeMode ? <div className="app-body"><AssistantView vm={health?.web_ui?.assistant === true} embedded={embedded} onOpenSettings={actions.openSettings} renderChat={(paneId, { greeting, startedAt }) => {
         // the Assistant's pane is on this VM's own herdr: Code mode's chat lens over it, composer and all
         const local = machines.find((machine) => machine.id === "local");
         const item = local?.snapshot?.panes.find((candidate) => candidate.pane_id === paneId);
@@ -795,7 +795,7 @@ export function App() {
             <PaneTerminal paneId={item.restore_error ? null : item.pane_id} terminalId={item.terminal_id ?? null} restoreError={item.restore_error ?? null}
               mirrored={health?.herdr ? health.herdr.terminal_attach === false || health.herdr.terminal_mirror === true : null}
               title={displayPaneTitle(item)} agent={item.agent ?? null} agentStatus={item.agent_status} cwd={item.cwd ?? null} workspaceId={item.workspace_id}
-              machineName={local?.name ?? "local"} view="chat" active
+              machineName={local?.name ?? "local"} view="chat" active greeting={greeting} startedAt={startedAt}
               terminalFontSize={settings.terminalFontSize} terminalWheelSpeed={settings.terminalWheelSpeed} terminalFontFamily={settings.terminalFontFamily}
               theme={resolvedEntry.mode} palette={resolvedEntry.id} />
           </MachineContext.Provider>
