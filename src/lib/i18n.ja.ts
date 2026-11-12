@@ -162,6 +162,7 @@ const BASE: Record<string, string> = {
   "Settings": "設定",
   "Chat": "チャット",
   "Assistant": "アシスタント",
+  "Show all {n}": "すべて表示 ({n})",
   "1 machine": "1 台のマシン",
   "{n} machines": "{n} 台のマシン",
   "1 project": "1 件のプロジェクト",

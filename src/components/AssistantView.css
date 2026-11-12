@@ -154,7 +154,7 @@
 .assistant-panel .agent-panel-section-head .icon-button { color: var(--text-dim); }
 .assistant-row { width: 100%; border: 0; border-radius: var(--radius-sm); background: transparent; font: inherit; text-align: left; cursor: pointer; }
 .assistant-row:hover { background: var(--bg-hover); }
-.assistant-row > span { flex: 1 1 auto; }
+.assistant-row > span:not(.machine-dot) { flex: 1 1 auto; }
 .assistant-row-arrow { width: var(--space-3); height: var(--space-3); color: var(--text-dim); }
 .assistant-panel p.agent-panel-environment-row { margin: 0; }
 .assistant-panel .assistant-transcript { padding: 0; overflow: visible; }
@@ -175,7 +175,9 @@
   background: var(--chat-canvas);
 }
 
-.assistant-panel-page .assistant-panel { max-height: none; }
+.assistant-panel-page > .agent-panel { flex: 1 1 auto; width: 100%; padding: 0; }
+.assistant-panel-page .assistant-panel { max-height: 100%; }
+.assistant-more { color: var(--text-dim); }
 
 .assistant-board-empty { padding-inline: var(--space-1); }
 .assistant-task-group .agent-panel-section-label { margin-inline: var(--space-1); }

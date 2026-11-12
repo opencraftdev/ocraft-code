@@ -160,6 +160,7 @@ const BASE: Record<string, string> = {
   "Settings": "설정",
   "Chat": "채팅",
   "Assistant": "어시스턴트",
+  "Show all {n}": "모두 보기 ({n})",
   "1 machine": "머신 1대",
   "{n} machines": "머신 {n}대",
   "1 project": "프로젝트 1개",

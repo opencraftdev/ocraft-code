@@ -66,6 +66,7 @@ export function AssistantPanel({ initial = null, onOpenTask, onSession }: { init
   const [state, setState] = useState<AssistantState | null>(initial);
   // an earlier chat, read only in the panel; null: the tasks and lists
   const [shown, setShown] = useState<string | null>(null);
+  const [allChats, setAllChats] = useState(false);
   const refresh = useCallback(() => fetchAssistant().then(setState, () => {}), []);
   // the server checks each machine every 30 s; this only reads what it found
   useEffect(() => {
@@ -104,11 +105,12 @@ export function AssistantPanel({ initial = null, onOpenTask, onSession }: { init
         <TaskBoard tasks={tasks} projects={projects} machines={machines} onChange={setState} onOpenTask={onOpenTask} />
       </PanelSection>
       {archived.length > 0 && <PanelSection title={t("Earlier chats")} count={archived.length}>
-        {archived.map((session) => (
+        {(allChats ? archived : archived.slice(0, EARLIER_SHOWN)).map((session) => (
           <button key={session.name} type="button" className="agent-panel-environment-row assistant-row" title={session.name} onClick={() => setShown(session.name)}>
             <MessageSquare aria-hidden="true" /><span>{clockTime(locale, session.started_at)}</span><ChevronRight className="assistant-row-arrow" aria-hidden="true" />
           </button>
         ))}
+        {!allChats && archived.length > EARLIER_SHOWN && <button type="button" className="agent-panel-action assistant-more" onClick={() => setAllChats(true)}><span>{t("Show all {n}", { n: archived.length })}</span></button>}
       </PanelSection>}
       <Projects projects={projects} machines={machines} loaded={state !== null} refresh={refresh} />
       <PanelSection title={t("Machines")} count={machines.length || undefined}>
@@ -124,6 +126,9 @@ export function AssistantPanel({ initial = null, onOpenTask, onSession }: { init
     </div>
   );
 }
+
+/** the earlier chats listed before Show all */
+const EARLIER_SHOWN = 5;
 
 /** one of the panel's sections, as the agent panel draws Environment, Context and Changes (AgentPanel.css) */
 function PanelSection({ title, count, action, children }: { title: string; count?: number; action?: ReactNode; children: ReactNode }) {

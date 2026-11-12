@@ -165,6 +165,7 @@ const BASE: Record<string, string> = {
   "Settings": "设置",
   "Chat": "聊天",
   "Assistant": "助手",
+  "Show all {n}": "全部显示 ({n})",
   "1 machine": "1 台机器",
   "{n} machines": "{n} 台机器",
   "1 project": "1 个项目",

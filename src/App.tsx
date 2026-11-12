@@ -604,7 +604,8 @@ export function App() {
 
   // the Assistant VM's tasks panel, alone, for another Ovis's right panel beside the Assistant's chat
   if (assistantPanelOnly(window.location.search)) {
-    return <div className="assistant-panel-page"><AssistantPanel onSession={(paneId) => window.parent.postMessage({ type: "ovis-assistant-session", paneId }, "*")} /></div>;
+    // inside the agent panel's own box, so its sections take the agent panel's look (styles.css)
+    return <div className="assistant-panel-page"><aside className="agent-panel"><AssistantPanel onSession={(paneId) => window.parent.postMessage({ type: "ovis-assistant-session", paneId }, "*")} /></aside></div>;
   }
   if (locked) return <AccessGate reason={lockReason} initialCode={pairCode} onUnlocked={unlock} />;
 
