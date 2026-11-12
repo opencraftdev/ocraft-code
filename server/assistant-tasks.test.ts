@@ -8,7 +8,7 @@ import type { Machine, MachineEvent } from "../shared/machines.ts";
 import type { SessionSnapshot } from "../shared/protocol.ts";
 import { Assistant, type RunScript } from "./assistant.ts";
 import { AssistantError } from "./assistant.ts";
-import { cleanupScript, localMergeScript, parseVerdict, statusAfter, taskSlug, type TaskBridge } from "./assistant-tasks.ts";
+import { cleanupScript, localMergeScript, parseVerdict, statusAfter, taskSlug, VERDICT_NUDGE, type TaskBridge } from "./assistant-tasks.ts";
 import { shellQuote } from "./machine-security.ts";
 import { cliRequest } from "./ovis-task-cli.ts";
 
@@ -64,7 +64,7 @@ function fixture(options: { stateDir?: string; state?: Machine["state"]; workspa
   return { assistant, machine, calls, answers, scripts, frame, task, stateDir, done, machinesChanged: () => listener!({ type: "machines", machines: [machine] }) };
 }
 
-const create = (assistant: Assistant, body: Record<string, unknown> = {}) => assistant.tasks.create({ project: "app", title: "Fix login", brief: "The login form\nrejects valid emails.", ...body });
+const create = (assistant: Assistant, body: Record<string, unknown> = {}) => assistant.tasks.create({ project: "app", title: "Fix login", brief: "The login form rejects valid emails.", ...body });
 const refusal = async (promise: Promise<unknown>) => { try { await promise; return null; } catch (error) { return error instanceof AssistantError ? error.code : String(error); } };
 
 describe("starting a task", () => {
@@ -81,7 +81,7 @@ describe("starting a task", () => {
       expect(JSON.stringify(calls)).not.toMatch(/focus|takeover/);
       const path = join(stateDir, "assistant", "tasks.json");
       expect(statSync(path).mode & 0o777).toBe(0o600);
-      expect((JSON.parse(readFileSync(path, "utf8")) as AssistantTask[])[0]!.brief).toBe("The login form\nrejects valid emails.");
+      expect((JSON.parse(readFileSync(path, "utf8")) as AssistantTask[])[0]!.brief).toBe("The login form rejects valid emails.");
     } finally { done(); }
   });
 
@@ -448,6 +448,8 @@ describe("review", () => {
       expect(fx.task()).toMatchObject({ status: "ready", reviewed: true, prUrl: "https://github.com/me/app/pull/7" });
       expect(fx.task().reviewPaneId).toBeUndefined();
       expect(fx.calls).toContainEqual({ path: "pane/close", method: "POST", body: { pane_id: "r1" } });
+      // it answered at once: nothing nudged it
+      expect(fx.calls.some((call) => call.path === "pane/input")).toBe(false);
       expect(fx.scripts.find((script) => script.includes("gh pr create"))).toContain("Reviewed by a second agent: passed after 1 round(s).");
       // Approve is the user's: nothing merged by itself
       expect(fx.scripts.some((script) => script.includes("gh pr merge"))).toBe(false);
@@ -482,6 +484,33 @@ describe("review", () => {
     } finally { fx.done(); }
   });
 
+  it("asks a reviewer that rests without a verdict once more, then hands the task to the user", async () => {
+    const fx = fixture();
+    try {
+      await create(fx.assistant, { review: true });
+      reviewers(fx);
+      await ready(fx);
+      fx.frame({ type: "pane-status", pane_id: "r1", agent_status: "working" });
+      await verdict(fx, "r1", "The diff looks fine to me.");
+      expect(fx.task()).toMatchObject({ status: "reviewing", reviewPaneId: "r1", reviewNudged: true });
+      expect(fx.calls.slice(-2)).toEqual([
+        { path: "pane/input", method: "POST", body: { pane_id: "r1", text: VERDICT_NUDGE } },
+        { path: "pane/keys", method: "POST", body: { pane_id: "r1", keys: ["Enter"] } },
+      ]);
+      // a rest before it took the nudge is not its answer
+      await verdict(fx, "r1", "The diff looks fine to me.");
+      expect(fx.task().status).toBe("reviewing");
+      fx.frame({ type: "pane-status", pane_id: "r1", agent_status: "working" });
+      await verdict(fx, "r1", "Still thinking.");
+      expect(fx.task()).toMatchObject({ status: "needs_you", reason: "Reviewer gave no verdict" });
+      expect(fx.task().reviewPaneId).toBeUndefined();
+      expect(fx.calls).toContainEqual({ path: "pane/close", method: "POST", body: { pane_id: "r1" } });
+      expect(fx.calls.filter((call) => call.path === "pane/input")).toHaveLength(1);
+      // Approve goes on as for any reason the server set
+      expect(await fx.assistant.tasks.approve("1")).toMatchObject({ status: "done" });
+    } finally { fx.done(); }
+  });
+
   it("reads the verdict from the reviewer's last reply line", () => {
     expect(parseVerdict("REVIEW: PASS")).toEqual({ pass: true });
     expect(parseVerdict("> REVIEW: FINDINGS\n1. a\n2. b")).toEqual({ pass: false, findings: "1. a\n2. b" });
@@ -498,7 +527,7 @@ describe("merge, pr project", () => {
       await ready(fx);
       expect(fx.task()).toMatchObject({ status: "ready", prUrl: "https://github.com/me/app/pull/7" });
       const pr = fx.scripts.find((script) => script.includes("gh pr create"))!;
-      expect(pr).toContain(`gh pr create --head ${shellQuote("assistant/1-fix-o-brien-s-login")} --base ${shellQuote("main")} --title ${shellQuote("Fix O'Brien's login")} --body ${shellQuote("The login form\nrejects valid emails.\n\nNot reviewed.\n\nOpened by the Ovis Assistant (task #1).")}`);
+      expect(pr).toContain(`gh pr create --head ${shellQuote("assistant/1-fix-o-brien-s-login")} --base ${shellQuote("main")} --title ${shellQuote("Fix O'Brien's login")} --body ${shellQuote("The login form rejects valid emails.\n\nNot reviewed.\n\nOpened by the Ovis Assistant (task #1).")}`);
       expect(pr).toContain(`git push -u origin ${shellQuote("assistant/1-fix-o-brien-s-login")}`);
       fx.calls.length = 0;
       expect(await fx.assistant.tasks.approve("1")).toMatchObject({ status: "done", worktree: null, paneId: null });
@@ -715,5 +744,61 @@ describe("merge, local project (real temporary repositories)", () => {
     expect(script).toContain("git merge --abort");
     expect(script).not.toMatch(/--force|-X|-s ours|reset --hard/);
     expect(cleanupScript("/r", "/wt", "assistant/1-x")).not.toMatch(/--force|-f\b/);
+  });
+});
+
+describe("a brief of several lines", () => {
+  const brief = "Fix the login form.\nIt rejects valid emails.\n\nAdd a test.";
+  it("starts the agent without it, then pastes it with its line breaks framed once the agent is up, and Enter", async () => {
+    const fx = fixture();
+    try {
+      expect(await create(fx.assistant, { brief })).toMatchObject({ status: "working", briefPending: true });
+      expect(fx.calls.at(-1)!.body).toMatchObject({ agent: { kind: "claude" } });
+      expect((fx.calls.at(-1)!.body as { agent: { args?: string[] } }).agent.args).toBeUndefined();
+      // at rest before the snapshot shows the agent: not up yet, nothing typed
+      fx.frame({ type: "pane-status", pane_id: "p1", agent_status: "idle" });
+      await fx.assistant.tasks.settled();
+      expect(fx.calls.some((call) => call.path === "pane/input")).toBe(false);
+      fx.machine.snapshot = snapshot([{ pane_id: "p1", agent_status: "idle" }]);
+      fx.frame({ type: "pane-status", pane_id: "p1", agent_status: "idle" });
+      await fx.assistant.tasks.settled();
+      expect(fx.calls.slice(-2)).toEqual([
+        { path: "pane/input", method: "POST", body: { pane_id: "p1", text: "\u001b[200~Fix the login form.\rIt rejects valid emails.\r\rAdd a test.\u001b[201~" } },
+        { path: "pane/keys", method: "POST", body: { pane_id: "p1", keys: ["Enter"] } },
+      ]);
+      expect(fx.task().briefPending).toBeUndefined();
+      // sent once; its rest before it took the brief is not Ready, its work after it is
+      fx.frame({ type: "pane-status", pane_id: "p1", agent_status: "idle" });
+      await fx.assistant.tasks.settled();
+      expect(fx.task().status).toBe("working");
+      expect(fx.calls.filter((call) => call.path === "pane/input")).toHaveLength(1);
+      await ready(fx);
+      expect(fx.task().status).toBe("ready");
+    } finally { fx.done(); }
+  });
+
+  it("is sent by the watcher's check when a frame was missed", async () => {
+    const fx = fixture();
+    try {
+      await create(fx.assistant, { brief });
+      fx.machine.snapshot = snapshot([{ pane_id: "p1", agent_status: "done" }]);
+      await fx.assistant.check("m1");
+      await fx.assistant.tasks.settled();
+      expect(fx.calls.find((call) => call.path === "pane/input")!.body).toMatchObject({ pane_id: "p1" });
+      expect(fx.task()).toMatchObject({ status: "working" });
+    } finally { fx.done(); }
+  });
+});
+
+describe("a task's alerts", () => {
+  it("names the live task a pane runs, not its reviewer's or an ended one's", async () => {
+    const fx = fixture();
+    try {
+      await create(fx.assistant);
+      expect(fx.assistant.tasks.paneTask("m1", "p1")).toMatchObject({ id: "1", title: "Fix login" });
+      expect(fx.assistant.tasks.paneTask("m2", "p1")).toBeUndefined();
+      await fx.assistant.tasks.cancel("1");
+      expect(fx.assistant.tasks.paneTask("m1", "p1")).toBeUndefined();
+    } finally { fx.done(); }
   });
 });

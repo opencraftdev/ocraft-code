@@ -107,6 +107,9 @@ export interface AssistantTask {
   findings?: string;
   reviewPaneId?: string;
   reviewed?: true;
+  /** the reviewer worked since it started (or since its nudge), and was asked once more for its verdict line */
+  reviewWorked?: true;
+  reviewNudged?: true;
   /** the branch has no commits ahead of `base`: Approve marks it Done with nothing merged */
   nothingToMerge?: true;
   /**
@@ -124,6 +127,8 @@ export interface AssistantTask {
   startedAt?: number;
   /** herdr reported the agent at work at least once since it started: at rest after that is Ready */
   worked?: true;
+  /** a brief of several lines, not yet sent: it goes into the agent's input as a paste once the agent is up */
+  briefPending?: true;
   /** why it failed */
   error?: string;
 }
