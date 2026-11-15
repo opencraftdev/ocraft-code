@@ -7,6 +7,10 @@ import { useState } from "react";
 export type AppMode = "assistant" | "code";
 
 const ADDRESS_KEY = "ovis:assistant-address";
+/** Chat or Voice in the Assistant's own pane, per device */
+const VIEW_KEY = "ovis:assistant-view";
+
+export type AssistantView = "chat" | "voice";
 
 /** The install command the setup page shows; the script is the repository's own. */
 export const ASSISTANT_INSTALL_COMMAND = "curl -fsSL https://raw.githubusercontent.com/opencraftdev/ocraft-code/main/scripts/install-assistant.sh | bash";
@@ -21,6 +25,12 @@ function write(key: string, value: string): void {
 
 export function storedAssistantAddress(): string { return read(ADDRESS_KEY) ?? ""; }
 export function storeAssistantAddress(address: string): void { write(ADDRESS_KEY, address); }
+
+/** Chat (the default) or Voice in the Assistant's pane, as this device last chose. */
+export function useAssistantView(): [AssistantView, (view: AssistantView) => void] {
+  const [view, setView] = useState<AssistantView>(() => read(VIEW_KEY) === "voice" ? "voice" : "chat");
+  return [view, (next) => { write(VIEW_KEY, next); setView(next); }];
+}
 
 /** The typed address as an http(s) link (https:// when no scheme is given), or null when it is none. */
 export function assistantLink(address: string): string | null {

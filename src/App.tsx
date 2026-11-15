@@ -40,7 +40,7 @@ import { openPresentation } from "./lib/filePresentation.ts";
 import { MachineDialog } from "./components/MachineDialog.tsx";
 import { RowMenu, type RowMenuItem } from "./components/RowMenu.tsx";
 import { headerCrumb, showsChat } from "./lib/headerCrumb.ts";
-import { paneStorageId } from "../shared/machines.ts";
+import { paneStorageId, type Machine } from "../shared/machines.ts";
 import { usePairedNotices } from "./lib/usePairedNotices.ts";
 import { takeAuthTokenFromUrl } from "./lib/authLink.ts";
 import { rosterPanes } from "./lib/dagPane.ts";
@@ -70,6 +70,8 @@ import { OpenFileContext } from "./lib/filePaths.ts";
 import { useAccessState, useLockedRef } from "./lib/useAccess.ts";
 import { useLocalHealth } from "./lib/useLocalHealth.ts";
 import { isAssistantMachine, isAssistantPane, useAppMode } from "./lib/assistantMode.ts";
+import { assistantVoice, useAssistantVoicePane } from "./lib/assistantVoice.ts";
+import { AssistantViewSwitch, AssistantVoiceBar, AssistantVoiceScreen, AssistantVoiceToast } from "./components/AssistantVoice.tsx";
 import { AssistantSetup } from "./components/AssistantView.tsx";
 import { AssistantSessions, useRestartAssistant } from "./components/AssistantSessions.tsx";
 import { useMachinesRef, useRecentFolderMemory, useRefetchTimer, useRosterError, useRosterEvents, useRosterLoader, useRosterState } from "./lib/useMachineRoster.ts";
@@ -560,6 +562,11 @@ export function App() {
   const assistantChat = Boolean(selectedPane?.agent) && isAssistantPane(selectedPane?.cwd)
     && (selectedMachineId === "local" ? assistantVm : isAssistantMachine(selectedMachine?.target?.destination));
   const restartAssistant = useRestartAssistant(selectedMachineId, assistantChat ? selectedPane ?? null : null);
+  // the Assistant pane's voice mode (components/AssistantVoice.tsx)
+  const { view: assistantView, setView: setAssistantView, target: assistantTarget } = useAssistantVoicePane(assistantChat, selectedMachineId, selectedPaneId);
+  const isAssistantOn = (machineId: string, machine: Machine | undefined, item: HerdrPane | null | undefined): boolean =>
+    Boolean(item?.agent) && isAssistantPane(item?.cwd) && (machineId === "local" ? assistantVm : isAssistantMachine(machine?.target?.destination));
+  const openVoice = (): void => { setAssistantView("voice"); setView("chat"); };
   const moreItems: RowMenuItem[] = [
     // the title's menu (the header has no tab strip): the pane's tab is renamed in the strip, drawn only while it edits
     ...(selectedPane && !selectedPane.restore_error ? [
@@ -730,6 +737,7 @@ export function App() {
             </button>
           </div>
         )}
+        <AssistantViewSwitch shown={codeMode && assistantChat} view={assistantView} onChange={(next) => { if (next === "voice") openVoice(); else setAssistantView(next); }} />
         {codeMode && selectedPane && wideScreen && (
           <>
             {/* opens Files, it is no third lens: set apart from the switch by a hairline */}
@@ -960,7 +968,9 @@ export function App() {
                         // the Assistant's own chat greets as the Assistant, not as an agent in its folder
                         greeting={isAssistantPane(item?.cwd) ? { title: t("What should the Assistant do?"), where: machine?.name ?? machineId } : undefined}
                         // only the Assistant's own chat tags sessions with `@`; every other pane's `@` stays files and skills
-                        sessionMachines={item?.agent && isAssistantPane(item.cwd) && (machineId === "local" ? assistantVm : isAssistantMachine(machine?.target?.destination)) ? machines : null}
+                        sessionMachines={isAssistantOn(machineId, machine, item) ? machines : null}
+                        // the Assistant's open call or its working voice tasks, a thin line over its composer
+                        composerBar={isAssistantOn(machineId, machine, item) ? <AssistantVoiceBar onVoice={openVoice} /> : null}
                         workspaceId={item?.workspace_id ?? null}
                         worktreeRepo={worktreeRepoName(item === null ? undefined : slotSnapshot?.workspaces.find((workspace) => workspace.workspace_id === item.workspace_id))}
                         machineName={machine?.name ?? machineId}
@@ -991,6 +1001,7 @@ export function App() {
                         onServerMessage={active && itemActive ? handleServerMessage : undefined}
                       />
                     </OpenFileContext.Provider>} />
+                  {active && assistantChat && pane?.pane_id === selectedPaneId && assistantView === "voice" && slotView === "chat" && <AssistantVoiceScreen />}
                   </div>
                 </main>
                 </RenderBoundary>
@@ -1071,6 +1082,13 @@ export function App() {
         <FileViewer key={viewing.path} path={viewing.path} paneId={viewing.paneId} onClose={closeFile} onOpen={(path) => openFile({ ...viewing, path, presentation })} onKind={reportFileKind} onTogglePresentation={toggleFilePresentation} keyboardActive={!settingsOpen} />
       </MachineContext.Provider>}
       {restartAssistant.dialog}
+      {/* a voice task's result while the user is not on the Voice screen: a tap goes there and hears it */}
+      {!(assistantChat && assistantView === "voice" && view === "chat") && <AssistantVoiceToast onHear={() => {
+        const target = assistantTarget.current;
+        if (target !== null) selectTarget(target.machineId, target.paneId, "chat");
+        setAssistantView("voice");
+        assistantVoice.hear();
+      }} />}
       {unsentFor && <UnsentTextDialog machines={machines} canRecover={unsentFor.pane.agent != null} onClose={closeUnsent} onRecover={recover} />}
       <CommandPalette key={selectedMachineId} machines={sidebarMachines} onSelect={selectTarget} open={paletteOpen} initialQuery={paletteQuery} onClose={() => setPaletteOpen(false)} snapshot={snapshot} online={selectedMachine?.state === "connected"} selectedPaneId={selectedPaneId}
         // a peek shows the terminal: its toggle says Switch to chat, which ends the peek
