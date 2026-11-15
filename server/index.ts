@@ -57,6 +57,7 @@ import { handleMachineRequest, nonCanonicalPath, slowMachinePath } from "./machi
 import { Assistant, handleAssistantRequest, machineBridge, type MachineBridge, type RunScript } from "./assistant.ts";
 import { AssistantSetup, handleAssistantSetupRequest, type AssistantSetupOptions } from "./assistant-setup.ts";
 import { AssistantSession, OVIS_TASK_BIN, type AssistantPanes } from "./assistant-sessions.ts";
+import type { VoiceOptions } from "./assistant-voice.ts";
 import { cliToken, handleOvisTaskRequest } from "./ovis-task.ts";
 import type { AssistantAgent } from "../shared/assistant.ts";
 import { handleSessionHistoryRequest, handleSessionResumeRequest, SESSION_HISTORY_PATH, SESSION_RESUME_PATH } from "./session-history-routes.ts";
@@ -221,6 +222,8 @@ export function createServer(
     assistantPanes?: AssistantPanes;
     /** how ovis-task reaches a machine's bridge (server/assistant.ts); unset, through Remote PCs. Tests pass their own. */
     assistantBridge?: MachineBridge;
+    /** the voice mode's ElevenLabs API and the Assistant pane's conversation (server/assistant-voice.ts); unset, the real ones. Tests pass fakes. */
+    assistantVoice?: VoiceOptions;
     /** how a VM setup from the setup page runs (server/assistant-setup.ts); unset, over SSH on this server's PTY host. Tests pass their own. */
     assistantSetup?: AssistantSetupOptions;
   } = {},
@@ -284,7 +287,7 @@ export function createServer(
     OVIS_BUN: process.execPath,
     PATH: `${OVIS_TASK_BIN}${delimiter}${process.env["PATH"] ?? ""}`,
   }), options.assistantPanes);
-  const assistantService = assistant && machines ? new Assistant(stateDir, machines, options.assistantRun ?? ((machine, script, timeoutMs) => machines.runScript(machine.id, script, timeoutMs)), { session: assistantSession, bridge: options.assistantBridge ?? machineBridge(machines) }) : null;
+  const assistantService = assistant && machines ? new Assistant(stateDir, machines, options.assistantRun ?? ((machine, script, timeoutMs) => machines.runScript(machine.id, script, timeoutMs)), { session: assistantSession, bridge: options.assistantBridge ?? machineBridge(machines), ...(options.assistantVoice ? { voice: options.assistantVoice } : {}) }) : null;
   const assistantSetup = new AssistantSetup(stateDir, { ...(machines ? { machines: () => machines.linuxMachines() } : {}), ...options.assistantSetup });
   // read finishes are kept for the herdr run each PC told this server it is in
   const seen = new SeenStore(stateDir, () => machines?.finishEpochs() ?? new Map());
@@ -329,7 +332,9 @@ export function createServer(
       // custom header (update-api.ts), and whoever holds the token already drives every pane here. Only those two
       // requests, each by its own method and with no query: the token opens nothing else of these routes (#2054)
       const bridgeUpdatePath = url.search === "" && (pathname === "/api/updates" ? request.method === "GET" : pathname === "/api/updates/install" && request.method === "POST");
-      const bridgePath = pathname === "/api/bridge" || pathname === "/api/session" || pathname === SESSION_HISTORY_PATH || pathname === SESSION_RESUME_PATH || pathname === "/api/agents" || pathname === "/api/agent/rename" || pathname === "/api/agent/commands" || pathname === "/api/integrations" || pathname === "/api/plugins/actions" || pathname === "/api/plugin/action" || pathname.startsWith("/api/pane/") || pathname.startsWith("/api/workspace/") || pathname.startsWith("/api/worktree/") || pathname.startsWith("/api/tab/") || pathname === "/api/layout/ratio" || pathname.startsWith("/api/fs/") || pathname === "/ws" || bridgeUpdatePath;
+      // the Assistant's voice routes: another Ovis's machine proxy forwards them with this PC's (bridge) token
+      const voicePath = /^\/api\/assistant\/voice\/(?:status|session|tool)$/.test(pathname);
+      const bridgePath = voicePath || pathname === "/api/bridge" || pathname === "/api/session" || pathname === SESSION_HISTORY_PATH || pathname === SESSION_RESUME_PATH || pathname === "/api/agents" || pathname === "/api/agent/rename" || pathname === "/api/agent/commands" || pathname === "/api/integrations" || pathname === "/api/plugins/actions" || pathname === "/api/plugin/action" || pathname.startsWith("/api/pane/") || pathname.startsWith("/api/workspace/") || pathname.startsWith("/api/worktree/") || pathname.startsWith("/api/tab/") || pathname === "/api/layout/ratio" || pathname.startsWith("/api/fs/") || pathname === "/ws" || bridgeUpdatePath;
       const ip = bunServer.requestIP(request);
       const loopback = ip !== null && isLoopbackAddress(ip.address);
       const forwarded = cameThroughProxy(request.headers);
@@ -434,7 +439,8 @@ export function createServer(
       }
       if (pathname === "/api/assistant" || pathname.startsWith("/api/assistant/")) {
         if (!assistantService) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
-        return handleAssistantRequest(request, pathname, assistantService);
+        const bearer = bearerMatches(request, bridgeToken) || (access.level === "full" && access.via === "token" && bearerMatches(request, token));
+        return handleAssistantRequest(request, pathname, assistantService, { bearer });
       }
       if (pathname === "/api/machines" || pathname.startsWith("/api/machines/")) {
         if (!machines) return jsonResponse({ error: { code: "bridge_only", message: "Manage PCs on the connection server" } }, 404);

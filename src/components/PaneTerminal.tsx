@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { ArrowLeft, ArrowUp, ChevronRight, ClipboardCheck, Clock, Eye, Quote, SendHorizontal, SquareTerminal, Trash2, TriangleAlert, Unplug, X } from "lucide-react";
@@ -111,6 +111,8 @@ export interface PaneTerminalProps {
   greeting?: { title: string; where: string };
   /** the Assistant's own pane only: the PCs whose agent sessions its composer's `@` tags */
   sessionMachines?: readonly Machine[] | null;
+  /** the Assistant's own pane only: its voice call or working voice tasks, a thin line over the composer */
+  composerBar?: ReactNode;
   /** when the pane's agent was started (ms): a chat this new may have no transcript yet (lib/startingChat.ts) */
   startedAt?: number;
   /** the lens over the pane: the chat transcript, or the live xterm grid (App remembers it per pane) */
@@ -184,6 +186,7 @@ export function PaneTerminal({
   machineName = "",
   greeting,
   sessionMachines = null,
+  composerBar = null,
   startedAt,
   view,
   findRequest = 0,
@@ -1273,6 +1276,7 @@ export function PaneTerminal({
       {/* the composer belongs to the chat lens: in terminal mode the grid itself is
           the input surface (key bar included), so a second box would only duplicate it */}
       {/* a Claude pane's running subagents, over the input: one may keep chatting while they work */}
+      {presented && paneId !== null && chatMounted && !observing && composerBar}
       {presented && paneId !== null && chatMounted && !secretActive && !observing && !ended && agent === "claude" && backgroundTasks > 0 && (
         <AgentStrip paneId={paneId} agent={agent} online={connected} count={backgroundTasks} onOpen={onOpenAgent} />
       )}

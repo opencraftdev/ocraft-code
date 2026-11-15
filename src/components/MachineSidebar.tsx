@@ -4,6 +4,7 @@ import { OWN_UPDATE_OFFER, type Machine, type MachineState, type MachineUpdate, 
 import { copyText } from "../lib/clipboard.ts";
 import { MachineContext } from "../lib/machineContext.tsx";
 import { isAssistantMachine } from "../lib/assistantMode.ts";
+import { AssistantCallDot } from "./AssistantVoice.tsx";
 import { answerMachineSetup, machineRequest } from "../lib/api.ts";
 import { describeProgress } from "../lib/bridgeProgress.ts";
 import { keepDismissed, noticeKey, readDismissed, waitingMachines, writeDismissed } from "../lib/machineNotice.ts";
@@ -280,6 +281,8 @@ function MachineGroup({ machine, headerless = false, ...props }: Props & { machi
         {/* the computer this app's server runs on; on a phone "this PC" read as the phone */}
         {machine.kind === "local" && <span className="machine-kind" title={t("The computer this app runs on")}>{t("Host")}</span>}
         {assistant && <span className="machine-kind is-assistant" title={t("The Assistant VM")}>{t("Assistant")}</span>}
+        {/* an open voice call goes on as audio while the user is elsewhere: its mark on the Assistant's PC */}
+        <AssistantCallDot machineId={machine.id} />
         <span className={`machine-dot is-${machine.action_required === "setup" ? "setup" : machine.state}`} title={machine.action_required === "setup" ? t("Setup needed") : t(STATE_WORD[machine.state])} aria-hidden="true" />
       </div>
       {machine.kind === "ssh" && <button className="sidebar-row-action machine-manage" aria-label={t("Manage {name}", { name: machine.name })} title={t("Manage PC")} aria-expanded={editing} onClick={() => { setEditing(!editing); setConfirmDelete(false); }}><SlidersHorizontal aria-hidden="true" /></button>}

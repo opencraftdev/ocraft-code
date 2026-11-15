@@ -86,6 +86,7 @@ import { readInstalledNotes, readUpdateNotes, type HerdrUpdateStatus, type Insta
 import type { AlertPrefs } from "../../shared/notify-policy.ts";
 import type { TelemetryChange, TelemetryStatus } from "../../shared/telemetry.ts";
 import type { VoiceConfigUpdate, VoiceStatus } from "../../shared/voice.ts";
+import type { VoiceStatus as AssistantVoiceStatus, VoiceSessionRequest, VoiceSessionResponse, VoiceToolRequest, VoiceToolResponse } from "../../shared/assistant-voice.ts";
 import { MAX_ATTACHMENT_BYTES } from "../../shared/attachments.ts";
 import { t } from "./i18n.ts";
 import { chatReadDeadlineMs, withChatReadDeadline } from "./chatReadDeadline.ts";
@@ -1069,6 +1070,17 @@ export async function saveVoiceConfig(update: VoiceConfigUpdate): Promise<VoiceS
   if (!response.ok) throw await errorFrom("/api/voice/config", response);
   return (await response.json()) as VoiceStatus;
 }
+
+/**
+ * The Assistant's voice routes (shared/assistant-voice.ts): on the VM itself its own, elsewhere through
+ * the machine proxy to the VM. The ElevenLabs key never comes back, only a call's short-lived token.
+ */
+export const fetchAssistantVoiceStatus = (machineId: string): Promise<AssistantVoiceStatus> =>
+  getJson(machinePath(machineId, "assistant/voice/status"), { cache: "no-store" });
+export const startAssistantVoiceSession = async (machineId: string, request: VoiceSessionRequest): Promise<VoiceSessionResponse> =>
+  (await sendJson(machinePath(machineId, "assistant/voice/session"), "POST", request)).json() as Promise<VoiceSessionResponse>;
+export const runAssistantVoiceTool = async (machineId: string, request: VoiceToolRequest): Promise<VoiceToolResponse> =>
+  (await sendJson(machinePath(machineId, "assistant/voice/tool"), "POST", request)).json() as Promise<VoiceToolResponse>;
 
 /** A message-bound fork, created once per request_id on the selected computer. */
 export async function forkConversation(request: import("../../shared/protocol.ts").ConversationForkRequest, machineId = "local"): Promise<import("../../shared/protocol.ts").ConversationForkResponse> {
