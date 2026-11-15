@@ -9,7 +9,7 @@ const status = (extra: Partial<VoiceStatus> = {}, pending: VoiceTask[] = [], sta
 const task = (id: string, state: VoiceTask["state"] = "working", result: string | null = null): VoiceTask => ({ id, text: `do ${id}`, sent_at: 1, state, result });
 
 /** a controller over fakes: the SDK, the routes, the clock and the timers, each run by hand */
-function harness(start: { status?: VoiceStatus; result?: { task_id: string; text: string }; sdkError?: unknown } = {}) {
+function harness(start: { status?: VoiceStatus; result?: { task_id: string; text: string }; sdkError?: unknown; heard?: Set<string> } = {}) {
   let now = 1_000;
   const timers = new Map<number, { ms: number; run: () => void }>();
   let timerId = 0;
@@ -40,6 +40,7 @@ function harness(start: { status?: VoiceStatus; result?: { task_id: string; text
     chime: () => { chimes.push(now); },
     now: () => now,
     every: (ms, run) => { const id = ++timerId; timers.set(id, { ms, run }); return () => { timers.delete(id); }; },
+    heard: start.heard ?? new Set<string>(),
   });
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
   return {
@@ -257,5 +258,33 @@ describe("the voice call", () => {
     expect(h.voice.getState().phase).toBe("idle");
     expect(h.voice.getState().machineId).toBe("other-vm");
     expect(h.options).toBeNull(); // the old VM's call never opened
+  });
+  it("offers a result that finished while the page was closed once, and never one already told", async () => {
+    const heard = new Set<string>();
+    const finished = status({}, [task("t8", "done", "Old news."), task("t9", "done", "CI is green.")]);
+    const first = harness({ status: finished, heard });
+    first.voice.bind("raka-devs");
+    await first.voice.refresh();
+    expect(first.voice.getState().result?.id).toBe("t9");
+    expect(first.chimes).toEqual([]); // no sound on a page load
+    first.voice.hear();
+    await first.settle();
+    expect(first.sessions.at(-1)).toEqual({ result_task_id: "t9" });
+
+    const again = harness({ status: finished, heard });
+    again.voice.bind("raka-devs");
+    await again.voice.refresh();
+    expect(again.voice.getState().result).toBeNull(); // only the newest is offered, and it was told
+
+    const newer = status({}, [task("t9", "done", "CI is green."), task("t10", "done", "Merged.")]);
+    const third = harness({ status: newer, heard });
+    third.voice.bind("raka-devs");
+    await third.voice.refresh();
+    expect(third.voice.getState().result?.id).toBe("t10");
+    third.voice.dismissResult();
+    const fourth = harness({ status: newer, heard });
+    fourth.voice.bind("raka-devs");
+    await fourth.voice.refresh();
+    expect(fourth.voice.getState().result).toBeNull();
   });
 });

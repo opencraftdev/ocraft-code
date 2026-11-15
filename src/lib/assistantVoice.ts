@@ -70,6 +70,26 @@ export interface VoiceDeps {
   now(): number;
   /** runs `run` every `ms` until the returned stop is called */
   every(ms: number, run: () => void): () => void;
+  /** the finished tasks this device already told or let go (by id), so a reload offers only a new one */
+  heard?: { has(id: string): boolean; add(id: string): void };
+}
+
+/** a finished task older than this is not offered after a reload */
+export const UNHEARD_MAX_AGE_MS = 24 * 60 * 60_000;
+const HEARD_KEY = "ovis:assistant-voice-heard";
+const HEARD_KEPT = 20;
+
+/** the told results' ids in this device's storage, the newest few; nothing remembered in private mode */
+function storedHeard(): { has(id: string): boolean; add(id: string): void } {
+  const read = (): string[] => {
+    try { const ids = JSON.parse(window.localStorage.getItem(HEARD_KEY) ?? "[]") as unknown; return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : []; } catch { return []; }
+  };
+  return {
+    has: (id) => read().includes(id),
+    add: (id) => {
+      try { window.localStorage.setItem(HEARD_KEY, JSON.stringify([...read().filter((known) => known !== id), id].slice(-HEARD_KEPT))); } catch { /* private mode: not remembered */ }
+    },
+  };
 }
 
 const CAPTIONS_KEPT = 4;
@@ -134,6 +154,7 @@ export function createVoiceController(deps: VoiceDeps) {
     if (text.trim() === "") return;
     set({ captions: [...state.captions, { id: ++captionId, who, text }].slice(-CAPTIONS_KEPT) });
   };
+  const heardIds = deps.heard ?? storedHeard();
   const working = () => state.tasks.filter((task) => task.state === "working" && !task.waiting);
 
   /** polls the status only while a task works */
@@ -145,8 +166,12 @@ export function createVoiceController(deps: VoiceDeps) {
 
   const takeStatus = (status: VoiceStatus) => {
     // a reload finds the tasks still working: their cards come back, so the result still reaches the user
-    const adopted = state.tasks.length === 0 ? status.assistant.pending.filter((task) => task.state === "working").map((task) => ({ ...task, waiting: false })) : state.tasks;
-    set({ status, persona: status.persona || state.persona, tasks: adopted, ...(status.configured ? {} : { trouble: "no_key" as const }) });
+    const fresh = state.tasks.length === 0;
+    const adopted = fresh ? status.assistant.pending.filter((task) => task.state === "working").map((task) => ({ ...task, waiting: false })) : state.tasks;
+    // a result that finished while no page was open: offered once, by the same "tap to hear" note
+    const newest = fresh && state.result === null ? status.assistant.pending.filter((task) => task.state === "done").at(-1) : undefined;
+    const unheard = newest && deps.now() - newest.sent_at < UNHEARD_MAX_AGE_MS && !heardIds.has(newest.id) ? newest : undefined;
+    set({ status, persona: status.persona || state.persona, tasks: adopted, ...(unheard ? { result: unheard } : {}), ...(status.configured ? {} : { trouble: "no_key" as const }) });
     syncPolling();
   };
 
@@ -177,8 +202,8 @@ export function createVoiceController(deps: VoiceDeps) {
   /** a task came to rest: Nara tells it in an open call or on the Voice screen; elsewhere the toast waits for a tap */
   function resultReady(task: VoiceTask): void {
     deps.chime();
-    if (call !== null) { call.sendContextualUpdate(resultCue(task.result ?? "")); heard(); return; }
-    if (voiceShown && state.phase === "idle") { void start(task.id); return; }
+    if (call !== null) { heardIds.add(task.id); call.sendContextualUpdate(resultCue(task.result ?? "")); heard(); return; }
+    if (voiceShown && state.phase === "idle") { heardIds.add(task.id); void start(task.id); return; }
     set({ result: task });
   }
 
@@ -317,9 +342,12 @@ export function createVoiceController(deps: VoiceDeps) {
     hear(): void {
       const task = state.result;
       set({ result: null });
-      if (task !== null) void start(task.id);
+      if (task !== null) { heardIds.add(task.id); void start(task.id); }
     },
-    dismissResult(): void { set({ result: null }); },
+    dismissResult(): void {
+      if (state.result !== null) heardIds.add(state.result.id);
+      set({ result: null });
+    },
     /** the orb's levels, read each frame */
     levels(): { input: number; output: number } {
       return call === null ? { input: 0, output: 0 } : { input: call.getInputVolume(), output: call.getOutputVolume() };
