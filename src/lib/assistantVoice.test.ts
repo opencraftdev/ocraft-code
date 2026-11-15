@@ -86,6 +86,8 @@ describe("the Assistant's voice routes", () => {
     expect(voiceTrouble(new ApiError("u", 503, "offline", "machine_offline"))).toBe("offline");
     expect(voiceTrouble(new ApiError("u", 502, "no", "voice_provider_auth"))).toBe("provider_auth");
     expect(voiceTrouble(new ApiError("u", 502, "no", "voice_provider"))).toBe("provider");
+    expect(voiceTrouble(new ApiError("u", 409, "no key", "voice_not_configured"))).toBe("no_key");
+    expect(voiceTrouble(new ApiError("u", 500, "?", "voice_failed"))).toBe("failed");
     expect(voiceTrouble(Object.assign(new Error("denied"), { name: "NotAllowedError" }))).toBe("mic");
     expect(voiceTrouble(new Error("?"))).toBe("failed");
   });

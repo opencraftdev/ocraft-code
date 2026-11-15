@@ -38,6 +38,8 @@ function snapshot(panes: { id: string; folder: string; title: string; agent: str
 }
 const EXTRA = [{
   id: "raka-devs", herdr_profile_id: "profile-raka-devs", name: "raka-devs", kind: "ssh", target: { destination: `opencraft@${VM_ADDRESS}` }, enabled: true, state: "connected", error: null,
+  // the bridge's herdr, as a connected PC's roster entry carries it (without it the header says herdr offline)
+  herdr: { version: "0.9.0", protocol: 22, terminal_attach: true },
   snapshot: snapshot([{ id: ASSISTANT_PANE, folder: "/home/opencraft/.config/ovis/assistant/agent", title: "Assistant", agent: "claude", status: "idle", workspace: "Assistant" }]),
 }];
 
@@ -63,13 +65,20 @@ async function buildTransport(): Promise<void> {
 /** the VM's voice routes and the SDK, faked in the page; the script steers them through window.__voice */
 const FAKES = `(() => {
   const voice = window.__voice = {
-    status: { configured: true, persona: "Nara", minutes: { used: 3, limit: 15 }, assistant: { state: "idle", pending: [] } },
+    status: { configured: true, persona: "Nara", minutes: null, assistant: { state: "idle", pending: [] } },
     level: 0, call: null, requests: [], ended: 0,
   };
   const realFetch = window.fetch;
   const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   window.fetch = (input, init) => {
     const url = new URL(typeof input === "string" ? input : input.url, location.href);
+    // the demo answers no remote PC: the Assistant's chat is a short conversation of its own
+    if (url.pathname === "/api/machines/raka-devs/pane/conversation") return Promise.resolve(json({ source: "claude-transcript", cursor: null,
+      metadata: { model: "claude-opus-5-5", reasoning_effort: "high" },
+      turns: [
+        { role: "user", ts: new Date(Date.now() - 600000).toISOString(), parts: [{ kind: "text", text: "[voice] Is PR 34 on ovis merged?" }] },
+        { role: "assistant", ts: new Date(Date.now() - 590000).toISOString(), parts: [{ kind: "text", text: "Not yet: CI is still running on PR 34 (2 of 3 checks green). I'll merge it once the last one passes." }] },
+      ] }));
     const match = /\\/assistant\\/voice\\/(status|session|tool)$/.exec(url.pathname);
     if (!match) return realFetch(input, init);
     const body = init && init.body ? JSON.parse(init.body) : null;
@@ -147,12 +156,15 @@ try {
           const voiceButton = page.getByRole("button", { name: "Assistant voice" });
           assert.equal(await chatButton.getAttribute("aria-pressed"), "true");
           assert.equal(await page.locator(".assistant-voice, .assistant-voice-bar").count(), 0);
+          await page.getByText("I'll merge it once the last one passes.").waitFor();
+          assert.equal(await page.getByText("herdr offline").count(), 0);
           await shot("chat");
 
           // Voice: the call screen, and no call until the orb is tapped
           await voiceButton.click();
           await page.locator(".assistant-voice").waitFor();
-          await page.waitForFunction(() => document.querySelector(".assistant-voice-minutes")?.textContent === "12 min left");
+          await page.waitForFunction(() => (window as unknown as { __voice: { requests: { path: string }[] } }).__voice.requests.some((request) => request.path.endsWith("/status")));
+          assert.equal(await page.locator(".assistant-voice-minutes").count(), 0, "no minutes line: ElevenLabs gives no number");
           assert.equal(await page.evaluate(() => (window as unknown as { __voice: { requests: { path: string }[] } }).__voice.requests.filter((request) => request.path.endsWith("/session")).length), 0, "switching never starts a call");
           assert.equal(await page.locator(".assistant-voice-phase").textContent(), "Tap to talk");
           await shot("voice-idle");
@@ -174,6 +186,7 @@ try {
           await page.waitForFunction(() => Number(getComputedStyle(document.querySelector(".assistant-voice-orb")!).getPropertyValue("--level")) > 0.5);
           assert.equal(await page.locator(".assistant-voice-phase").textContent(), "Speaking");
           assert.deepEqual(await page.locator(".assistant-voice-captions li").allTextContents(), ["You Cek CI di ovis, merge kalau hijau ya.", "Nara Oke, aku kasih ke Assistant ya."]);
+          assert.equal(await page.locator(".machine-group.is-assistant .assistant-call-dot[aria-label='On call with Nara']").count(), 1, "the sidebar marks the Assistant's PC while the call is open");
           await shot("voice-speaking");
           const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
           assert.equal(overflow, 0, "no sideways scroll");
@@ -186,6 +199,7 @@ try {
           await page.locator(".assistant-voice").waitFor();
           await page.getByRole("button", { name: "End" }).click();
           await page.locator(".assistant-voice-bar.is-inline").getByText("Assistant working… 1 task").waitFor();
+          assert.equal(await page.locator(".assistant-call-dot").count(), 0, "no mark once the call ended");
 
           // no key on the VM: one line, the guide and a retry
           await steer(`window.__voice.status = { ...window.__voice.status, configured: false }`);
@@ -203,7 +217,7 @@ try {
           if (width === 390) await page.getByRole("button", { name: "Open workspace list" }).click();
           await other.click();
           await page.waitForFunction(() => !document.querySelector(".assistant-view-switch"));
-          await steer(`window.__voice.status = { ...window.__voice.status, assistant: { state: "idle", pending: [{ id: "t1", text: "cek CI di ovis, merge kalau hijau", sent_at: 1, state: "done", result: "CI is green and PR 34 is merged." }] } }`);
+          await steer(`window.__voice.status = { ...window.__voice.status, assistant: { state: "idle", pending: [] } }`);
           await page.locator(".assistant-voice-toast").waitFor({ timeout: 12_000 });
           assert.equal(await page.evaluate(() => (window as unknown as { __voice: { call: unknown } }).__voice.call), null, "Nara never speaks by herself outside the Assistant");
           await shot("toast");

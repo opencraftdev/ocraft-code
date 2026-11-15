@@ -254,6 +254,16 @@
 .assistant-voice-toast-hear:hover { background: var(--bg-hover); }
 .assistant-voice-toast-hear svg { width: 16px; height: 16px; color: var(--accent); }
 
+/* the sidebar's mark on the Assistant's PC while a call is open */
+.assistant-call-dot {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--accent);
+}
+
+.assistant-call-dot svg { width: 14px; height: 14px; }
+
 @media (prefers-reduced-motion: reduce) {
   .assistant-voice-orb { transform: none; transition: none; }
   .assistant-voice-orb-core,

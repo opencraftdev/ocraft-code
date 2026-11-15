@@ -168,3 +168,18 @@ export function AssistantVoiceToast({ onHear }: { onHear: () => void }) {
     </div>
   );
 }
+
+/** The sidebar's mark on the Assistant's PC while a call is open: the call goes on as audio wherever the user is. */
+export function OnCallDot({ shown, persona }: { shown: boolean; persona: string }) {
+  const t = useT();
+  if (!shown) return null;
+  const label = t("On call with {name}", { name: persona });
+  // the Voice switch's glyph, not a second green dot beside the PC's connection dot
+  return <span className="assistant-call-dot" role="img" aria-label={label} title={label}><AudioLines aria-hidden="true" /></span>;
+}
+
+/** OnCallDot for one PC's header: shown on the PC the call's Assistant is on. */
+export function AssistantCallDot({ machineId }: { machineId: string }) {
+  const voice = useAssistantVoice();
+  return <OnCallDot shown={voice.machineId === machineId && voice.phase !== "idle"} persona={voice.persona} />;
+}

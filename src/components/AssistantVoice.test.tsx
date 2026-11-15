@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { isAssistantPane, useAssistantView } from "../lib/assistantMode.ts";
 import { SettingsProvider } from "../lib/settings.ts";
-import { AssistantViewSwitch, AssistantVoiceBar, AssistantVoiceToast } from "./AssistantVoice.tsx";
+import { AssistantCallDot, AssistantViewSwitch, AssistantVoiceBar, AssistantVoiceToast, OnCallDot } from "./AssistantVoice.tsx";
 
 const wrap = (element: ReturnType<typeof createElement>) => renderToStaticMarkup(createElement(SettingsProvider, { children: element }));
 
@@ -32,5 +32,15 @@ describe("the Assistant's Chat | Voice switch", () => {
   it("leaves Chat as it was: no bar over the composer and no toast without a call or a voice task", () => {
     expect(wrap(createElement(AssistantVoiceBar, { onVoice: () => {} }))).toBe("");
     expect(wrap(createElement(AssistantVoiceToast, { onHear: () => {} }))).toBe("");
+  });
+
+  it("marks the Assistant's PC in the sidebar only while a call is open", () => {
+    const dot = wrap(createElement(OnCallDot, { shown: true, persona: "Nara" }));
+    expect(dot).toContain("class=\"assistant-call-dot\"");
+    expect(dot).toContain("role=\"img\"");
+    expect(dot).toContain("aria-label=\"On call with Nara\"");
+    expect(wrap(createElement(OnCallDot, { shown: false, persona: "Nara" }))).toBe("");
+    // no call on this page: no mark on any PC
+    expect(wrap(createElement(AssistantCallDot, { machineId: "raka-devs" }))).toBe("");
   });
 });

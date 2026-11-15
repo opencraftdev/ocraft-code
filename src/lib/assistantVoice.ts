@@ -83,8 +83,8 @@ export function voiceTrouble(error: unknown): VoiceTrouble {
     if (error.code === "machine_offline" || (error.status === 503 && error.code === null)) return "offline";
     if (error.code === "voice_provider_auth") return "provider_auth";
     if (error.code === "voice_provider") return "provider";
-    if (error.code?.includes("not_configured")) return "no_key";
-    if (error.code?.includes("minutes")) return "minutes";
+    if (error.code === "voice_not_configured") return "no_key";
+    // voice_failed, and the tool route's assistant_not_running, assistant_prompt, invalid_text, unknown_tool
     return "failed";
   }
   const name = (error as { name?: unknown } | null)?.name;
