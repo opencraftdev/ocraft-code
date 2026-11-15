@@ -59,7 +59,11 @@ them, and report back. You do not write code yourself.
 - Before a compaction, and in the first turn of a new day, distill the lasting facts from the logs
   into \`PROFILE.md\` and \`projects/\`. Keep PROFILE.md and each project file short: rewrite them
   rather than append. Never delete a log.
+- \`VOICE.md\`: Nara, the voice persona that talks with the user and hands you their spoken asks.
+  You may refine it; the server pushes it to the voice provider at the next call.
 - These are the only files you edit.
+- A message that starts with \`[voice]\` came from a spoken call: answer it as usual, and end with a
+  short plain summary of the outcome, which Nara reads aloud.
 
 ## Rules
 
@@ -156,6 +160,31 @@ I am the Assistant: one long-lived coordinator for the user's herdr sessions on 
 delegate their work to coding agents, watch it, and report back plainly. I do not write code myself.
 I keep this profile so that nothing lasting is lost when my conversation is compacted.
 `;
+/** the voice persona (docs/plan/20261115-1240-assistant-voice.md): its first heading is its name */
+export const VOICE = `# Nara
+
+You are Nara, the voice of the user's Assistant. You talk with the user; the Assistant (Claude, on
+their VM) does the work.
+
+## How you are
+
+- Calm, warm, a little dry humour. A colleague, not a reader.
+- One to three short sentences per turn. Numbers and names over lists.
+- Answer in the language the user just spoke: Indonesian, English, or a natural mix of both when
+  they mix.
+- Never read code, file paths, commands or logs aloud: say "I put the details on screen" instead.
+
+## What you do
+
+- Real work (anything to check, change, run, open or send) goes to the Assistant with
+  \`ask_assistant\`, in one clear sentence of what the user wants. Say you handed it over, then stop.
+- Quick questions you answer yourself: what runs where with \`sessions\`, the latest outcome with
+  \`last_result\`.
+- Anything that changes things outside (merge, push, delete, close a session, send a message to
+  someone): read it back in one sentence and wait for a clear yes before sending it with
+  \`confirmed\` set.
+- When the Assistant finishes, summarize its reply in one to three sentences.
+`;
 const PROFILE = "# Profile\n\nThe user, their preferences, their machines and what each one holds.\n";
 
 /** a day as the profile's logs name it, in this server's time zone */
@@ -183,7 +212,7 @@ export function writeAgentFolder(folder: string, codexAuth?: string, profile = D
   mkdirSync(join(folder, ".codex", "rules"), { recursive: true, mode: 0o700 });
   const own = join(folder, "profiles", profile);
   for (const directory of ["projects", "logs"]) mkdirSync(join(own, directory), { recursive: true, mode: 0o700 });
-  for (const [name, text] of [["SOUL.md", SOUL], ["PROFILE.md", PROFILE]] as const) {
+  for (const [name, text] of [["SOUL.md", SOUL], ["PROFILE.md", PROFILE], ["VOICE.md", VOICE]] as const) {
     if (!existsSync(join(own, name))) writeFileSync(join(own, name), text);
   }
   const notes = join(folder, "notes.md");
@@ -397,6 +426,20 @@ export class AssistantSession {
     this.state = "running";
     await this.watchContext(stored.pane_id, pane.status);
   }
+
+  /** the Assistant's pane and its agent's state now; null when it has no pane, herdr cannot be asked, or no agent runs there */
+  async paneNow(): Promise<{ paneId: string; status: AgentStatus | null } | null> {
+    const paneId = this.stored?.pane_id;
+    if (!paneId) return null;
+    const pane = await this.panes.pane(paneId).catch(() => null);
+    return pane?.agent ? { paneId, status: pane.status } : null;
+  }
+
+  /** types a message into the Assistant's own pane, as the keep-alive does */
+  sendToPane(paneId: string, text: string): Promise<void> { return this.panes.send(paneId, text); }
+
+  /** where its Codex keeps its conversation; undefined for Claude Code */
+  get codexHome(): string | undefined { return this.agent === "codex" ? join(this.folder, ".codex") : undefined; }
 
   /** a pane's agent state as herdr reports it between checks: a notes request worked on and done goes on to /compact */
   heard(paneId: string, status: AgentStatus): void {

@@ -219,7 +219,7 @@ describe("the long-lived Assistant session", () => {
     try {
       writeAgentFolder(folder, undefined, "second");
       const own = join(folder, "profiles", "second");
-      expect(readdirSync(own).sort()).toEqual(["PROFILE.md", "SOUL.md", "logs", "projects"]);
+      expect(readdirSync(own).sort()).toEqual(["PROFILE.md", "SOUL.md", "VOICE.md", "logs", "projects"]);
       writeFileSync(join(own, "SOUL.md"), "refined by the agent");
       writeAgentFolder(folder, undefined, "second");
       expect(readFileSync(join(own, "SOUL.md"), "utf8")).toBe("refined by the agent");

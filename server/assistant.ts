@@ -15,6 +15,7 @@ import { MAX_LABEL_CHARS } from "../shared/labels.ts";
 import { LOCAL_MACHINE, sshHost, type Machine, type MachineEvent } from "../shared/machines.ts";
 import { AssistantGraph } from "./assistant-graph.ts";
 import type { AssistantSession } from "./assistant-sessions.ts";
+import { AssistantVoice, VoiceError, type VoiceOptions } from "./assistant-voice.ts";
 import type { ConversationResponse, HerdrPane } from "../shared/protocol.ts";
 import { isJsonObject, jsonResponse, setRequestRoute } from "./http.ts";
 import { slowMachinePath } from "./machine-api.ts";
@@ -195,10 +196,11 @@ export class Assistant {
 
   readonly session: AssistantSession | null;
   readonly graph: AssistantGraph;
+  readonly voice: AssistantVoice;
   private bridge: MachineBridge;
 
   /** `graphTimer`: the session graph's clock (writes and sweeps), apart from the health checks' `timer` */
-  constructor(stateDir: string, private machines: AssistantMachines, private run: RunScript, options: { intervalMs?: number; timer?: Timer; graphTimer?: Timer; now?: () => number; session?: AssistantSession; bridge?: MachineBridge } = {}) {
+  constructor(stateDir: string, private machines: AssistantMachines, private run: RunScript, options: { intervalMs?: number; timer?: Timer; graphTimer?: Timer; now?: () => number; session?: AssistantSession; bridge?: MachineBridge; voice?: VoiceOptions } = {}) {
     this.session = options.session ?? null;
     this.intervalMs = options.intervalMs ?? HEALTH_INTERVAL_MS;
     this.timer = options.timer ?? defaultTimer;
@@ -216,6 +218,7 @@ export class Assistant {
       opened: (machine, pane) => this.openedHere(machine, pane), bridge: this.bridge, run: this.run, now: this.now,
       ...(options.graphTimer ? { timer: options.graphTimer } : {}),
     });
+    this.voice = new AssistantVoice(stateDir, { session: this.session, graph: this.graph }, options.voice);
     this.unsubscribe = machines.subscribe((event) => {
       if (event.type === "machines") {
         this.sync();
@@ -225,7 +228,10 @@ export class Assistant {
         if (local?.state === "connected" && local.snapshot) void this.session?.check();
       }
       if (event.type === "machine-message" && event.message.type === "pane-status") {
-        if (event.machine_id === LOCAL_MACHINE) this.session?.heard(event.message.pane_id, event.message.agent_status);
+        if (event.machine_id === LOCAL_MACHINE) {
+          this.session?.heard(event.message.pane_id, event.message.agent_status);
+          this.voice.heard(event.message.pane_id, event.message.agent_status);
+        }
         this.graph.heard(event.machine_id, event.message.pane_id, event.message.agent_status);
       }
     });
@@ -484,26 +490,38 @@ export class Assistant {
  * The Assistant-mode routes (/api/assistant/...), for this app's own pages only. Fixes and Restart
  * Assistant run only on a click. A write here must carry a browser page's Origin (index.ts already
  * refused one that is not this app's), so a client that sends none (the ovis-task CLI) is refused.
+ * The voice routes (voice/...) also take a bearer token instead (`bearer`): another Ovis's machine
+ * proxy forwards them with this PC's token and no Origin.
  */
-export async function handleAssistantRequest(request: Request, pathname: string, assistant: Assistant): Promise<Response> {
+export async function handleAssistantRequest(request: Request, pathname: string, assistant: Assistant, options: { bearer?: boolean } = {}): Promise<Response> {
   const parts = pathname.slice("/api/assistant".length).split("/").filter(Boolean);
   const [collection, id, action] = parts;
   const route = parts.length === 0 ? ""
+    : collection === "voice" && parts.length === 2 && ["status", "session", "tool"].includes(id!) ? `/voice/${id}`
     : collection === "machines" && id && (parts.length === 2 || (parts.length === 3 && action === "fix")) ? (action ? "/machines/:id/fix" : "/machines/:id") : null;
   if (route === null) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
   setRequestRoute(`/api/assistant${route}`);
-  const allowed: Record<string, string[]> = { "": ["GET"], "/machines/:id": ["PATCH"], "/machines/:id/fix": ["POST"] };
+  const allowed: Record<string, string[]> = { "": ["GET"], "/machines/:id": ["PATCH"], "/machines/:id/fix": ["POST"], "/voice/status": ["GET"], "/voice/session": ["POST"], "/voice/tool": ["POST"] };
   if (!allowed[route]!.includes(request.method)) return jsonResponse({ error: { code: "method_not_allowed", message: `use ${allowed[route]!.join(" or ")}` } }, 405, { allow: allowed[route]!.join(", ") });
-  if (request.method !== "GET" && !request.headers.get("origin")) return jsonResponse({ error: { code: "browser_only", message: "Use Assistant controls from this app" } }, 403);
+  const voice = route.startsWith("/voice/");
+  if (request.method !== "GET" && !request.headers.get("origin") && !(voice && options.bearer === true)) return jsonResponse({ error: { code: "browser_only", message: "Use Assistant controls from this app" } }, 403);
   const body = request.method === "GET" ? null : await request.json().catch(() => null);
   try {
     switch (`${request.method} ${route}`) {
       case "GET ": return jsonResponse(assistant.state());
+      case "GET /voice/status": return jsonResponse(await assistant.voice.status());
+      case "POST /voice/session": return jsonResponse(await assistant.voice.session(body));
+      case "POST /voice/tool": return jsonResponse(await assistant.voice.tool(body));
       case "PATCH /machines/:id": assistant.setMachine(id!, body); return jsonResponse({ ok: true });
       default: await assistant.fix(id!, body); return jsonResponse(assistant.state());
     }
   } catch (error) {
-    if (error instanceof AssistantError) return jsonResponse({ error: { code: error.code, message: error.message } }, error.status);
+    if (error instanceof AssistantError || error instanceof VoiceError) return jsonResponse({ error: { code: error.code, message: error.message } }, error.status);
+    // a voice failure's words may come from the provider: said without them
+    if (voice) {
+      console.error(`Assistant voice ${route}: ${error instanceof Error ? error.name : "error"}`);
+      return jsonResponse({ error: { code: "voice_failed", message: "The voice request failed" } }, 500);
+    }
     // what SSH said on the machine: a fix that could not run there
     return jsonResponse({ error: { code: "machine_unavailable", message: error instanceof Error ? error.message.slice(0, 500) : String(error) } }, 502);
   }
