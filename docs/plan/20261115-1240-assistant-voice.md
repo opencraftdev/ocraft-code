@@ -178,5 +178,6 @@ plan are to be checked before the first real call (see open questions).
   screen readers (the header already has a "Chat" button). Switching to Chat is the minimize. A
   read-back holds an open call for at most 45 s. The chime is the alert sound's. A small toast of its
   own (the app had none). The "on call" mark in the sidebar is the Voice glyph in the accent colour.
-- Not built: "Answered — tap to hear" after the page was closed (the toast covers an open page).
+- A result that finished while no page was open: the next page load offers the newest one once, with
+  the same "tap to hear" note (no chime); told or dismissed ids are kept per device.
 
