@@ -31,7 +31,7 @@ export class VoiceError extends Error {
 
 /** An ask that changes things outside, which Nara must read back and the user confirm (Indonesian and English). */
 export function riskyAsk(text: string): boolean {
-  return /\b(?:merge|push|delete|hapus|remove|kill|reset|force|deploy|(?:close|tutup)\s+(?:\S+\s+){0,3}(?:session|sesi)|send\s+(?:a\s+)?message|kirim\s+pesan)/i.test(text);
+  return /\b(?:merge|push|delete|hapus|remove|kill|reset|force|deploy|release|publish|rebase|(?:close|tutup)\s+(?:\S+\s+){0,3}(?:session|sesi|pane|workspace|pr|issue)|(?:send|kirim|kirimin|kabari|kabarin|email|message|reply|balas)\s+(?:\S+\s+){0,3}(?:message|pesan|email|chat|wa|whatsapp|slack|dm))\b/i.test(text);
 }
 
 /** voice.json: `tool_ids`/`tools_hash` are the three client tools created for the agent */

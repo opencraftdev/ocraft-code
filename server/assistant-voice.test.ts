@@ -82,10 +82,12 @@ function voiceFixture(options: { key?: boolean; fail?: { status: number }; reply
 describe("risky asks", () => {
   it("are caught in English and Indonesian", () => {
     for (const text of ["merge PR 34", "push the branch", "delete the old worktree", "hapus branch lama", "remove that file", "close the ovis session",
-      "tutup sesi di macbook", "kill the dev server", "reset main", "force it", "deploy to the VM", "send a message to Dion", "kirim pesan ke Trina"]) {
+      "tutup sesi di macbook", "kill the dev server", "reset main", "force it", "deploy to the VM", "send a message to Dion", "kirim pesan ke Trina",
+      "send Dion a message", "kabarin Depras lewat wa", "tutup PR 12", "close the PR", "release v1.2", "message Dion on slack"]) {
       expect({ text, risky: riskyAsk(text) }).toEqual({ text, risky: true });
     }
-    for (const text of ["cek CI di ovis", "what's running on the mac?", "summarize PR 34", "buka sesi baru di ovis", "jalankan test"]) {
+    for (const text of ["cek CI di ovis", "what's running on the mac?", "summarize PR 34", "buka sesi baru di ovis", "jalankan test",
+      "summarize the message from Dion", "apa isi pesan terakhir?", "pushover notifications docs"]) {
       expect({ text, risky: riskyAsk(text) }).toEqual({ text, risky: false });
     }
   });
