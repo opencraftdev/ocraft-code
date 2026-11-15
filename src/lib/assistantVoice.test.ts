@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import { VOICE_FOLLOW_UP_SECONDS, VOICE_SILENCE_SECONDS, VOICE_TOOLS, type VoiceSessionRequest, type VoiceStatus, type VoiceTask, type VoiceToolRequest, type VoiceToolResponse } from "../../shared/assistant-voice.ts";
 import { ApiError, fetchAssistantVoiceStatus, runAssistantVoiceTool, startAssistantVoiceSession } from "./api.ts";
-import { createVoiceController, POLL_MS, toolRequest, voiceTrouble, type VoiceCall } from "./assistantVoice.ts";
+import { createVoiceController, POLL_MS, READ_BACK_HOLD_MS, toolRequest, voiceTrouble, type VoiceCall } from "./assistantVoice.ts";
 
 const status = (extra: Partial<VoiceStatus> = {}, pending: VoiceTask[] = [], state: VoiceStatus["assistant"]["state"] = "idle"): VoiceStatus =>
   ({ configured: true, persona: "Nara", minutes: { used: 3, limit: 15 }, assistant: { state, pending }, ...extra });
@@ -218,5 +218,44 @@ describe("the voice call", () => {
     expect(h.ended).toBe(0);
     await h.advance(4000);
     expect(h.ended).toBe(1);
+  });
+  it("tells a result that finishes during the call, with its reply from the status", async () => {
+    const h = harness();
+    h.voice.bind("raka-devs");
+    await h.voice.start();
+    h.toolAnswer = () => ({ result: "Sent", task: task("t1") });
+    await h.options.clientTools.ask_assistant({ text: "check CI" });
+    h.input = 0.5; // the user keeps talking, so the call stays open
+    h.status = status({}, [task("t1", "done", "CI is green, merged.")]);
+    await h.advance(POLL_MS);
+    expect(h.chimes.length).toBe(1);
+    expect(h.updates.at(-1)).toContain("CI is green, merged.");
+    expect(h.ended).toBe(0);
+  });
+
+  it("lets a read-back the user never answered hold the call only for a while", async () => {
+    const h = harness();
+    h.voice.bind("local");
+    await h.voice.start();
+    h.toolAnswer = () => ({ result: "Read it back and ask", needs_confirmation: true });
+    await h.options.clientTools.ask_assistant({ text: "merge PR 34" });
+    await h.advance(READ_BACK_HOLD_MS - 1000);
+    expect(h.ended).toBe(0);
+    await h.advance(1000 + VOICE_SILENCE_SECONDS * 1000 + 500);
+    expect(h.ended).toBe(1);
+    expect(h.voice.getState().tasks).toEqual([]);
+  });
+
+  it("drops a call still connecting when the Assistant pane moves to another PC", async () => {
+    const h = harness();
+    h.voice.bind("raka-devs");
+    const starting = h.voice.start();
+    expect(h.voice.getState().phase).toBe("connecting");
+    h.voice.bind("other-vm");
+    await starting;
+    await h.settle();
+    expect(h.voice.getState().phase).toBe("idle");
+    expect(h.voice.getState().machineId).toBe("other-vm");
+    expect(h.options).toBeNull(); // the old VM's call never opened
   });
 });

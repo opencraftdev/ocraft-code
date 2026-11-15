@@ -83,11 +83,12 @@ describe("risky asks", () => {
   it("are caught in English and Indonesian", () => {
     for (const text of ["merge PR 34", "push the branch", "delete the old worktree", "hapus branch lama", "remove that file", "close the ovis session",
       "tutup sesi di macbook", "kill the dev server", "reset main", "force it", "deploy to the VM", "send a message to Dion", "kirim pesan ke Trina",
-      "send Dion a message", "kabarin Depras lewat wa", "tutup PR 12", "close the PR", "release v1.2", "message Dion on slack"]) {
+      "send Dion a message", "kabarin Depras lewat wa", "tutup PR 12", "close the PR", "release v1.2", "message Dion on slack",
+      "email Budi the report", "kirim ke Budi laporannya", "gabungkan PR 34", "squash the commits", "approve and land it", "drop the old branch"]) {
       expect({ text, risky: riskyAsk(text) }).toEqual({ text, risky: true });
     }
     for (const text of ["cek CI di ovis", "what's running on the mac?", "summarize PR 34", "buka sesi baru di ovis", "jalankan test",
-      "summarize the message from Dion", "apa isi pesan terakhir?", "pushover notifications docs"]) {
+      "summarize the message from Dion", "apa isi pesan terakhir?", "pushover notifications docs", "summarize the email from Budi", "landing page copy"]) {
       expect({ text, risky: riskyAsk(text) }).toEqual({ text, risky: false });
     }
   });
@@ -149,6 +150,47 @@ describe("the ElevenLabs agent", () => {
   });
 });
 
+describe("the ElevenLabs agent, when things go wrong", () => {
+  it("creates only the missing tools after a failure part way, and makes the agent again once ElevenLabs lost it", async () => {
+    const { voice, api, stateDir } = voiceFixture();
+    const real = api.fetch;
+    let toolCalls = 0;
+    let agentGone = false;
+    const flaky = (async (input: string | URL | Request, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/v1/convai/tools" && ++toolCalls === 2) return new Response("{}", { status: 500 });
+      if (agentGone && path === "/v1/convai/conversation/token") { agentGone = false; return new Response("{}", { status: 404 }); }
+      return real(input, init);
+    }) as typeof fetch;
+    (voice as unknown as { fetch: typeof fetch }).fetch = flaky;
+    await expect(voice.session({})).rejects.toMatchObject({ code: "voice_provider" });
+    await voice.session({});
+    const created = api.calls.filter((call) => call.path === "/v1/convai/tools").length;
+    expect(created).toBe(3);
+    agentGone = true;
+    const again = await voice.session({});
+    expect(again.conversation_token).toBe("conv_token");
+    expect(api.calls.filter((call) => call.path === "/v1/convai/agents/create").length).toBe(2);
+    expect(JSON.parse(readFileSync(join(stateDir, "assistant", "voice.json"), "utf8"))).toMatchObject({ tool_ids: ["tool_1", "tool_2", "tool_3"], agent_id: "agent_1" });
+  });
+
+  it("drops a damaged task line instead of failing every status", async () => {
+    const { stateDir, folder } = voiceFixture();
+    writeFileSync(join(stateDir, "assistant", "voice-tasks.json"), JSON.stringify([null, { id: "t1" }, { id: "t2", text: "cek CI", sent_at: 1, state: "working", result: null }]));
+    const { session } = fakeSession(folder, { now: "idle" });
+    const voice = new AssistantVoice(stateDir, { session, graph: { build: () => GRAPH } }, { fetch: fakeElevenLabs().fetch, now: () => 2 });
+    expect((await voice.status()).assistant.pending.map((task) => task.id)).toEqual(["t2"]);
+  });
+
+  it("never lets a key quoted past the cut reach an error", async () => {
+    const { voice } = voiceFixture();
+    (voice as unknown as { fetch: typeof fetch }).fetch = (async () => new Response(`${"x".repeat(290)} ${KEY}`, { status: 500 })) as unknown as typeof fetch;
+    const error = await voice.session({}).then(() => null, (caught: unknown) => caught as Error);
+    expect(error?.message).toContain("ElevenLabs answered 500");
+    expect(error?.message).not.toContain(KEY.slice(0, 8));
+  });
+});
+
 describe("the persona's tools", () => {
   it("sends one marked message to the Assistant's pane, refuses a risky ask until confirmed, and logs each send", async () => {
     const { voice, sent, folder } = voiceFixture();
@@ -188,8 +230,10 @@ describe("the persona's tools", () => {
     voice.heard("w1:p1", "working");
     voice.heard("w1:p1", "done");
     const deadline = Date.now() + 2000;
-    while ((await voice.status()).assistant.pending.length > 0 && Date.now() < deadline) await Bun.sleep(5);
+    while ((await voice.status()).assistant.pending.some((pending) => pending.state === "working") && Date.now() < deadline) await Bun.sleep(5);
     expect((await voice.tool({ tool: "last_result" })).result).toBe("CI is green and PR 34 is merged.");
+    // a page polling during a call reads the finished task's reply from the status itself
+    expect((await voice.status()).assistant.pending).toEqual([{ ...task, state: "done", result: "CI is green and PR 34 is merged." }]);
     const stored = JSON.parse(readFileSync(join(stateDir, "assistant", "voice-tasks.json"), "utf8"));
     expect(stored).toEqual([{ ...task, state: "done", result: "CI is green and PR 34 is merged." }]);
     expect(statSync(join(stateDir, "assistant", "voice-tasks.json")).mode & 0o777).toBe(0o600);

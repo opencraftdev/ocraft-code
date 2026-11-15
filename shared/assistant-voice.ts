@@ -25,7 +25,8 @@ export interface VoiceStatus {
   persona: string;
   /** agent minutes this month, from the ElevenLabs API; null when it did not answer */
   minutes: { used: number; limit: number } | null;
-  /** the Assistant's pane state, so the page knows when a voice request is done */
+  /** the Assistant's pane state, so the page knows when a voice request is done; `pending`: the tasks
+   * still working, and the newest few finished ones with their replies */
   assistant: { state: "idle" | "working" | "blocked" | "done" | "unknown"; pending: VoiceTask[] };
 }
 

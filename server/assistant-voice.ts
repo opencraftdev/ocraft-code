@@ -26,18 +26,26 @@ const UNHEARD_DONE_MS = 30_000;
 const AT_REST: readonly (AgentStatus | null)[] = ["idle", "done"];
 
 export class VoiceError extends Error {
-  constructor(readonly code: string, message: string, readonly status: number) { super(message); }
+  /** `upstream`: the HTTP status ElevenLabs answered, when it answered one */
+  constructor(readonly code: string, message: string, readonly status: number, readonly upstream?: number) { super(message); }
 }
 
 /** An ask that changes things outside, which Nara must read back and the user confirm (Indonesian and English). */
 export function riskyAsk(text: string): boolean {
-  return /\b(?:merge|push|delete|hapus|remove|kill|reset|force|deploy|release|publish|rebase|(?:close|tutup)\s+(?:\S+\s+){0,3}(?:session|sesi|pane|workspace|pr|issue)|(?:send|kirim|kirimin|kabari|kabarin|email|message|reply|balas)\s+(?:\S+\s+){0,3}(?:message|pesan|email|chat|wa|whatsapp|slack|dm))\b/i.test(text);
+  return /^\s*email\b|\b(?:merge|gabung\w*|squash|approve|land\s+(?:it|the\s+pr|pr)|drop\s+(?:\S+\s+){0,2}(?:branch|table|database|db|stash|pr)|kirim\s+(?:\S+\s+){0,2}ke|push|delete|hapus|remove|kill|reset|force|deploy|release|publish|rebase|(?:close|tutup)\s+(?:\S+\s+){0,3}(?:session|sesi|pane|workspace|pr|issue)|(?:send|kirim|kirimin|kabari|kabarin|email|message|reply|balas)\s+(?:\S+\s+){0,3}(?:message|pesan|email|chat|wa|whatsapp|slack|dm))\b/i.test(text);
 }
 
+/** the newest tasks stay in the status after they finish, so a page polling for one reads its reply */
+const RECENT_DONE = 5;
+
+const validTask = (value: unknown): value is VoiceTask => isJsonObject(value)
+  && typeof value.id === "string" && typeof value.text === "string" && typeof value.sent_at === "number"
+  && (value.state === "working" || value.state === "done") && (value.result === null || typeof value.result === "string");
+
 /** voice.json: `tool_ids`/`tools_hash` are the three client tools created for the agent */
-interface VoiceConfig { api_key?: string; agent_id?: string; voice_id?: string; synced_hash?: string; tool_ids?: string[]; tools_hash?: string }
+interface VoiceConfig { api_key?: string; agent_id?: string; voice_id?: string; synced_hash?: string; tool_ids?: string[]; tools_hash?: string; tools_partial?: string }
 const validConfig = (value: unknown): value is VoiceConfig => isJsonObject(value)
-  && ["api_key", "agent_id", "voice_id", "synced_hash", "tools_hash"].every((key) => value[key] === undefined || typeof value[key] === "string")
+  && ["api_key", "agent_id", "voice_id", "synced_hash", "tools_hash", "tools_partial"].every((key) => value[key] === undefined || typeof value[key] === "string")
   && (value.tool_ids === undefined || (Array.isArray(value.tool_ids) && value.tool_ids.every((id) => typeof id === "string")));
 
 /**
@@ -142,7 +150,8 @@ export class AssistantVoice {
     this.conversation = options.conversation ?? ((paneId, codexHome) => paneConversation(paneId, codexHome));
     this.now = options.now ?? Date.now;
     const read = readStateDocument(this.tasksPath);
-    this.tasks = read.kind === "json" && Array.isArray(read.value) ? (read.value as VoiceTask[]) : [];
+    // a damaged entry is dropped, so one bad line never stops every status
+    this.tasks = read.kind === "json" && Array.isArray(read.value) ? read.value.filter(validTask) : [];
   }
 
   private config(): VoiceConfig {
@@ -174,8 +183,9 @@ export class AssistantVoice {
       throw new VoiceError("voice_provider", scrub(`Could not reach ElevenLabs: ${error instanceof Error ? error.message : String(error)}`, key), 502);
     }
     if (!response.ok) {
-      const detail = (await response.text().catch(() => "")).trim().slice(0, 300);
-      throw new VoiceError(response.status === 401 || response.status === 403 ? "voice_provider_auth" : "voice_provider", scrub(`ElevenLabs answered ${response.status}${detail ? `: ${detail}` : ""}`, key), 502);
+      // scrubbed whole, then cut: a cut first could leave part of a quoted key unmatched
+      const detail = scrub((await response.text().catch(() => "")).trim(), key).slice(0, 300);
+      throw new VoiceError(response.status === 401 || response.status === 403 ? "voice_provider_auth" : "voice_provider", `ElevenLabs answered ${response.status}${detail ? `: ${detail}` : ""}`, 502, response.status);
     }
     const answer = await response.json().catch(() => null);
     return isJsonObject(answer) ? answer : {};
@@ -194,13 +204,16 @@ export class AssistantVoice {
     const toolsHash = hash(TOOL_CONFIGS);
     if (!config.tool_ids || config.tools_hash !== toolsHash) {
       // ponytail: tools of an earlier tool config are left on the account, unused; delete them if they ever pile up
-      const ids: string[] = [];
-      for (const tool_config of TOOL_CONFIGS) {
+      // each id is kept as it is made (`tools_partial`), so a failure part way creates only the rest next time
+      const ids: string[] = config.tools_partial === toolsHash ? [...(config.tool_ids ?? [])] : [];
+      for (const tool_config of TOOL_CONFIGS.slice(ids.length)) {
         const created = await this.call("/v1/convai/tools", "POST", { tool_config });
         if (typeof created.id !== "string") throw new VoiceError("voice_provider", "ElevenLabs created a tool without an id", 502);
         ids.push(created.id);
+        save({ ...this.config(), tool_ids: [...ids], tools_partial: toolsHash });
       }
-      save({ ...this.config(), tool_ids: ids, tools_hash: toolsHash });
+      const { tools_partial: _done, ...rest } = this.config();
+      save({ ...rest, tool_ids: ids, tools_hash: toolsHash });
     }
     const body = agentBody(this.voice(), config.voice_id || DEFAULT_VOICE_ID, config.tool_ids!);
     const synced = hash(body);
@@ -209,10 +222,23 @@ export class AssistantVoice {
       if (typeof created.agent_id !== "string") throw new VoiceError("voice_provider", "ElevenLabs created an agent without an id", 502);
       save({ ...this.config(), agent_id: created.agent_id, synced_hash: synced });
     } else if (config.synced_hash !== synced) {
-      await this.call(`/v1/convai/agents/${encodeURIComponent(config.agent_id)}`, "PATCH", body);
+      try {
+        await this.call(`/v1/convai/agents/${encodeURIComponent(config.agent_id)}`, "PATCH", body);
+      } catch (error) {
+        // the agent was deleted on ElevenLabs: made again rather than failing for good
+        if (!(error instanceof VoiceError && error.upstream === 404)) throw error;
+        this.forgetAgent();
+        return this.syncNow();
+      }
       save({ ...this.config(), synced_hash: synced });
     }
     return config.agent_id!;
+  }
+
+  /** the stored agent is gone on ElevenLabs: the next sync creates a new one */
+  private forgetAgent(): void {
+    const { agent_id: _agent, synced_hash: _hash, ...rest } = this.config();
+    writePrivateState(this.configPath, rest);
   }
 
   private async paneState(): Promise<{ paneId: string; status: AgentStatus | null } | null> {
@@ -231,7 +257,7 @@ export class AssistantVoice {
       // ElevenLabs' GET /v1/user/subscription (https://elevenlabs.io/docs/api-reference/user/subscription/get)
       // counts characters (credits), not agent minutes: no clean minutes number, so none is invented
       minutes: null,
-      assistant: { state: (["idle", "working", "blocked", "done"] as const).find((state) => state === pane?.status) ?? "unknown", pending: this.tasks.filter((task) => task.state === "working") },
+      assistant: { state: (["idle", "working", "blocked", "done"] as const).find((state) => state === pane?.status) ?? "unknown", pending: this.tasks.filter((task, index) => task.state === "working" || index >= this.tasks.length - RECENT_DONE) },
     };
   }
 
@@ -265,8 +291,19 @@ export class AssistantVoice {
 
   async session(body: unknown): Promise<VoiceSessionResponse> {
     if (!this.key()) throw new VoiceError("voice_not_configured", "Voice needs an ElevenLabs key on the Assistant VM", 409);
-    const agentId = await this.sync();
-    const token = (await this.call(`/v1/convai/conversation/token?agent_id=${encodeURIComponent(agentId)}`, "GET")).token;
+    let agentId = await this.sync();
+    const tokenFor = (id: string) => this.call(`/v1/convai/conversation/token?agent_id=${encodeURIComponent(id)}`, "GET");
+    let answer: Record<string, unknown>;
+    try {
+      answer = await tokenFor(agentId);
+    } catch (error) {
+      // the agent was deleted on ElevenLabs: made again once
+      if (!(error instanceof VoiceError && error.upstream === 404)) throw error;
+      this.forgetAgent();
+      agentId = await this.sync();
+      answer = await tokenFor(agentId);
+    }
+    const token = answer.token;
     if (typeof token !== "string") throw new VoiceError("voice_provider", "ElevenLabs gave no conversation token", 502);
     const askedTask = isJsonObject(body) && typeof body.result_task_id === "string" ? body.result_task_id : undefined;
     const task = askedTask === undefined ? undefined : this.tasks.find((candidate) => candidate.id === askedTask && candidate.state === "done");

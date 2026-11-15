@@ -1,6 +1,6 @@
 # Assistant: voice conversation (speech to speech, with a persona)
 
-Status: approved
+Status: done
 Created: 2026-11-15 12:40
 Follows: [Assistant graph and profile](20261112-1900-assistant-graph-and-profile.md),
 [Assistant delegation](20261112-1622-assistant-delegation.md)
@@ -158,3 +158,25 @@ plan are to be checked before the first real call (see open questions).
 - Privacy: check whether the ElevenLabs Free plan keeps or trains on conversations, and turn
   conversation storage off in the agent if the plan allows it. OK to proceed if it cannot be turned
   off on Free?
+
+## As built
+
+- Server: `server/assistant-voice.ts`. The three client tools are created with `POST /v1/convai/tools`
+  and attached by `tool_ids` (the agent body's inline `prompt.tools` is deprecated); the agent uses
+  `gemini-2.5-flash`, `eleven_flash_v2_5`, first message "Ya, ada apa?" (an English preset "Yes,
+  what's up?") and the `language_detection` system tool. voice.json also keeps `tool_ids`,
+  `tools_hash` and, while tools are being made, `tools_partial`. An agent ElevenLabs no longer has
+  (404) is made again. `ask_assistant` sends through the session's own send path (herdr
+  `agent.prompt`), refuses a pane waiting on a prompt, and gates risky asks by a keyword check
+  (English and Indonesian); the persona sets `confirmed`, so the gate is a backstop, not a guard
+  against a persona that was talked into it.
+- Minutes: ElevenLabs' API reports characters, not agent minutes, so `status.minutes` is null and
+  the call screen shows no minutes line. The ElevenLabs dashboard shows them.
+- `status.assistant.pending` lists working tasks and the newest finished ones with their replies.
+  Several tasks pending at once all finish with the same latest reply.
+- Client: the switch's buttons read Chat / Voice, named "Assistant chat" / "Assistant voice" for
+  screen readers (the header already has a "Chat" button). Switching to Chat is the minimize. A
+  read-back holds an open call for at most 45 s. The chime is the alert sound's. A small toast of its
+  own (the app had none). The "on call" mark in the sidebar is the Voice glyph in the accent colour.
+- Not built: "Answered — tap to hear" after the page was closed (the toast covers an open page).
+

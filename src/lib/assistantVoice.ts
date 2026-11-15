@@ -75,6 +75,8 @@ export interface VoiceDeps {
 const CAPTIONS_KEPT = 4;
 export const POLL_MS = 5000;
 const TICK_MS = 500;
+/** how long a read-back waiting for the user's yes keeps an open call from ending on silence */
+export const READ_BACK_HOLD_MS = 45_000;
 /** an input level above this is someone speaking, not the room */
 const SPEECH_LEVEL = 0.08;
 
@@ -193,9 +195,8 @@ export function createVoiceController(deps: VoiceDeps) {
     if (ending !== null) void ending.endSession().catch(() => {});
   }
 
-  async function runTool(tool: VoiceToolName, parameters: unknown): Promise<string> {
-    const machineId = state.machineId;
-    if (machineId === null) return "The Assistant is not reachable from this page.";
+  async function runTool(tool: VoiceToolName, parameters: unknown, machineId: string): Promise<string> {
+    if (machineId !== state.machineId) return "The Assistant is not reachable from this page.";
     const request = toolRequest(tool, parameters);
     toolsRunning += 1;
     if (state.phase === "listening") set({ phase: "thinking" });
@@ -226,7 +227,8 @@ export function createVoiceController(deps: VoiceDeps) {
   function tick(): void {
     if (call === null) return;
     if (state.phase === "speaking" || call.getInputVolume() > SPEECH_LEVEL || call.getOutputVolume() > SPEECH_LEVEL) heard();
-    if (toolsRunning > 0 || state.tasks.some((task) => task.waiting)) { heard(); return; }
+    // a read-back holds the call open only for a while: a "no" that leads to no tool call must not keep it forever
+    if (toolsRunning > 0 || state.tasks.some((task) => task.waiting && deps.now() - task.sent_at < READ_BACK_HOLD_MS)) { heard(); return; }
     if (deps.now() - lastHeard >= silenceLimit * 1000) finish(null);
   }
 
@@ -255,7 +257,7 @@ export function createVoiceController(deps: VoiceDeps) {
       if (mine !== attempt) return;
       silenceLimit = session.result ? VOICE_FOLLOW_UP_SECONDS : VOICE_SILENCE_SECONDS;
       heard();
-      const clientTools = Object.fromEntries(VOICE_TOOLS.map((tool) => [tool, (parameters: unknown) => runTool(tool, parameters)]));
+      const clientTools = Object.fromEntries(VOICE_TOOLS.map((tool) => [tool, (parameters: unknown) => runTool(tool, parameters, machineId)]));
       const opened = await sdk.Conversation.startSession({
         conversationToken: session.conversation_token,
         connectionType: "webrtc",
@@ -295,7 +297,7 @@ export function createVoiceController(deps: VoiceDeps) {
     /** the Assistant pane's PC: its routes, its tasks */
     bind(machineId: string | null): void {
       if (machineId === state.machineId) return;
-      if (call !== null) finish(null);
+      if (state.phase !== "idle") finish(null);
       set({ machineId, status: null, tasks: [], captions: [], trouble: null, result: null });
       syncPolling();
       // the minutes, the persona, and the tasks a reload left working
