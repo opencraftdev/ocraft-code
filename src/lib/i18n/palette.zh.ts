@@ -9,6 +9,8 @@ export const PALETTE_ZH: Record<string, string> = {
   "Switch to terminal": "切换到终端",
   "Switch to chat": "切换到聊天",
   "Toggle theme": "切换主题",
+  "Switch to the terminals layout": "切换到终端布局",
+  "Switch to the main layout": "切换到主布局",
   "Search panes and actions…": "搜索窗格和操作…",
   "Close command palette": "关闭命令面板",
   "Filter panes by status": "按状态筛选窗格",

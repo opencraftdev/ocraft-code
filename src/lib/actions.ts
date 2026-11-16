@@ -63,6 +63,8 @@ export interface AppActions {
   toggleSidebar: () => void;
   /** the sidebar's Filter field, focused, with the drawer or the sidebar opened first: drawn even where Settings → Appearance leaves it out */
   openSidebarFilter: () => void;
+  /** herdr-app's layout.switch: the next layout preset (main, terminals), remembered in Settings */
+  switchLayout: () => void;
   /** flips dark/light (a `system` setting becomes the opposite of the resolved theme) */
   toggleTheme: () => void;
   /** Sign out of token/device authentication; null for automatic local/Tailscale access. */

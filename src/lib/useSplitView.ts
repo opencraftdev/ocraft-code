@@ -2,7 +2,7 @@ import { type Dispatch, type DragEvent, type RefObject, type SetStateAction, use
 import type { HerdrPane } from "../../shared/protocol.ts";
 import { paneStorageId, type Machine } from "../../shared/machines.ts";
 import { fetchSession, splitPane as splitPaneApi, type HealthInfo } from "./api.ts";
-import { dockPane, draggedPane, dropSide, otherSlot, PANE_DRAG_TYPE, sameTarget, storedSplit, storeSplit, type SplitSide, type SplitSlot, type SplitState, type SplitTarget } from "./split.ts";
+import { dockPane, draggedPane, dropSide, otherSlot, PANE_DRAG_TYPE, sameTarget, storedSplit, storeSplit, swapZone, type SplitSide, type SplitSlot, type SplitState, type SplitTarget } from "./split.ts";
 import { paneDrag, type PaneDrag } from "./paneDrag.ts";
 
 const SELECTION_KEY = "ovis:selection";
@@ -268,13 +268,16 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
   // dragenter too: a drop hit-tests once more, and when the node under the pointer was replaced since
   // the last dragover (xterm redraws its rows, a transcript renders again) the new node gets a
   // dragenter instead. Chromium refuses a drop whose last drag event nobody accepted.
-  /** The title of another pane in the dragged pane's own tab, under the pointer: dropped there, the
-   *  two trade places (herdr's pane.swap) instead of opening the pane in a half. */
-  const swapHead = (target: EventTarget | null): HTMLElement | null => {
+  /** Another pane of the dragged pane's own tab, its title or its middle (swapZone) under the pointer:
+   *  dropped there, the two trade places (herdr's pane.swap) instead of opening the pane in a half.
+   *  Answers that pane's title, which carries the mark. */
+  const swapHead = (target: EventTarget | null, x: number, y: number): HTMLElement | null => {
     const dragged = draggedPaneRef.current;
-    const head = target instanceof Element ? target.closest<HTMLElement>(".pane-frame-head") : null;
-    const slot = head?.closest<HTMLElement>(".pane-slot");
-    const paneId = head?.parentElement?.getAttribute("data-layout-pane");
+    const frame = target instanceof Element ? target.closest<HTMLElement>(".pane-frame") : null;
+    const head = frame ? [...frame.children].find((child): child is HTMLElement => child.classList.contains("pane-frame-head")) ?? null : null;
+    if (!frame || !head || (!head.contains(target as Node) && !swapZone(x, y, frame.getBoundingClientRect()))) return null;
+    const slot = frame.closest<HTMLElement>(".pane-slot");
+    const paneId = frame.getAttribute("data-layout-pane");
     if (!dragged || !head || !slot || !paneId || paneId === dragged.paneId || slot.dataset.machine !== dragged.machineId) return null;
     // the dragged pane drawn in the same canvas is in the same tab, the only place herdr swaps in
     return slot.querySelector(`.pane-frame:not(.is-hidden)[data-layout-pane="${CSS.escape(dragged.paneId)}"]`) ? head : null;
@@ -283,7 +286,7 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
     if (!splitDragOn || !event.dataTransfer.types.includes(PANE_DRAG_TYPE)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
-    const head = swapHead(event.target);
+    const head = swapHead(event.target, event.clientX, event.clientY);
     markSwap(head);
     setPaneDragging(head === null);
     if (head) { showDropTarget(null); return; }
@@ -305,7 +308,7 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
     event.preventDefault();
     event.stopPropagation();
     const dragged = draggedPane(event.dataTransfer.getData(PANE_DRAG_TYPE));
-    const target = swapHead(event.target)?.parentElement?.getAttribute("data-layout-pane");
+    const target = swapHead(event.target, event.clientX, event.clientY)?.parentElement?.getAttribute("data-layout-pane");
     if (dragged && target) {
       clearDropPreview();
       swapPanes(dragged, target);

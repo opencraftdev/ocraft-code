@@ -9,6 +9,8 @@ export const PALETTE_JA: Record<string, string> = {
   "Switch to terminal": "ターミナルに切り替え",
   "Switch to chat": "チャットに切り替え",
   "Toggle theme": "テーマを切り替え",
+  "Switch to the terminals layout": "ターミナルレイアウトに切り替え",
+  "Switch to the main layout": "メインレイアウトに切り替え",
   "Search panes and actions…": "ペインと操作を検索…",
   "Close command palette": "コマンドパレットを閉じる",
   "Filter panes by status": "状態でペインを絞り込む",

@@ -110,8 +110,18 @@ To see two panes side by side, drag a workspace row, an **Agents** row, a tab, a
 a half's bar onto the left or right half of the pane area. A pick in the sidebar or the **Agents**
 list then opens in the active half only, and the focus stays there. Both halves can show the same
 tab, and you type in whichever half is active; the other half shows that tab at the active half's size.
-To rearrange a split tab instead, drop a pane's title on another pane's title in the same tab: the
-two panes trade places.
+To rearrange a split tab instead, drop a pane's title on another pane's title, or on the middle of
+another pane, in the same tab: the two panes trade places. herdr 0.9 moves a pane only to another
+tab, so a drop near another pane's edge does not place it beside that pane.
+
+In the terminal view a wider screen draws the tab's panes as herdr splits them, with a draggable
+boundary between each; the chat and each half of a side-by-side view show one pane. Each split
+pane has a header, as in herdr's own app: its agent's mark, its name, its folder and its state,
+and, while the pointer is over it, **Split right**, **Split down**, **Zoom pane** and **Close
+pane**, with a grip at its top centre to drag it. **Switch to the terminals layout** in the
+command palette gives the panes the whole window as framed cards and folds the sidebar away
+(herdr's `terminals` layout); **Switch to the main layout** brings the sidebar back. This browser
+remembers the choice.
 
 
 **3. Take it with you.** Scan the installer's QR code with a phone signed in to the same Tailscale account, then install the app from the browser. See [On your phone](#on-your-phone).
