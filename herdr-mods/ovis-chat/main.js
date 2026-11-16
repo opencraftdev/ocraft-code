@@ -10,7 +10,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, TextView, TextareaState, Textarea, ScrollHandle } from "gpui-base";
 import { WebSocket } from "websocket";
 import { props, theme, settings, checking, run } from "herdr";
-import { target, apiUrl, wsUrl, Transcript, chatRows, modelText, contextText, applyFrame, promptAnswer } from "./chat.js";
+import { target, apiUrl, wsUrl, Transcript, chatRows, modelText, applyFrame, promptAnswer } from "./chat.js";
 import { composerMessage, composerPayload, composerDelivery, composerStatusWord, composerSendShown, submitNote } from "./lib.js";
 
 /** Rows shown per step: the newest ones first, "Show earlier" adds this many. */
@@ -359,27 +359,29 @@ export default class OvisChat extends View {
     const showSend = composerSendShown({ working, text });
     const canSend = !this.t.readOnly && this.connected && !this.sending && text.trim().length > 0;
     const button = showSend
-      ? div().id("send").size(30).rounded_full().flex().items_center().justify_center()
+      ? div().id("send").size(34).rounded_full().flex().items_center().justify_center()
         .bg(canSend ? t.foreground : t.raised).text_color(canSend ? t.background : t.dim)
         .when(canSend, (el) => el.cursor_pointer().on_click((_e, cx) => this.send(cx)))
         .tooltip(this.sending ? "Sending…" : working ? "Send for the next turn" : "Send")
         .child(svg(icon("arrow-up")).size(16))
-      : div().id("stop").size(30).rounded_full().flex().items_center().justify_center().bg(t.foreground).text_color(t.background)
+      : div().id("stop").size(34).rounded_full().flex().items_center().justify_center().bg(t.foreground).text_color(t.background)
         .when(!this.t.readOnly, (el) => el.cursor_pointer().on_click((_e, cx) => this.stop(cx)))
         .tooltip("Stop").child(svg(icon("stop")).size(14));
     const status = this.s.status;
-    const color = status === "working" ? t.working : status === "blocked" ? t.blocked : status === "done" ? t.done : t.dim;
+    // as OCraft's composer: only a turn in progress or a question shows a word under the box
+    const busy = status === "working" || status === "blocked";
+    const color = status === "blocked" ? t.blocked : t.working;
     const model = modelText(this.meta);
-    const context = contextText(this.meta);
-    return v_flex().w_full().gap(6).children([
+    const [modelName, effort] = model ? model.split(" · ") : [];
+    return v_flex().w_full().gap(8).children([
       ...this.composerTop(t),
       ...this.s.pending.map((m) => h_flex().gap(6).px(12).text_size(12).text_color(t.muted).id(`pending:${m.id}`)
         .child(div().text_color(t.dim).child(m.state === "held" ? "Held" : "Queued")).child(div().truncate().child(m.text))),
-      h_flex().w_full().gap(8).items_end().pl(16).pr(8).py(8).rounded(14).bg(t.surface).border(1).border_color(t.input)
-        .child(div().flex_1().min_w(0).py(4).text_size(15).child(Textarea.new(this.input)))
+      h_flex().w_full().min_h(56).gap(10).items_end().pl(20).pr(10).py(10).rounded(16).bg(t.surface).border(1).border_color(t.border)
+        .child(div().flex_1().min_w(0).py(6).text_size(15).child(Textarea.new(this.input)))
         .child(button),
-      h_flex().w_full().gap(8).px(6).items_center().text_size(12).text_color(t.muted).children([
-        div().text_color(color).child(`● ${composerStatusWord(status)}`),
+      h_flex().w_full().gap(10).px(8).items_center().text_size(13).text_color(t.muted).children([
+        busy && div().text_color(color).child(`● ${composerStatusWord(status)}`),
         !this.connected && div().text_color(t.dim).child("Reconnecting…"),
         this.t.readOnly && div().text_color(t.dim).child("Watching only"),
         (this.note || this.s.error || this.loadError) && div().flex_1().truncate().text_color(t.blocked).child(this.note || this.s.error || this.loadError),
@@ -387,8 +389,8 @@ export default class OvisChat extends View {
         // shown with pane.view: back to the pane's own terminal
         this.t.host && div().id("terminal").px(6).rounded(6).cursor_pointer().text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("pane.view", { pane: this.t.host })).child("Terminal"),
-        context &&div().text_color(t.dim).child(context),
-        model && div().text_color(t.foreground).child(model),
+        modelName && h_flex().gap(4).text_size(14).text_color(t.foreground).child(effort ? `${modelName} ·` : modelName)
+          .when(Boolean(effort), (el) => el.child(effort[0].toUpperCase() + effort.slice(1))),
       ].filter(Boolean)),
     ].filter(Boolean));
   }
