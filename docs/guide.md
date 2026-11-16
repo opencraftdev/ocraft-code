@@ -491,6 +491,14 @@ herdr-app do tab.new '{"mod":"ovis-chat","props":{"pane":"w1:p1"}}'
 
 Props: `pane` (the herdr pane id), `server` (the Ovis, `http://127.0.0.1:7317` by default), `machine` (`local` by default, or a remote PC's id, reached through that Ovis's PC proxy: the Assistant's chat is its VM's id and the Assistant pane) and `readOnly: true` to watch without sending or answering. Shown in place of a herdr-app pane (`herdr-app do pane.view '{"mod":"ovis-chat","props":{"paneId":"w1:p1"}}'`), the Ovis pane goes in `paneId`, and **Terminal** under the box goes back to the pane's terminal. A local Ovis on loopback needs no sign-in. Pictures in messages are not shown yet.
 
+`herdr-mods/ovis-assistant` is the Assistant as Code mode shows it: its chat on the left (the same chat as `ovis-chat`), and on the right its panel: **Environment** (the VM and the Assistant's folder), **Context** (the share of its window used), **Changes** (pull requests and uncommitted lines, shown when there are any), **Sessions** (the agent sessions on your PCs it can delegate to, working and blocked first, the rest folded under "N finished"; a click opens that session's chat in a new tab), **Background tasks** (while some run) and **Restart Assistant** (after a yes, `/clear` or `/new` to its agent; not while it works). Type `@` in the box to tag a session: the picker lists your connected PCs' sessions, Enter or a click puts the tag above the box, and it goes out as the same exact `@session(...)` the web box sends. **Voice** in the header opens the Assistant's voice in your browser (`?assistant=voice` on its pane's link), since a mod has no microphone.
+
+```sh
+herdr-app do tab.new '{"mod":"ovis-assistant"}'
+```
+
+It finds the Assistant itself among the PCs of the Ovis at `server`, as the web app does: the agent pane working in the VM's Assistant folder. `machine` and `pane` name it instead, and `readOnly: true` watches only. The panel reads its routes again every few seconds (a mod reads no event stream).
+
 ## Access and safety
 
 Anyone who can reach the server can type into your terminals, so what matters is who gets in. It listens on `127.0.0.1` by default, which means only this computer. From anywhere else, a request gets in in one of three ways:

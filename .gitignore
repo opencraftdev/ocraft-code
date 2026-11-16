@@ -24,6 +24,8 @@ docs/screenshots/*.mp4
 
 # herdr-app mods' bundles of the web client's helpers, made by scripts/build-herdr-mods.ts
 herdr-mods/*/lib.js
+# ovis-assistant's copy of ovis-chat's modules (herdr-app loads no import from outside a mod's folder)
+herdr-mods/ovis-assistant/ovis-chat/
 
 # the website, assembled by scripts/build-site.ts
 _site/

@@ -26,9 +26,29 @@ function write(key: string, value: string): void {
 export function storedAssistantAddress(): string { return read(ADDRESS_KEY) ?? ""; }
 export function storeAssistantAddress(address: string): void { write(ADDRESS_KEY, address); }
 
-/** Chat (the default) or Voice in the Assistant's pane, as this device last chose. */
+/**
+ * `?assistant=voice` (or `chat`) in an address: the view a link asks the Assistant's pane to open in,
+ * as the herdr-app ovis-assistant mod's Voice opens this app with its pane's link; else null.
+ */
+export function linkedAssistantView(search: string): AssistantView | null {
+  const value = new URLSearchParams(search).get("assistant");
+  return value === "voice" || value === "chat" ? value : null;
+}
+
+/** A linked view becomes this device's choice, as if picked, and leaves the address so a reload keeps what the user picks next. */
+function adoptLinkedView(): void {
+  if (typeof window === "undefined" || !window.location) return;
+  const linked = linkedAssistantView(window.location.search);
+  if (linked === null) return;
+  write(VIEW_KEY, linked);
+  const url = new URL(window.location.href);
+  url.searchParams.delete("assistant");
+  try { window.history.replaceState(window.history.state, "", url.href); } catch { /* the choice still holds */ }
+}
+
+/** Chat (the default) or Voice in the Assistant's pane, as this device last chose or a link asked. */
 export function useAssistantView(): [AssistantView, (view: AssistantView) => void] {
-  const [view, setView] = useState<AssistantView>(() => read(VIEW_KEY) === "voice" ? "voice" : "chat");
+  const [view, setView] = useState<AssistantView>(() => { adoptLinkedView(); return read(VIEW_KEY) === "voice" ? "voice" : "chat"; });
   return [view, (next) => { write(VIEW_KEY, next); setView(next); }];
 }
 
