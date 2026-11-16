@@ -207,7 +207,7 @@ export const SETTINGS_ZH: Record<string, string> = {
   "Long turns": "长任务",
   "Every turn": "每一轮",
   "In the app": "应用内",
-  "While the app is open, these show as system notifications at once. Click one to open its pane.": "应用打开时，这些会立即以系统通知显示。点击即可打开其窗格。",
+  "While the app is open, these show at once as a card in its corner. Click one to open its pane.": "应用打开时，这些会立即以卡片显示在应用一角。点击即可打开其窗格。",
   "Sound": "声音",
   "While a tab of the app is open, it chimes for these alerts, also when a Focus or Do Not Disturb silences notifications.": "应用的标签页打开时，每条提醒都会响起提示音。即使专注模式或勿扰模式让通知静音，也能听到。",
   "One-tap messages above the message box, on this device. Each is sent as if typed: queued while the agent works, an answer when a question is open.": "显示在消息输入框上方的一键消息，仅适用于此设备。每条消息都像手动输入一样发送：Agent 工作时加入队列，有未关闭的问题时作为回答。",

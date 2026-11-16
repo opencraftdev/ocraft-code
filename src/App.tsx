@@ -78,6 +78,9 @@ import { useMachinesRef, useRecentFolderMemory, useRefetchTimer, useRosterError,
 import { useMachineDialog } from "./lib/useMachineDialog.ts";
 import { useNewSessionMachine, useNewSessionState, useSessionHistoryList } from "./lib/useNewSessionDialog.ts";
 import { useCommandPalette } from "./lib/useCommandPalette.ts";
+import { useAppCommands } from "./lib/useAppCommands.ts";
+import { ShortcutsHelp } from "./components/ShortcutsHelp.tsx";
+import { AlertToasts } from "./components/AlertToasts.tsx";
 import { useRenameRequest } from "./lib/useRenameRequest.ts";
 import { useFilePanels } from "./lib/useFilePanels.ts";
 import { usePaneCoverage } from "./lib/usePaneCoverage.ts";
@@ -523,6 +526,8 @@ export function App() {
   );
 
   useShortcuts(actions, locked === false);
+  // herdr-app's tab, workspace and agent steps and numbered keys (lib/commands.ts registry)
+  useAppCommands({ snapshot, machineId: selectedMachineId, selectedPaneId, selectPane, openPalette });
 
   // The header's More menu: what used to be three buttons of its own. Each item is there under
   // the condition its button had. At phone width the palette's button gives its room to the
@@ -1094,6 +1099,8 @@ export function App() {
         // a peek shows the terminal: its toggle says Switch to chat, which ends the peek
         view={terminalPeek !== null ? "terminal" : view} actions={actions} />
       <MarkdownLinkMenu />
+      <ShortcutsHelp />
+      <AlertToasts />
     </div></MachineContext.Provider></MachineSessionsProvider>
   );
 }

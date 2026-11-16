@@ -12,6 +12,9 @@ import { dropletAllows, endedTurn, seedStatuses, trackTurn, type DropletKind } f
 import { canPlayAlertSound, playAlertSound, recheckAlertSounds, unlockAlertSound, type AlertSoundKind } from "./alertSound.ts";
 import { createAlertTurnPlayer } from "./alertTurns.ts";
 import { sameTarget, type SplitState } from "./split.ts";
+import { alertDecision, showAlertToast } from "./alertToasts.ts";
+import { t } from "./i18n.ts";
+import { tabLabel } from "./tabName.ts";
 
 type PaneStatusMessage = Extract<ServerMessage, { type: "pane-status" }>;
 type PaneExitedMessage = Extract<ServerMessage, { type: "pane-exited" }>;
@@ -42,23 +45,37 @@ export interface AlertSignalsParams {
 
 /** The in-app alert and the alert sound, and what the event stream does with a status change. */
 export function useAlertSignals({ settings, selectionRef, drawerOpenRef, splitRef, splitShownRef, machinesRef, alertsRef, alertsOnRef, pushOnRef, statusRef, turnStartRef, lastTurnRef, alertInAppRef, alertSoundRef }: AlertSignalsParams) {
-  // Alerts while the app is open: a system notification (the browser's, or macOS's in the Mac app), never
+  // the pane is in front of the user: open here, or the other half of a shown split, in a visible tab
+  const looking = (machine: Machine, pane: HerdrPane): boolean => {
+    if (document.visibilityState !== "visible" || drawerOpenRef.current) return false;
+    const open = selectionRef.current;
+    if (open.machineId === machine.id && open.paneId === pane.pane_id) return true;
+    return splitShownRef.current && sameTarget(splitRef.current?.other ?? null, { machineId: machine.id, paneId: pane.pane_id });
+  };
+  // Alerts while the app is open: a card in the app (lib/alertToasts.ts, herdr-app's toast), never
   // for the pane already open in front of the user. With web push on, the push already shows one.
   const dropIn = useCallback((machine: Machine, pane: HerdrPane, kind: DropletKind) => {
     if (!alertsOnRef.current || !alertInAppRef.current || document.visibilityState !== "visible" || pushOnRef.current) return;
-    const open = selectionRef.current;
-    if (open.machineId === machine.id && open.paneId === pane.pane_id && !drawerOpenRef.current) return;
-    if (splitShownRef.current && sameTarget(splitRef.current?.other ?? null, { machineId: machine.id, paneId: pane.pane_id }) && !drawerOpenRef.current) return;
-    const title = machinesRef.current.length > 1 ? `${machine.name} · ${alertPaneTitle(pane)}` : alertPaneTitle(pane);
-    const select = () => takeTargetRef.current?.({ machine_id: machine.id, pane_id: pane.pane_id, view: "chat", workspace_id: pane.workspace_id });
-    if (kind === "ended") showPaneEndedNotification(pane.pane_id, title, select, machine.id, pane.workspace_id, true);
-    else showPaneStatusNotification(pane.pane_id, title, kind, select, machine.id, pane.workspace_id, true);
+    if (!alertDecision(kind, looking(machine, pane)).toast) return;
+    const name = machinesRef.current.length > 1 ? `${machine.name} · ${alertPaneTitle(pane)}` : alertPaneTitle(pane);
+    const workspace = machine.snapshot?.workspaces.find((entry) => entry.workspace_id === pane.workspace_id);
+    const tabs = machine.snapshot?.tabs.filter((tab) => tab.workspace_id === pane.workspace_id) ?? [];
+    const tab = tabs.find((entry) => entry.tab_id === pane.tab_id);
+    const place = [workspace?.label, tab && tabs.length > 1 ? tabLabel(tab, t, tabs.indexOf(tab) + 1) : null].filter(Boolean).join(" / ") || null;
+    showAlertToast({
+      key: JSON.stringify([machine.id, pane.pane_id]),
+      kind,
+      title: t(kind === "blocked" ? "{name} needs you" : kind === "done" ? "{name} finished" : "{name} ended", { name }),
+      place,
+      open: () => takeTargetRef.current?.({ machine_id: machine.id, pane_id: pane.pane_id, view: "chat", workspace_id: pane.workspace_id }),
+    });
   }, []);
   /** how a notification's click opens its pane, set by the first status message (App's takeNotificationTarget) */
   const takeTargetRef = useRef<((target: NotificationTarget) => unknown) | null>(null);
 
   // The alert sound (lib/alertSound.ts): heard also while the tab is hidden and a Focus silences
-  // system notifications; never for the pane open in front of the user.
+  // system notifications. A finish is not sounded for the pane open in front of the user; a
+  // question is, as herdr-app does (lib/alertToasts.ts alertDecision).
   const alertTurns = useRef<ReturnType<typeof createAlertTurnPlayer> | null>(null);
   useEffect(() => {
     const player = createAlertTurnPlayer({
@@ -76,9 +93,7 @@ export function useAlertSignals({ settings, selectionRef, drawerOpenRef, splitRe
   }, []);
   const chime = useCallback((machine: Machine, pane: HerdrPane, kind: AlertSoundKind) => {
     if (!alertsOnRef.current || !alertSoundRef.current || !canPlayAlertSound()) return;
-    const open = selectionRef.current;
-    if (document.visibilityState === "visible" && open.machineId === machine.id && open.paneId === pane.pane_id && !drawerOpenRef.current) return;
-    if (document.visibilityState === "visible" && splitShownRef.current && sameTarget(splitRef.current?.other ?? null, { machineId: machine.id, paneId: pane.pane_id }) && !drawerOpenRef.current) return;
+    if (!alertDecision(kind, looking(machine, pane)).sound) return;
     alertTurns.current?.chime(JSON.stringify([machine.id, pane.pane_id, kind]), kind);
   }, []);
 

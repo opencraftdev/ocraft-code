@@ -1,6 +1,6 @@
 import { MachineContext, useMachineApi, useMachineId } from "../lib/machineContext.tsx";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type FocusEvent as ReactFocusEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { Bell, Columns2, CornerLeftUp, Folder, FolderInput, FolderOpen, FolderSearch, History, ListFilter, LoaderCircle, Maximize2, MessageSquarePlus, Minimize2, Monitor, PanelLeft, Pencil, Pin, Plus, Puzzle, RefreshCw, Rows2, Settings, SunMoon, SwitchCamera, X } from "lucide-react";
+import { Bell, Command as CommandIcon, Columns2, CornerLeftUp, Folder, FolderInput, FolderOpen, FolderSearch, History, ListFilter, LoaderCircle, Maximize2, MessageSquarePlus, Minimize2, Monitor, PanelLeft, Pencil, Pin, Plus, Puzzle, RefreshCw, Rows2, Settings, SunMoon, SwitchCamera, X } from "lucide-react";
 
 import "./CommandPalette.css";
 
@@ -13,7 +13,8 @@ import type { AppActions, PaneView } from "../lib/actions.ts";
 import { FILTER_KEYS, offeredPluginActions, parseQuery, STATUS_FILTERS, statusCounts, type OfferedPluginAction, type PaletteStatusFilter } from "../lib/paletteSearch.ts";
 import { actionAliases, rankByTitle, requestSettingsPage, settingsPageEntries } from "../lib/paletteSettings.ts";
 import { Ownership, runPluginActionToEnd } from "../lib/pluginRun.ts";
-import { shortcutDisplayKeys, formatKeys, type ShortcutId } from "../lib/shortcuts.ts";
+import { chordDisplayKeys, isMacPlatform, shortcutDisplayKeys, formatKeys, SHORTCUTS, type ShortcutId } from "../lib/shortcuts.ts";
+import { commandKeys, loadRecentCommands, rankCommands, rememberCommand, takePromptRequest, useCommandList, type AppCommand } from "../lib/commands.ts";
 import { useSettings } from "../lib/settings.ts";
 import { AgentMark } from "./AgentMark.tsx";
 import { displayPaneTitle, StatusBadge } from "./Sidebar.tsx";
@@ -58,6 +59,8 @@ interface PaletteAction {
   label: string;
   icon: ComponentType;
   shortcut?: ShortcutId;
+  /** a registered command's own key (lib/commands.ts), shown as the shortcut is */
+  chord?: string;
   /** a second line under the label: the Settings page a group of it is on */
   detail?: string;
   /** the palette stays open after it: it changes the palette's own list */
@@ -141,10 +144,10 @@ function branchBeside(label: string, branch: string | null | undefined): string 
   return branch;
 }
 
-function ShortcutHint({ shortcutId }: { shortcutId?: ShortcutId }) {
+function ShortcutHint({ shortcutId, chord }: { shortcutId?: ShortcutId; chord?: string }) {
   const { settings } = useSettings();
-  if (!shortcutId) return null;
-  const keys = formatKeys(shortcutDisplayKeys(shortcutId, settings.shortcutOverrides));
+  if (!shortcutId && !chord) return null;
+  const keys = formatKeys(shortcutId ? shortcutDisplayKeys(shortcutId, settings.shortcutOverrides) : chordDisplayKeys(chord!));
   if (keys.length === 0) return null;
   return <span className="palette-shortcut" aria-label={keys.join(" + ")}>{keys.map((key) => <kbd className="kbd" key={key}>{key}</kbd>)}</span>;
 }
@@ -158,6 +161,10 @@ export function CommandPalette({ open, initialQuery = "", onClose, machines, onS
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<PaletteStatusFilter>("all");
   const [selection, setSelection] = useState<PaletteSelection>(NO_SELECTION);
+  /** a command that asks for a name (lib/commands.ts prompt): the search field is its question */
+  const [prompt, setPrompt] = useState<AppCommand | null>(null);
+  const [recentCommands, setRecentCommands] = useState<string[]>([]);
+  const registered = useCommandList();
   const [plugins, setPlugins] = useState<PluginActions[]>([]);
   /** `<plugin_id>.<action_id>` of the plugin action under way; the palette stays open until it answers */
   const [running, setRunning] = useState<string | null>(null);
@@ -226,13 +233,15 @@ export function CommandPalette({ open, initialQuery = "", onClose, machines, onS
     setSelection(NO_SELECTION);
     focusedRow.current = null;
     requestSettingsPage(null);
+    setPrompt(takePromptRequest());
+    setRecentCommands(loadRecentCommands());
     setRecentPaneIds(loadRecent());
     setRecentFolders(recentDirectories.read(machineId));
   }, [open]);
 
   // The folder a path-like query names, read from the selected PC as the query crosses a `/`: the
   // last segment only filters what is listed. A dot starting it asks for the hidden folders too.
-  const folder = open ? folderQuery(query) : null;
+  const folder = open && prompt === null ? folderQuery(query) : null;
   const folderDirectory = folder?.directory ?? null;
   const folderHidden = folder?.filter.startsWith(".") ?? false;
   // Try again after a failed listing asks for the same folder once more
@@ -353,6 +362,27 @@ export function CommandPalette({ open, initialQuery = "", onClose, machines, onS
       run: () => { void actions.moveTabToWorkspace({ machineId, tabId: selectedTab, workspaceId: entry.workspace_id, notice: true }).catch(() => undefined); } })),
   [actions, machineId, selectedTab, selectedWorkspace, snapshot?.workspaces, t, tabPanes]);
 
+  // the registered commands (lib/commands.ts): one row each, a choice command one row per choice
+  // ("Go to workspace: api"), found by a query only as the moves are; one that asks for a name
+  // turns the search field into its question
+  const { commandActions, choiceActions } = useMemo(() => {
+    const shortcutIds = new Set<string>(SHORTCUTS.map((shortcut) => shortcut.id));
+    const mac = isMacPlatform();
+    const ask = (command: AppCommand) => { setPrompt(command); setQuery(""); setSelection(NO_SELECTION); inputRef.current?.focus(); };
+    const shown = registered.filter((command) => !command.hidden);
+    return {
+      commandActions: shown.filter((command) => !command.choices).map((command): PaletteAction => ({
+        id: `command:${command.id}`, label: command.label, icon: CommandIcon,
+        ...(shortcutIds.has(command.id) ? { shortcut: command.id as ShortcutId } : commandKeys(command, mac)[0] ? { chord: commandKeys(command, mac)[0] } : {}),
+        keepOpen: command.prompt !== undefined,
+        run: () => { if (command.prompt !== undefined) ask(command); else command.run(); },
+      })),
+      choiceActions: shown.flatMap((command) => (command.choices?.() ?? []).map((choice): PaletteAction => ({
+        id: `command:${command.id}:${choice.value}`, label: `${command.label}: ${choice.label}`, icon: CommandIcon, run: () => command.run(choice.value),
+      }))),
+    };
+  }, [registered]);
+
   const allPanes = useMemo(() => machines.flatMap((machine) => machine.state === "connected" ? machine.snapshot?.panes ?? [] : []), [machines]);
   const multiMachine = machines.length > 1;
   const selectedMachineName = machines.find((machine) => machine.id === machineId)?.name;
@@ -364,6 +394,7 @@ export function CommandPalette({ open, initialQuery = "", onClose, machines, onS
   // the panes went to last lead an unsearched, unfiltered list
   const sections = useMemo<PaletteSectionView[]>(() => {
     const list: PaletteSectionView[] = [];
+    if (prompt !== null) return list;
     // a path lists the selected PC's folders (T3 Code's browse mode): where it is, with Open in
     // Files and the way up, then the pinned and recent folders it leads to, then its folders
     if (folder !== null) {
@@ -400,7 +431,8 @@ export function CommandPalette({ open, initialQuery = "", onClose, machines, onS
     }
     if (actionsOnly || filter === "all") {
       // a name found only through an alias comes after the titles that hold the query
-      const visible = rankByTitle(text, [...paletteActions, ...(text === "" ? [] : moveActions)].map((action) => ({ item: action, title: action.label, aliases: aliasesByAction[action.id] })));
+      // letters in order, word starts first (herdr-app's palette); unsearched, the ones run last lead
+      const visible = rankCommands(text, [...paletteActions, ...commandActions, ...(text === "" ? [] : [...moveActions, ...choiceActions])].map((action) => ({ item: action, title: action.label, aliases: aliasesByAction[action.id], recentId: action.id })), recentCommands);
       if (visible.length > 0) list.push({ id: "actions", heading: t("Actions"), machineName: multiMachine ? selectedMachineName : undefined, branch: null, placeNamesWorkspace: false, rows: visible.map((action) => ({ kind: "action", action })) });
       const pages = text === "" ? [] : rankByTitle(text, settingsActions.map(({ action, aliases }) => ({ item: action, title: action.label, aliases })));
       if (pages.length > 0) list.push({ id: "settings-pages", heading: t("Settings"), machineName: multiMachine ? selectedMachineName : undefined, branch: null, placeNamesWorkspace: false, rows: pages.map((action) => ({ kind: "action", action })) });
@@ -408,7 +440,7 @@ export function CommandPalette({ open, initialQuery = "", onClose, machines, onS
       if (offered.length > 0) list.push({ id: "plugins", heading: t("Plugin actions"), machineName: multiMachine ? selectedMachineName : undefined, branch: null, placeNamesWorkspace: false, rows: offered.map((item) => ({ kind: "plugin", offered: item })) });
     }
     return list;
-  }, [actionsOnly, text, filter, machines, multiMachine, selectedMachineName, machineId, branches, recentPaneIds, selectedPaneId, paletteActions, moveActions, aliasesByAction, settingsActions, plugins, t, folder?.directory, folder?.filter, query, browse, home, pins, recentFolders, snapshot, actions]);
+  }, [prompt, commandActions, choiceActions, recentCommands, actionsOnly, text, filter, machines, multiMachine, selectedMachineName, machineId, branches, recentPaneIds, selectedPaneId, paletteActions, moveActions, aliasesByAction, settingsActions, plugins, t, folder?.directory, folder?.filter, query, browse, home, pins, recentFolders, snapshot, actions]);
 
   const rows = useMemo(() => sections.flatMap((section) => section.rows), [sections]);
   const rowKeys = useMemo(() => sections.flatMap((section) => section.rows.map((row) => rowKey(section.id, row))), [sections]);
@@ -488,6 +520,7 @@ export function CommandPalette({ open, initialQuery = "", onClose, machines, onS
     onClose();
   };
   const runAction = (action: PaletteAction): void => {
+    setRecentCommands((recent) => rememberCommand(action.id, recent));
     action.run();
     if (!action.keepOpen) onClose();
   };
@@ -541,6 +574,15 @@ export function CommandPalette({ open, initialQuery = "", onClose, machines, onS
     // Candidate navigation and the committing Enter belong to the IME. WebKit can report
     // the latter after compositionend with isComposing false and key code 229.
     if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+    if (prompt !== null) {
+      // the answer to a command's question: Enter runs it with what was typed
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      if (query.trim() === "") return;
+      prompt.run(query.trim());
+      onClose();
+      return;
+    }
     if (event.key === "ArrowDown" && itemCount > 0) {
       event.preventDefault();
       select((activeIndex + 1) % itemCount);
@@ -626,7 +668,8 @@ export function CommandPalette({ open, initialQuery = "", onClose, machines, onS
   const footerPath = activeRow?.kind === "pane" ? panePath(activeRow.pane) : activeRow?.kind === "folder" ? activeRow.path : "";
   const browseListing = folder !== null && browse.directory === folder.directory ? browse : null;
   const listingFailed = online && browseListing?.error === "failed";
-  const emptyText = folder === null ? t("No matching panes or actions")
+  const emptyText = prompt !== null ? prompt.label
+    : folder === null ? t("No matching panes or actions")
     : browseListing?.error === "invalid" ? t("This folder cannot be opened.")
     : browseListing?.error === "failed" || !online ? t("Folders could not be loaded.")
     : browseListing?.listing ? t("No matching folders") : t("Loading…");
@@ -641,10 +684,10 @@ export function CommandPalette({ open, initialQuery = "", onClose, machines, onS
       {machines.filter((machine) => machine.state === "connected").map((machine) => <MachineContext.Provider key={machine.id} value={machine.id}><PaletteBranchReader machine={machine} onChange={onInventory} /></MachineContext.Provider>)}
       <section ref={surface} className="menu command-palette" role="dialog" aria-modal="true" aria-label={t("Command palette")} onKeyDown={onSurfaceKeyDown} onFocus={onSurfaceFocus}>
         <div className="palette-search">
-          <input ref={inputRef} className="input" type="search" value={query} placeholder={t("Search panes and actions…")} aria-label={t("Search panes and actions")} aria-controls="palette-results" aria-activedescendant={itemCount ? `palette-item-${activeIndex}` : undefined} onKeyDown={onInputKeyDown} onChange={(event) => { setQuery(event.target.value); setSelection(NO_SELECTION); }} />
+          <input ref={inputRef} className="input" type="search" value={query} placeholder={prompt?.prompt ?? t("Search panes and actions…")} aria-label={prompt?.prompt ?? t("Search panes and actions")} aria-controls="palette-results" aria-activedescendant={itemCount ? `palette-item-${activeIndex}` : undefined} onKeyDown={onInputKeyDown} onChange={(event) => { setQuery(event.target.value); setSelection(NO_SELECTION); }} />
           <button type="button" className="icon-button" aria-label={t("Close command palette")} onClick={onClose}><X /></button>
         </div>
-        {!actionsOnly && folder === null && (
+        {!actionsOnly && folder === null && prompt === null && (
           <div className="palette-filters" role="radiogroup" aria-label={t("Filter panes by status")} onKeyDown={onChipsKeyDown}>
             {STATUS_FILTERS.map((status) => (
               <button key={status} type="button" role="radio" className="palette-filter" data-status={status} aria-checked={filter === status} tabIndex={filter === status ? 0 : -1} data-empty={counts[status] === 0 || undefined} onClick={(event) => onChipClick(event, status)}>
@@ -689,7 +732,7 @@ export function CommandPalette({ open, initialQuery = "", onClose, machines, onS
                 }
                 if (row.kind === "action") {
                   const Icon = row.action.icon;
-                  return <button key={row.action.id} id={`palette-item-${index}`} type="button" role="option" className="menu-item" aria-selected={activeIndex === index} onFocus={() => select(index)} onMouseMove={() => select(index)} onClick={() => runAction(row.action)}><Icon />{row.action.detail === undefined ? <span className="menu-item-main">{row.action.label}</span> : <span className="menu-item-main"><span className="palette-row-title">{row.action.label}</span><span className="palette-row-subtitle">{row.action.detail}</span></span>}<ShortcutHint shortcutId={row.action.shortcut} /></button>;
+                  return <button key={row.action.id} id={`palette-item-${index}`} type="button" role="option" className="menu-item" aria-selected={activeIndex === index} onFocus={() => select(index)} onMouseMove={() => select(index)} onClick={() => runAction(row.action)}><Icon />{row.action.detail === undefined ? <span className="menu-item-main">{row.action.label}</span> : <span className="menu-item-main"><span className="palette-row-title">{row.action.label}</span><span className="palette-row-subtitle">{row.action.detail}</span></span>}<ShortcutHint shortcutId={row.action.shortcut} chord={row.action.chord} /></button>;
                 }
                 const { pane } = row;
                 const workspace = row.machine.snapshot?.workspaces.find((item) => item.workspace_id === pane.workspace_id);

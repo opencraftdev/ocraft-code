@@ -207,7 +207,7 @@ export const SETTINGS_JA: Record<string, string> = {
   "Long turns": "長いターン",
   "Every turn": "毎ターン",
   "In the app": "アプリ内",
-  "While the app is open, these show as system notifications at once. Click one to open its pane.": "アプリを開いている間は、すぐにシステム通知として表示されます。クリックするとそのペインを開きます。",
+  "While the app is open, these show at once as a card in its corner. Click one to open its pane.": "アプリを開いている間は、すぐにアプリの隅にカードとして表示されます。クリックするとそのペインを開きます。",
   "Sound": "サウンド",
   "While a tab of the app is open, it chimes for these alerts, also when a Focus or Do Not Disturb silences notifications.": "アプリのタブを開いている間は、これらの通知ごとに音を鳴らします。集中モードやおやすみモードで通知が消音されていても聞こえます。",
   "One-tap messages above the message box, on this device. Each is sent as if typed: queued while the agent works, an answer when a question is open.": "メッセージ入力欄の上に表示されるワンタップのメッセージで、このデバイスに適用されます。入力したときと同じように送信され、エージェントの作業中はキューに入り、質問が開いているときは回答になります。",
