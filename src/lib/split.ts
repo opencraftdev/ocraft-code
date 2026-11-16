@@ -59,6 +59,15 @@ export function dropSide(x: number, left: number, width: number, previous: Split
   return x < middle ? "left" : "right";
 }
 
+/** A pane dropped in the middle of another pane of its tab (the inner half each way) trades places
+ *  with it (herdr's pane.swap), as herdr-app's center drop does; nearer an edge it docks in a half.
+ *  herdr 0.9 refuses pane.move inside one tab (`same_tab`), so an edge never places it beside. */
+export function swapZone(x: number, y: number, box: { left: number; top: number; width: number; height: number }): boolean {
+  const fx = (x - box.left) / box.width;
+  const fy = (y - box.top) / box.height;
+  return fx >= 0.25 && fx <= 0.75 && fy >= 0.25 && fy <= 0.75;
+}
+
 /**
  * A pane dropped on one half: the split after it, and the pane to select (the dropped one, which
  * becomes the active half). Null when nothing changes: a pane dropped onto the active half that

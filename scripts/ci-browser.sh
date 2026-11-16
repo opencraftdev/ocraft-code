@@ -154,6 +154,7 @@ run_script scripts/background-agent-detail-demo-regression.ts
 run_script scripts/palette-machines-demo-regression.ts
 run_script scripts/health-flap-demo-regression.ts
 run_script scripts/narrow-pane-demo-regression.ts
+run_script scripts/splits-layouts-demo-regression.ts
 run_script scripts/touch-long-press-demo-regression.ts
 run_script scripts/context-menu-inputs-demo-regression.ts
 run_script scripts/render-crash-demo-regression.ts

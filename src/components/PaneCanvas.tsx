@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type DragEvent, type MouseEvent, type MutableRefObject, type PointerEvent, type ReactNode } from "react";
-import { ArchiveRestore, Columns2, Ellipsis, Eraser, Maximize2, MoveHorizontal, Pencil, Rows2, ArrowLeftRight, TextWrap, X } from "lucide-react";
+import { ArchiveRestore, Columns2, Ellipsis, Eraser, GripHorizontal, Maximize2, MoveHorizontal, Pencil, Rows2, ArrowLeftRight, TextWrap, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import type { HerdrPane, PaneLayoutSnapshot, SessionSnapshot } from "../../shared/protocol.ts";
 import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
@@ -18,12 +18,15 @@ import { useFocusTrap } from "../lib/useFocusTrap.ts";
 import { usePhoneSheetBack } from "../lib/sheetHistory.ts";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { paneLifetimes } from "../lib/paneLifetime.ts";
-import { displayPaneTitle } from "./Sidebar.tsx";
+import { displayPaneTitle, StatusBadge } from "./Sidebar.tsx";
+import { AgentMark } from "./AgentMark.tsx";
 import { RowMenu, type RowMenuItem } from "./RowMenu.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import "./PaneCanvas.css";
 
 type PaneLayoutSplit = PaneLayoutSnapshot["splits"][number];
+/** the pane menu's items a split pane's header also offers as buttons, as herdr-app's pane header does */
+const headActions = [["split-right", Columns2], ["split-down", Rows2], ["zoom", Maximize2], ["close", X]] as const;
 
 interface Props {
   snapshot: SessionSnapshot | null;
@@ -322,7 +325,21 @@ export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged
             event.dataTransfer.effectAllowed = "move";
             event.dataTransfer.setData(PANE_DRAG_TYPE, paneDragData({ machineId, paneId: item.pane_id }));
           }}>
+          {/* herdr-app's pane header: the agent's mark, its name, the folder and its state; split,
+              zoom and close show while the pointer is over the pane. The grip at its top centre
+              drags the pane: onto another pane's middle the two trade places */}
+          {!single && onOpenInHalf && !coarse && <span className="pane-frame-grip" aria-hidden="true"><GripHorizontal /></span>}
+          {!single && item.agent && <AgentMark agent={item.agent} size={14} />}
           <span className="pane-frame-title">{displayPaneTitle(item)}</span>
+          {!single && <span className="pane-frame-folder" title={item.foreground_cwd ?? item.cwd ?? undefined}>{(item.foreground_cwd ?? item.cwd ?? "").replace(/\/+$/, "").split("/").pop()}</span>}
+          {!single && item.agent && <StatusBadge status={item.agent_status} compact />}
+          {!single && <span className="pane-frame-actions">
+            {headActions.map(([id, Icon]) => {
+              const action = itemsFor(item).find((entry) => entry.id === id);
+              return action && <button key={id} type="button" className="icon-button pane-frame-action" aria-label={action.label} title={action.label}
+                onClick={(event) => { event.stopPropagation(); action.run(); }}><Icon aria-hidden="true" /></button>;
+            })}
+          </span>}
           <button type="button" className="icon-button pane-frame-menu" aria-label={t("Pane actions for {name}", { name: displayPaneTitle(item) })}
             onClick={(event) => showMenu(item, event.currentTarget)}><Ellipsis aria-hidden="true" /></button>
         </div>
