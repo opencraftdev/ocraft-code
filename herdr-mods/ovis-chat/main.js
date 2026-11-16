@@ -19,7 +19,7 @@ const PAGE = 30;
 const COLUMN = 780;
 const icon = (name) => `mods/ovis-chat/icons/${name}.svg`;
 
-async function getJson(url) {
+export async function getJson(url) {
   const response = await fetch(url);
   let body = null;
   try { body = await response.json(); } catch { /* an empty or non-JSON answer */ }
@@ -36,7 +36,15 @@ async function postJson(url, data) {
 
 export default class OvisChat extends View {
   init(_props, cx) {
-    this.t = target(props());
+    this.setup(target(props()));
+    if (!this.t.pane) { this.s.error = "No pane: open with props {server, machine, pane}"; return; }
+    if (checking()) return;
+    this.connect(cx);
+  }
+
+  // The chat's state and composer, before it knows its pane: ovis-assistant finds the pane first.
+  setup(t, placeholder = "Message the agent…") {
+    this.t = t;
     this.s = { status: undefined, agent: null, features: new Set(), pending: [], error: null };
     this.rows = [];
     this.meta = null;
@@ -53,13 +61,15 @@ export default class OvisChat extends View {
     this.follow = true;
     this.stick = true;
     this.scroll = ScrollHandle.new();
-    this.input = TextareaState.new({ placeholder: this.t.readOnly ? "Watching only" : "Message the agent…" });
+    this.input = TextareaState.new({ placeholder: this.t.readOnly ? "Watching only" : placeholder });
     this.input.set_auto_grow(1, 8);
     // Enter sends; Shift+Enter is a newline (the textarea has already put the newline in)
     this.input.on("submit", (event, cx) => { if (!event.shift) this.send(cx, true); });
     this.input.on("change", (_e, cx) => cx.notify());
-    if (!this.t.pane) { this.s.error = "No pane: open with props {server, machine, pane}"; return; }
-    if (checking()) return;
+  }
+
+  /** Reads the pane's transcript and opens its socket. */
+  connect(cx) {
     this.transcript = new Transcript(getJson, this.t);
     this.refresh(cx);
     cx.spawn((cx) => this.socketLoop(cx));
@@ -110,7 +120,7 @@ export default class OvisChat extends View {
     if (frame.type === "pong") return;
     if (frame.type === "submit-result") {
       if (this.sending?.id === frame.id) {
-        if (frame.ok) { this.input.set_value(""); this.note = null; }
+        if (frame.ok) { this.input.set_value(""); this.note = null; this.sent(); }
         else this.note = submitNote(frame.code ?? "", frame.message ?? "", this.s.agent);
         this.sending = null;
         cx.notify();
@@ -214,6 +224,7 @@ export default class OvisChat extends View {
       if (at > 0 && value[at - 1] === "\n") value = value.slice(0, at - 1) + value.slice(at);
       this.input.set_value(value);
     }
+    value = this.outgoing(value);
     const text = composerMessage(value);
     if (text.trim().length === 0 || this.sending) return;
     const delivery = composerDelivery(this.s.agent, this.s.status);
@@ -227,6 +238,14 @@ export default class OvisChat extends View {
     this.stick = true;
     cx.notify();
   }
+
+  /** What goes out for the box's text: ovis-assistant adds its session tags. */
+  outgoing(value) {
+    return value;
+  }
+
+  /** The server took the message. */
+  sent() {}
 
   stop(cx) {
     if (this.t.readOnly) return;
@@ -329,6 +348,11 @@ export default class OvisChat extends View {
     ].filter(Boolean));
   }
 
+  /** Drawn above the composer's box: ovis-assistant's session tags and picker. */
+  composerTop(_t) {
+    return [];
+  }
+
   composer(t) {
     const text = this.input.value();
     const working = this.working();
@@ -348,6 +372,7 @@ export default class OvisChat extends View {
     const model = modelText(this.meta);
     const context = contextText(this.meta);
     return v_flex().w_full().gap(6).children([
+      ...this.composerTop(t),
       ...this.s.pending.map((m) => h_flex().gap(6).px(12).text_size(12).text_color(t.muted).id(`pending:${m.id}`)
         .child(div().text_color(t.dim).child(m.state === "held" ? "Held" : "Queued")).child(div().truncate().child(m.text))),
       h_flex().w_full().gap(8).items_end().pl(16).pr(8).py(8).rounded(14).bg(t.surface).border(1).border_color(t.input)
@@ -369,7 +394,11 @@ export default class OvisChat extends View {
   }
 
   render() {
-    const t = theme();
+    return this.chatBody(theme()).id("root").size_full();
+  }
+
+  /** The chat column: messages, then the prompt card and composer. ovis-assistant draws it beside its panel. */
+  chatBody(t) {
     const first = Math.max(0, this.rows.length - this.shown);
     const visible = this.rows.slice(first);
     const earlier = first > 0 || this.transcript?.hasOlder();
@@ -383,7 +412,7 @@ export default class OvisChat extends View {
       div().h(8),
     ].filter(Boolean);
     if (this.stick) { this.scroll.scroll_to_item(children.length - 1); this.stick = false; }
-    return v_flex().id("root").size_full().bg(t.background).text_color(t.foreground).children([
+    return v_flex().bg(t.background).text_color(t.foreground).children([
       v_flex().id("chat").flex_1().min_h(0).pt(16).gap(18).overflow_y_scrollbar().track_scroll(this.scroll)
         .on_scroll_wheel((e, cx) => { if (e.delta.y > 0 && this.follow) { this.follow = false; cx.notify(); } })
         .children(children),

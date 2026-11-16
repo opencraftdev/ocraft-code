@@ -1,3 +1,6 @@
+import type { PaneInfo } from "../../shared/protocol.ts";
+import { paneTitle } from "../../shared/notify-policy.ts";
+
 /**
  * A pane is known by its project, not by where it sits on disk. A shell's terminal title is
  * usually its working directory written out ("/home/me/dev/api", "~/dev/api", "C:\\work\\api"):
@@ -31,6 +34,11 @@ export function stripPaneChrome(title: string, agent: string | null | undefined,
   if (!agent) return shellStripped;
   const marked = shellStripped.replace(AGENT_CHROME, "");
   return agent === "codex" && !whole ? codexThreadTitle(marked) : marked;
+}
+
+/** The title a pane's row shows: its label, else its live title without chrome (a path as its last folder), else its id. */
+export function displayPaneTitle(pane: PaneInfo): string {
+  return pane.label?.trim() || shortPathTitle(stripPaneChrome(paneTitle(pane), pane.agent)) || pane.pane_id;
 }
 
 export function shortPathTitle(title: string): string {

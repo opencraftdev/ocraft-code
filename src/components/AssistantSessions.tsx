@@ -3,7 +3,7 @@ import { Bot, ChevronDown, ChevronRight, RotateCcw } from "lucide-react";
 
 import type { Machine } from "../../shared/machines.ts";
 import type { HerdrPane } from "../../shared/protocol.ts";
-import { isAssistantMachine, isAssistantPane } from "../lib/assistantMode.ts";
+import { sessionActive, assistantSessions } from "../lib/assistantSessions.ts";
 import { useT } from "../lib/i18n.ts";
 import { useMachineSessions } from "../lib/machineSessionContext.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
@@ -11,23 +11,7 @@ import type { RowMenuItem } from "./RowMenu.tsx";
 import { STATE_WORD } from "./MachineSidebar.tsx";
 import { displayPaneTitle } from "./Sidebar.tsx";
 
-/** One PC's agent panes the Assistant can delegate to, in the Sessions section's order. */
-export interface SessionGroup { machine: Machine; panes: HerdrPane[] }
-
-/** working, then blocked (needs input), then the rest */
-const rank = (pane: HerdrPane): number => pane.agent_status === "working" ? 0 : pane.agent_status === "blocked" ? 1 : 2;
-export const sessionActive = (pane: HerdrPane): boolean => rank(pane) < 2;
-
-/**
- * Every agent pane on the PCs this Ovis has, the Assistant VM and the Assistant's own pane excepted,
- * grouped by PC in the roster's order, each PC's panes ordered working, blocked, then the rest.
- */
-export function assistantSessions(machines: readonly Machine[]): SessionGroup[] {
-  return machines
-    .filter((machine) => !(machine.kind === "ssh" && isAssistantMachine(machine.target?.destination)))
-    .map((machine) => ({ machine, panes: (machine.snapshot?.panes ?? []).filter((pane) => pane.agent && !isAssistantPane(pane.cwd)).sort((a, b) => rank(a) - rank(b)) }))
-    .filter((group) => group.panes.length > 0);
-}
+export { assistantSessions, sessionActive, type SessionGroup } from "../lib/assistantSessions.ts";
 
 /** the row's dot, as the agent panel's rows draw theirs (AgentPanel.css state-*) */
 const tone = (pane: HerdrPane): string => pane.agent_status === "working" ? "working" : pane.agent_status === "blocked" ? "blocked" : pane.agent_status === "done" ? "done" : "idle";

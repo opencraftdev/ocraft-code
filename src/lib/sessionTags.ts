@@ -5,8 +5,8 @@
  */
 import { sshHost, type Machine } from "../../shared/machines.ts";
 import type { HerdrPane } from "../../shared/protocol.ts";
-import { assistantSessions, type SessionGroup } from "../components/AssistantSessions.tsx";
-import { displayPaneTitle } from "../components/Sidebar.tsx";
+import { assistantSessions, type SessionGroup } from "./assistantSessions.ts";
+import { displayPaneTitle } from "./paneName.ts";
 import { isAssistantMachine } from "./assistantMode.ts";
 
 export interface SessionChoice { machine: Machine; pane: HerdrPane }

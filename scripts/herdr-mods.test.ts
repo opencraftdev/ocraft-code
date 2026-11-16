@@ -168,11 +168,16 @@ describe("install", () => {
   test("copies each mod without its bundle entry, and defaults to the herdr-app home", async () => {
     const target = mkdtempSync(join(tmpdir(), "herdr-mods-"));
     try {
-      const [dir] = await installHerdrMods(target);
+      const dirs = await installHerdrMods(target);
+      const dir = dirs.find((d) => d.endsWith("ovis-chat"));
       const files = readdirSync(dir!);
       expect(files).toEqual(expect.arrayContaining(["main.js", "chat.js", "lib.js", "mod.json", "icons"]));
       expect(files).not.toContain("lib.entry.ts");
       expect(existsSync(join(dir!, "icons/copy.svg"))).toBe(true);
+      // ovis-assistant loads ovis-chat's modules from its own folder: herdr-app allows no import outside it
+      const assistant = dirs.find((d) => d.endsWith("ovis-assistant"))!;
+      expect(readdirSync(join(assistant, "ovis-chat")).sort()).toEqual(["chat.js", "lib.js", "main.js"]);
+      expect(readdirSync(assistant)).not.toContain("lib.entry.ts");
     } finally {
       rmSync(target, { recursive: true, force: true });
     }
