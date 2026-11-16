@@ -9,6 +9,7 @@ import { HerdrError, herdrSocketPath, paneRead, paneSendText, sessionSnapshot } 
 import { MirrorSession } from "../mirror.ts";
 import { ReplayBuffer } from "../output-window.ts";
 import { PtySession } from "../pty/session.ts";
+import { CoreAttachSession, coreEngineEnabled } from "../herdr-core/engine.ts";
 import { type Client, connectionOf } from "./connections.ts";
 
 const MAX_REPLAY_BYTES = 128 * 1024;
@@ -105,8 +106,8 @@ interface AttachmentState {
  */
 export interface PtyAttachment extends AttachmentState {
   readonly kind: "pty";
-  /** the attach the latest start made: each retry, take-over or handoff's new terminal replaces it */
-  process: PtySession;
+  /** the attach the latest start made: each retry, take-over or handoff's new terminal replaces it; on herdr-core a byte channel, no pty */
+  process: PtySession | CoreAttachSession;
   /** a held terminal's next try takes the slot from the other bridge for this client (`take-over`) */
   takeOver?: (client: Client) => void;
 }
@@ -214,7 +215,7 @@ export function createSpawnAttachment({ attachments, retiringAttachments, termin
       return attachment;
     }
 
-    const attachment: PtyAttachment = { kind: "pty", ready: false, process: undefined as unknown as PtySession, ...state };
+    const attachment: PtyAttachment = { kind: "pty", ready: false, process: undefined as unknown as PtySession | CoreAttachSession, ...state };
     attachments.set(paneId, attachment);
 
     // No --takeover unless asked: another web bridge may own the exclusive attach slot.
@@ -264,7 +265,7 @@ export function createSpawnAttachment({ attachments, retiringAttachments, termin
     /** One budget persists across consecutive exits during recovery. Starting an attach never renews it. */
     let recoveryDeadline: number | null = null;
     let recoveryRetries = 0;
-    const start = (): PtySession => {
+    const start = (): PtySession | CoreAttachSession => {
       let takingOver = mayTakeOver(takeover) ? takeover : null;
       takeover = null;
       trying = true;
@@ -475,43 +476,51 @@ export function createSpawnAttachment({ attachments, retiringAttachments, termin
         if (firstRecovery) relookup();
         else retryLookup();
       };
-      const command = process.env["OVIS_HERDR_BIN"] || "herdr";
-      // node-pty reports a command it cannot exec only as a silent exit 1, which reads as an
-      // ended attach (#925): look it up on the PATH and from the home directory the sidecar uses.
-      if (!Bun.which(command, { PATH: process.env["PATH"] ?? "", cwd: process.env["HOME"] ?? "/" })) {
-        throw new HerdrError("attach_failed", `herdr could not be started: ${command} is not an executable on the server's PATH (set OVIS_HERDR_BIN to herdr's full path)`);
-      }
-      const session = new PtySession({
-        command,
-        // --takeover goes after the id: before it, herdr reads the id as an unknown option
-        args: ["terminal", "attach", attachedTerminal, ...(takingOver ? ["--takeover"] : [])],
-        // herdr's CLI reads HERDR_SOCKET_PATH, not HERDR_SOCKET: the stream must reach
-        // the same session the RPCs talk to, or a named session's terminals are
-        // looked up on the default socket and the attach dies.
-        env: { HERDR_SOCKET_PATH: herdrSocketPath() },
-        cols: attachment.cols,
-        rows: attachment.rows,
-        onData: (data) => {
-          if (retired || attachments.get(paneId) !== attachment) return;
-          // herdr's startup queries are the bridge's to answer: never readiness, broadcast or replay
-          if (!holding && held !== null) {
-            const before = held;
-            const taken = probes.take(data, (text) => ATTACH_PREAMBLE_RE.test(before + text));
-            if (taken.replies) session.write(taken.replies);
-            data = taken.output;
-          } else data = probes.flush() + data;
-          if (!data) return;
-          output = (output + data).slice(-1024);
-          if (held === null) return publish(data);
-          held += data;
-          if (!holding && !ATTACH_PREAMBLE_RE.test(held)) {
-            holding = true;
-            heldSince = Date.now();
-            holdTimer = setTimeout(took, holdFor);
-          }
-        },
-        onExit: ended,
-      });
+      const onData = (data: string): void => {
+        if (retired || attachments.get(paneId) !== attachment) return;
+        // herdr's startup queries are the bridge's to answer: never readiness, broadcast or replay
+        if (!holding && held !== null) {
+          const before = held;
+          const taken = probes.take(data, (text) => ATTACH_PREAMBLE_RE.test(before + text));
+          if (taken.replies) session.write(taken.replies);
+          data = taken.output;
+        } else data = probes.flush() + data;
+        if (!data) return;
+        output = (output + data).slice(-1024);
+        if (held === null) return publish(data);
+        held += data;
+        if (!holding && !ATTACH_PREAMBLE_RE.test(held)) {
+          holding = true;
+          heldSince = Date.now();
+          holdTimer = setTimeout(took, holdFor);
+        }
+      };
+      const herdrAttach = (): PtySession => {
+        const command = process.env["OVIS_HERDR_BIN"] || "herdr";
+        // node-pty reports a command it cannot exec only as a silent exit 1, which reads as an
+        // ended attach (#925): look it up on the PATH and from the home directory the sidecar uses.
+        if (!Bun.which(command, { PATH: process.env["PATH"] ?? "", cwd: process.env["HOME"] ?? "/" })) {
+          throw new HerdrError("attach_failed", `herdr could not be started: ${command} is not an executable on the server's PATH (set OVIS_HERDR_BIN to herdr's full path)`);
+        }
+        return new PtySession({
+          command,
+          // --takeover goes after the id: before it, herdr reads the id as an unknown option
+          args: ["terminal", "attach", attachedTerminal, ...(takingOver ? ["--takeover"] : [])],
+          // herdr's CLI reads HERDR_SOCKET_PATH, not HERDR_SOCKET: the stream must reach
+          // the same session the RPCs talk to, or a named session's terminals are
+          // looked up on the default socket and the attach dies.
+          env: { HERDR_SOCKET_PATH: herdrSocketPath() },
+          cols: attachment.cols,
+          rows: attachment.rows,
+          onData,
+          onExit: ended,
+        });
+      };
+      // herdr-core: a byte channel on the engine's connection, no CLI and no pty; its attach has
+      // no exclusive slot, so there is nothing to take over
+      const session: PtySession | CoreAttachSession = coreEngineEnabled()
+        ? new CoreAttachSession({ terminal: attachedTerminal, cols: attachment.cols, rows: attachment.rows, onData, onExit: ended })
+        : herdrAttach();
       return session;
     };
     attachment.takeOver = (client) => {

@@ -15,6 +15,7 @@ import type {
 import type { AgentInfo, AgentManifestInfo, AgentStartParams, PaneInfo, PaneLayoutSnapshot, PaneProcessInfo, PaneScrollInfo, TabInfo, WorkspaceInfo } from "../../shared/herdr-api.generated.ts";
 import type { HerdrMethod, HerdrMethods, SingleHerdrMethod, UntypedHerdrMethod } from "./methods.ts";
 import type { HerdrIdentity } from "../../shared/machines.ts";
+import { coreEngine, coreEngineEnabled } from "../herdr-core/engine.ts";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const diagnostics = new ConnectionDiagnostics("herdr.rpc");
@@ -216,6 +217,9 @@ export async function herdrRpc(
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
   guard?: () => boolean,
 ): Promise<unknown> {
+  // On herdr-core only the wrappers that dispatch to it below work: a herdr 0.9 call must never
+  // reach a herdr 0.9 that happens to run beside it (the same pane IDs would mean other panes).
+  if (coreEngineEnabled()) throw new HerdrError("unsupported_engine", `${method} is not available on herdr-core yet`);
   const id = nextId();
   const started = performance.now();
   const key = JSON.stringify([socketPath, method]); // private bookkeeping only; never logged
@@ -323,6 +327,7 @@ export async function herdrRpc(
 }
 
 export async function ping(socketPath?: string): Promise<HerdrIdentity> {
+  if (coreEngineEnabled()) return coreEngine().ping();
   const result = await herdrRpc<{ version: string; protocol: number; capabilities?: Record<string, unknown> }>("ping", {}, socketPath);
   const attach = terminalAttachSupported(result.capabilities);
   // without attach the web server repaints the pane's screen instead (server/mirror.ts)
@@ -330,12 +335,14 @@ export async function ping(socketPath?: string): Promise<HerdrIdentity> {
 }
 
 export async function sessionSnapshot(socketPath?: string, timeoutMs?: number): Promise<SessionSnapshot> {
+  if (coreEngineEnabled()) return coreEngine().sessionSnapshot();
   const result = await herdrRpc<{ snapshot: SessionSnapshot }>("session.snapshot", {}, socketPath, timeoutMs);
   return result.snapshot;
 }
 
 /** One pane's metadata; an unknown pane rejects with herdr's `pane_not_found`. */
 export async function paneGet(paneId: string, socketPath?: string): Promise<PaneInfo> {
+  if (coreEngineEnabled()) return coreEngine().paneGet(paneId);
   const result = await herdrRpc<{ pane: PaneInfo }>("pane.get", { pane_id: paneId }, socketPath);
   return result.pane;
 }
@@ -615,6 +622,7 @@ export interface PaneReadOptions {
 }
 
 export async function paneRead(options: PaneReadOptions, socketPath?: string): Promise<PaneReadResult> {
+  if (coreEngineEnabled()) return coreEngine().paneRead(options);
   const { paneId, source = "visible", format = "text", lines, stripAnsi, timeoutMs } = options;
   // Escape sequences must survive for xterm.js, so an ansi read defaults to strip_ansi:false.
   const strip = stripAnsi ?? format !== "ansi";
@@ -732,6 +740,7 @@ export async function agentGet(paneId: string, socketPath?: string): Promise<Age
 }
 
 export async function paneSendText(paneId: string, text: string, socketPath?: string, guard?: () => boolean): Promise<void> {
+  if (coreEngineEnabled()) return coreEngine().paneSendText(paneId, text, guard);
   await herdrRpc("pane.send_text", { pane_id: paneId, text }, socketPath, undefined, guard);
 }
 
@@ -746,6 +755,7 @@ export async function agentPrompt(target: string, text: string, socketPath?: str
 }
 
 export async function paneSendKeys(paneId: string, keys: string[], socketPath?: string, guard?: () => boolean): Promise<void> {
+  if (coreEngineEnabled()) return coreEngine().paneSendKeys(paneId, keys, guard);
   await herdrRpc("pane.send_keys", { pane_id: paneId, keys }, socketPath, undefined, guard);
 }
 
@@ -876,6 +886,7 @@ export function subscribeEvents(
   handlers: SubscribeHandlers,
   socketPath: string = herdrSocketPath(),
 ): Subscription {
+  if (coreEngineEnabled()) return coreEngine().subscribeEvents(subscriptions, handlers);
   let closed = false;
   let socket: { end: () => void } | null = null;
   let started = false;
