@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { assistantLink, isAssistantMachine, isAssistantPane, storeAssistantAddress, storedAssistantAddress } from "./assistantMode.ts";
+import { assistantLink, isAssistantMachine, linkedAssistantView, isAssistantPane, storeAssistantAddress, storedAssistantAddress } from "./assistantMode.ts";
 
 describe("this device", () => {
   describe("in this browser", () => {
@@ -64,5 +64,15 @@ describe("isAssistantMachine", () => {
     expect(isAssistantMachine("raka-devs-2.tail38376d.ts.net", address)).toBe(false);
     expect(isAssistantMachine(undefined, address)).toBe(false);
     expect(isAssistantMachine("raka-devs", "")).toBe(false);
+  });
+});
+
+describe("a link to the Assistant's view", () => {
+  it("opens voice or chat from ?assistant=, and nothing else from anything else", () => {
+    expect(linkedAssistantView("?machine=vm&pane=wF%3Ap1&view=chat&assistant=voice")).toBe("voice");
+    expect(linkedAssistantView("?assistant=chat")).toBe("chat");
+    expect(linkedAssistantView("?assistant=call")).toBeNull();
+    expect(linkedAssistantView("?pane=wF%3Ap1")).toBeNull();
+    expect(linkedAssistantView("")).toBeNull();
   });
 });

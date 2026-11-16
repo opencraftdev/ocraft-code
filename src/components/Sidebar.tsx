@@ -16,7 +16,7 @@ import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { RowMenu, type RowMenuItem } from "./RowMenu.tsx";
 import { WorktreeDialog, type WorktreeDialogMode } from "./WorktreeDialog.tsx";
 import { focusWorkspaceListToggle } from "../lib/focus.ts";
-import { folderName, shortPathTitle, stripPaneChrome, taskRowLines } from "../lib/paneName.ts";
+import { displayPaneTitle, folderName, shortPathTitle, stripPaneChrome, taskRowLines } from "../lib/paneName.ts";
 import { ApiError } from "../lib/api.ts";
 import { useT } from "../lib/i18n.ts";
 import { userErrorMessage } from "../lib/userError.ts";
@@ -55,9 +55,8 @@ export { paneTitle };
  * The title a row or the header shows: the user's label, else the live title minus its chrome,
  * a working directory written out shortened to its last folder (lib/paneName.ts).
  */
-export function displayPaneTitle(pane: PaneInfo): string {
-  return pane.label?.trim() || shortPathTitle(stripPaneChrome(paneTitle(pane), pane.agent)) || pane.pane_id;
-}
+// the title a row shows lives with the other pane-name rules, which the herdr-app mods bundle too
+export { displayPaneTitle };
 
 /**
  * The title an alert names a pane by: as a row's, with the folder Codex adds after its thread
