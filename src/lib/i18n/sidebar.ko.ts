@@ -57,4 +57,5 @@ export const SIDEBAR_KO: Record<string, string> = {
   "Show {count} sub-agents": "하위 에이전트 {count}개 표시",
   "Hide {count} sub-agents": "하위 에이전트 {count}개 숨기기",
   "Mark unread": "읽지 않음으로 표시",
+  "{ahead} ahead, {behind} behind its upstream": "업스트림보다 {ahead}개 앞서고 {behind}개 뒤처짐",
 };

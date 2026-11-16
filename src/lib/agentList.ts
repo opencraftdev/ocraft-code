@@ -147,12 +147,12 @@ export function stepAgent(order: readonly string[], current: string | null, delt
   return order[(at + delta + order.length) % order.length]!;
 }
 
-interface StepKeyEvent { key: string; code?: string; altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }
-
-/** Alt+Down / Alt+Up everywhere, and ⌘] / ⌘[ on a Mac as herdr-app binds them: +1, -1, or 0 for any other key. */
-export function agentStepKey(event: StepKeyEvent, mac: boolean): 1 | -1 | 0 {
-  if (event.shiftKey || event.ctrlKey) return 0;
-  if (event.altKey && !event.metaKey && (event.key === "ArrowDown" || event.key === "ArrowUp")) return event.key === "ArrowDown" ? 1 : -1;
-  if (mac && event.metaKey && !event.altKey && (event.code === "BracketRight" || event.code === "BracketLeft")) return event.code === "BracketRight" ? 1 : -1;
-  return 0;
+let agentStepper: ((delta: 1 | -1) => void) | null = null;
+/** The Agents list publishes how it steps, so the Next / Previous agent commands follow its order */
+export function setAgentStepper(stepper: ((delta: 1 | -1) => void) | null): void { agentStepper = stepper; }
+/** Steps the Agents list; false when no list is mounted */
+export function stepAgentList(delta: 1 | -1): boolean {
+  if (agentStepper === null) return false;
+  agentStepper(delta);
+  return true;
 }

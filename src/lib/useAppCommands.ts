@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import type { HerdrPane, SessionSnapshot } from "../../shared/protocol.ts";
 import { renameWorkspace } from "./api.ts";
 import { registerCommands, setPromptOpener, type AppCommand } from "./commands.ts";
+import { stepAgentList } from "./agentList.ts";
 import { rosterPanes } from "./dagPane.ts";
 import { useT } from "./i18n.ts";
 import { tabLabel } from "./tabName.ts";
@@ -102,7 +103,7 @@ export function useAppCommands({ snapshot, machineId, selectedPaneId, selectPane
     if (snapshot === null) return;
     const go = (paneId: string | null) => { if (paneId !== null && paneId !== selectedPaneId) selectPane(paneId); };
     const step = (id: string, label: string, kind: "tab" | "workspace" | "agent", direction: -1 | 1): AppCommand =>
-      ({ id, label, run: () => go(stepTarget(kind, snapshot, selectedPaneId, direction)) });
+      ({ id, label, run: () => { if (kind !== "agent" || !stepAgentList(direction)) go(stepTarget(kind, snapshot, selectedPaneId, direction)); } });
     const { workspaces, tabs, selected } = places(snapshot, selectedPaneId);
     const selectedWorkspace = selected === null ? undefined : snapshot.workspaces.find((workspace) => workspace.workspace_id === selected.workspace_id);
     const commands: AppCommand[] = [

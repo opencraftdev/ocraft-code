@@ -16,7 +16,7 @@ import { createDirectory, listDirectories } from "./directories.ts";
 import { HerdrError, paneMoveToNewTab, sessionSnapshot, tabClose, tabCreate, tabMove, tabRename, workspaceClose, workspaceCreate, workspaceMove, workspaceRename, worktreeCreate, worktreeList, worktreeOpen, worktreeRemove } from "./herdr/client.ts";
 import { badRequest, conflictResponse, errorResponse, isJsonObject, jsonResponse, readJsonObject, setRequestRoute } from "./http.ts";
 import { paneContext } from "./pane-context.ts";
-import { repoDiffResponse } from "./repo-diff.ts";
+import { aheadBehind, repoDiffResponse } from "./repo-diff.ts";
 import type { ShellAgentLocator } from "./shell-agent.ts";
 
 /** `value` as an absolute path (`~` expanded) when it is a directory this user can read; null otherwise. */
@@ -174,7 +174,12 @@ export async function handleWorkspaceRequest(request: Request, url: URL, pathnam
     if (workspaceId === "") return badRequest("missing_workspace_id", "workspace_id is required");
     try {
       const listing = await worktreeList(workspaceId);
-      return jsonResponse({ source: listing.source, worktrees: listing.worktrees });
+      // each checkout's distance from its upstream, read on this PC as the sidebar names its branch
+      const worktrees = await Promise.all(listing.worktrees.map(async (worktree) => {
+        const counts = worktree.is_bare ? null : await aheadBehind(worktree.path);
+        return counts === null ? worktree : { ...worktree, ...counts };
+      }));
+      return jsonResponse({ source: listing.source, worktrees });
     } catch (error) {
       return errorResponse(error);
     }

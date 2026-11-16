@@ -469,3 +469,18 @@ export async function repoDiffResponse(kind: "files" | "file" | "refs", cwd: str
     return errorResponse(error);
   }
 }
+
+/**
+ * How far a checkout's branch is from its upstream: commits only it has (`ahead`) and only the
+ * upstream has (`behind`). Null without an upstream, outside git, or when git does not answer:
+ * the sidebar then says nothing. Refs only, so no worktree scan.
+ */
+export async function aheadBehind(cwd: string, options: RepoDiffOptions = {}): Promise<{ ahead: number; behind: number } | null> {
+  try {
+    const run = await runGit(contextOf({ deadlineMs: 3_000, ...options }), cwd, ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"], 256);
+    const counts = /^(\d+)\s+(\d+)\s*$/.exec(run.stdout);
+    return run.code === 0 && counts ? { ahead: Number(counts[1]), behind: Number(counts[2]) } : null;
+  } catch {
+    return null;
+  }
+}

@@ -7,7 +7,7 @@ import { parsePatchFiles } from "@pierre/diffs";
 import type { ApiError, RepoBranchComparison, RepoDiffFileList, RepoDiffFilePatch, RepoDiffRefs } from "../shared/protocol.ts";
 import { DeviceStore } from "./devices.ts";
 import { createServer } from "./index.ts";
-import { REPO_DIFF_CONTEXT_LINES, REPO_DIFF_MAX_FILES, REPO_DIFF_MAX_LIST_BYTES, REPO_DIFF_MAX_PATCH_BYTES, REPO_DIFF_MAX_REFS, repoDiffFile, repoDiffFiles, repoDiffRefs } from "./repo-diff.ts";
+import { aheadBehind, REPO_DIFF_CONTEXT_LINES, REPO_DIFF_MAX_FILES, REPO_DIFF_MAX_LIST_BYTES, REPO_DIFF_MAX_PATCH_BYTES, REPO_DIFF_MAX_REFS, repoDiffFile, repoDiffFiles, repoDiffRefs } from "./repo-diff.ts";
 
 /**
  * Real git repositories in a temp folder: the routes are only as right as what git prints, so a
@@ -788,5 +788,21 @@ describe("GET /api/workspace/diff/*", () => {
       expect([path, response.status]).toEqual([path, 403]);
       expect((await response.json() as ApiError).error.code).toBe("read_only");
     }
+  });
+});
+
+describe("aheadBehind", () => {
+  it("counts commits each side of the upstream, and says nothing without one", async () => {
+    const origin = repository("ahead-origin");
+    git(origin, "commit", "-q", "--allow-empty", "-m", "base");
+    const clone = join(scratch, "ahead-clone");
+    git(scratch, "clone", "-q", origin, clone);
+    git(clone, "commit", "-q", "--allow-empty", "-m", "mine");
+    git(clone, "commit", "-q", "--allow-empty", "-m", "mine too");
+    git(origin, "commit", "-q", "--allow-empty", "-m", "theirs");
+    git(clone, "fetch", "-q");
+    expect(await aheadBehind(clone)).toEqual({ ahead: 2, behind: 1 });
+    expect(await aheadBehind(origin)).toBeNull();
+    expect(await aheadBehind(join(scratch, "no-such-folder"))).toBeNull();
   });
 });

@@ -57,4 +57,5 @@ export const SIDEBAR_ZH: Record<string, string> = {
   "Show {count} sub-agents": "显示 {count} 个子 Agent",
   "Hide {count} sub-agents": "隐藏 {count} 个子 Agent",
   "Mark unread": "标为未读",
+  "{ahead} ahead, {behind} behind its upstream": "领先上游 {ahead} 个提交，落后 {behind} 个",
 };

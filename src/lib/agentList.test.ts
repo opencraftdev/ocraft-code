@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { agentGroups, agentRank, agentStepKey, cleanAgentTitle, clearUnread, stepAgent, trackChanges, unreadKey } from "./agentList.ts";
+import { agentGroups, agentRank, cleanAgentTitle, clearUnread, stepAgent, trackChanges, unreadKey } from "./agentList.ts";
 import type { KnownStatus } from "./status.ts";
 
 interface Row { key: string; status: KnownStatus; space: string; kids?: KnownStatus[]; since?: number }
@@ -100,17 +100,5 @@ describe("stepping", () => {
     expect(stepAgent(["a", "b", "c"], null, 1)).toBe("a");
     expect(stepAgent(["a", "b", "c"], "gone", -1)).toBe("c");
     expect(stepAgent([], "a", 1)).toBeNull();
-  });
-
-  test("Alt+arrows everywhere, ⌘] / ⌘[ only on a Mac, nothing with other modifiers", () => {
-    const key = (key: string, mods: Partial<{ altKey: boolean; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean }>, code?: string) =>
-      ({ key, code, altKey: false, metaKey: false, ctrlKey: false, shiftKey: false, ...mods });
-    expect(agentStepKey(key("ArrowDown", { altKey: true }), false)).toBe(1);
-    expect(agentStepKey(key("ArrowUp", { altKey: true }), true)).toBe(-1);
-    expect(agentStepKey(key("ArrowUp", { altKey: true, shiftKey: true }), true)).toBe(0);
-    expect(agentStepKey(key("]", { metaKey: true }, "BracketRight"), true)).toBe(1);
-    expect(agentStepKey(key("[", { metaKey: true }, "BracketLeft"), true)).toBe(-1);
-    expect(agentStepKey(key("]", { metaKey: true }, "BracketRight"), false)).toBe(0);
-    expect(agentStepKey(key("ArrowDown", {}), false)).toBe(0);
   });
 });

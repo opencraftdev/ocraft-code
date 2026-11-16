@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Terminal } from "@xterm/xterm";
-import { fileUriPath, hyperlinkFilter, isWebLink, terminalFileLinks } from "./terminalFileLinks.ts";
+import { cachedExists, fileUriPath, hyperlinkFilter, isWebLink, terminalFileLinkProvider, terminalFileLinks } from "./terminalFileLinks.ts";
 
 /** a plain press of the primary button, as xterm hands one to a link */
 const click = { button: 0 } as MouseEvent;
@@ -247,5 +247,29 @@ describe("terminal file links", () => {
     await new Promise<void>((resolve) => term.write("https://example.com/src/app.ts v1.2.3 1.2.3 and/or", resolve));
     expect(terminalFileLinks(term.buffer.active, 1, () => {})).toEqual([]);
     term.dispose();
+  });
+});
+
+describe("terminal file links that must exist", () => {
+  it("links only the paths the pane's PC finds, a trailing period and :line left out of the check", async () => {
+    const term = new Terminal({ cols: 80, allowProposedApi: true });
+    await new Promise<void>((resolve) => term.write("see ~/notes/a.md and src/app.ts:12:4 or ./gone/b.ts.", resolve));
+    const asked: string[] = [];
+    const provider = terminalFileLinkProvider(() => term.buffer.active, () => {}, async (path) => { asked.push(path); return !path.includes("gone"); });
+    const links = await new Promise<{ text: string }[] | undefined>((resolve) => provider.provideLinks(1, resolve));
+    expect(asked).toEqual(["~/notes/a.md", "src/app.ts:12:4", "./gone/b.ts"]);
+    expect(links?.map((link) => link.text)).toEqual(["~/notes/a.md", "src/app.ts:12:4"]);
+    term.dispose();
+  });
+
+  it("asks once per path while the answer is fresh", async () => {
+    let clock = 0;
+    let calls = 0;
+    const exists = cachedExists(async () => { calls++; return true; }, 1000, () => clock);
+    await exists("a.ts"); await exists("a.ts");
+    expect(calls).toBe(1);
+    clock = 2000;
+    await exists("a.ts");
+    expect(calls).toBe(2);
   });
 });
