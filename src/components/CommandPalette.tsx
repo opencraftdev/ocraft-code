@@ -1,6 +1,6 @@
 import { MachineContext, useMachineApi, useMachineId } from "../lib/machineContext.tsx";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type FocusEvent as ReactFocusEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
-import { Bell, Command as CommandIcon, Columns2, CornerLeftUp, Folder, FolderInput, FolderOpen, FolderSearch, History, ListFilter, LoaderCircle, Maximize2, MessageSquarePlus, Minimize2, Monitor, PanelLeft, Pencil, Pin, Plus, Puzzle, RefreshCw, Rows2, Settings, SunMoon, SwitchCamera, X } from "lucide-react";
+import { Bell, Command as CommandIcon, Columns2, CornerLeftUp, Folder, FolderInput, FolderOpen, FolderSearch, History, LayoutPanelLeft, ListFilter, LoaderCircle, Maximize2, MessageSquarePlus, Minimize2, Monitor, PanelLeft, Pencil, Pin, Plus, Puzzle, RefreshCw, Rows2, Settings, SunMoon, SwitchCamera, X } from "lucide-react";
 
 import "./CommandPalette.css";
 
@@ -154,6 +154,7 @@ function ShortcutHint({ shortcutId, chord }: { shortcutId?: ShortcutId; chord?: 
 
 export function CommandPalette({ open, initialQuery = "", onClose, machines, onSelect, snapshot, online, selectedPaneId, view, actions }: CommandPaletteProps) {
   const t = useT();
+  const { settings } = useSettings();
   const machineId = useMachineId();
   const api = useMachineApi();
   const touch = useMediaQuery("(pointer: coarse)");
@@ -329,6 +330,8 @@ export function CommandPalette({ open, initialQuery = "", onClose, machines, onS
     { id: "sidebar", label: t("Toggle sidebar"), icon: PanelLeft, shortcut: "toggle-sidebar", run: actions.toggleSidebar },
     // the sidebar's Filter field, also where Settings → Appearance → Sidebar filter leaves it out
     { id: "filter-sidebar", label: t("Filter workspaces and agents"), icon: ListFilter, run: actions.openSidebarFilter },
+    // herdr-app's layout.switch: the other of its two shipped layouts
+    { id: "layout", label: t(settings.paneLayout === "main" ? "Switch to the terminals layout" : "Switch to the main layout"), icon: LayoutPanelLeft, run: actions.switchLayout },
     { id: "theme", label: t("Toggle theme"), icon: SunMoon, run: actions.toggleTheme },
     { id: "settings", label: t("Settings"), icon: Settings, shortcut: "settings", run: actions.openSettings },
     { id: "add-pc", label: t("Add PC"), icon: Monitor, run: actions.openAddPc },

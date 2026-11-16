@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AppLink } from "./deepLink.ts";
+import type { PaneLayout } from "./settings.ts";
 import { watchDrawerSwipe } from "./edgeSwipe.ts";
 import { FILE_PANEL_DOCK_QUERY, storedFilePanelWidth } from "./filePanelWidth.ts";
 import { storedSidebarWidth } from "./sidebarWidth.ts";
@@ -7,10 +8,12 @@ import { useMediaQuery } from "./useMediaQuery.ts";
 
 export interface SidebarLayoutParams {
   initialLink: AppLink | null;
+  /** the layout preset (Settings paneLayout): terminals folds the sidebar */
+  paneLayout: PaneLayout;
 }
 
 /** Keeps the drawer, sidebar and file-panel layout state. */
-export function useSidebarLayout({ initialLink }: SidebarLayoutParams) {
+export function useSidebarLayout({ initialLink, paneLayout }: SidebarLayoutParams) {
   // a phone opened by a link that says so starts with its drawer out (lib/deepLink.ts)
   const [drawerOpen, setDrawerOpen] = useState(() => initialLink?.sidebar === "shown" && window.matchMedia?.("(min-width: 769px)").matches !== true);
   const drawerOpenRef = useRef(drawerOpen); drawerOpenRef.current = drawerOpen;
@@ -37,6 +40,13 @@ export function useSidebarLayout({ initialLink }: SidebarLayoutParams) {
   }, []);
   // a desktop opened by a link that says so starts with the sidebar collapsed, and the address says so while it is
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => initialLink?.sidebar === "hidden");
+  // herdr-app's terminals layout gives the panes the window: it folds the sidebar away, and main brings it back
+  const shownLayout = useRef(paneLayout);
+  useEffect(() => {
+    if (paneLayout === "terminals") setSidebarCollapsed(true);
+    else if (shownLayout.current === "terminals") setSidebarCollapsed(false);
+    shownLayout.current = paneLayout;
+  }, [paneLayout]);
   // the width the sidebar's edge was dragged to on this device; null is the density's own
   const [sidebarWidth, setSidebarWidth] = useState(storedSidebarWidth);
   const filePanelAvailable = useMediaQuery(FILE_PANEL_DOCK_QUERY);

@@ -9,6 +9,8 @@ export const PALETTE_KO: Record<string, string> = {
   "Switch to terminal": "터미널로 전환",
   "Switch to chat": "채팅으로 전환",
   "Toggle theme": "테마 전환",
+  "Switch to the terminals layout": "터미널 레이아웃으로 전환",
+  "Switch to the main layout": "기본 레이아웃으로 전환",
   "Search panes and actions…": "패널과 동작 검색…",
   "Close command palette": "명령 팔레트 닫기",
   "Filter panes by status": "상태별 패널 필터",

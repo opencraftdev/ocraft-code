@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { activateOther, dockPane, draggedPane, dropSide, paneDragData, slotSide, storedSplit, storeSplit, type SplitState } from "./split.ts";
+import { activateOther, dockPane, draggedPane, dropSide, paneDragData, slotSide, storedSplit, storeSplit, swapZone, type SplitState } from "./split.ts";
 
 const A = { machineId: "local", paneId: "w1:p1" };
 const B = { machineId: "local", paneId: "w1:p2" };
@@ -165,5 +165,16 @@ describe("split storage", () => {
     expect(storedSplit()).toBeNull();
     expect(() => storeSplit({ other: A, bSide: "right", active: "b" })).not.toThrow();
     expect(() => storeSplit(null)).not.toThrow();
+  });
+});
+
+describe("swapZone", () => {
+  const box = { left: 100, top: 50, width: 400, height: 200 };
+  it("swaps in the inner half of the pane and not near an edge", () => {
+    expect(swapZone(300, 150, box)).toBe(true);
+    expect(swapZone(200, 100, box)).toBe(true);
+    expect(swapZone(199, 150, box)).toBe(false);
+    expect(swapZone(300, 99, box)).toBe(false);
+    expect(swapZone(490, 240, box)).toBe(false);
   });
 });

@@ -38,6 +38,19 @@
 /* a pane's title dragged over another pane's title of its tab: dropped there, the two trade places */
 .pane-frame-head.is-swap-target { color: var(--accent); background: var(--accent-tint); box-shadow: inset 0 0 0 calc(var(--hairline) * 2) var(--accent); }
 .pane-frame-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+/* a split pane's header (herdr-app's pane mod): mark, name, folder, state, then its actions on hover */
+.pane-frame-head { position: relative; }
+.pane-frame:not(.is-single) .pane-frame-title { flex: 0 1 auto; max-width: 50%; color: var(--text); }
+.pane-frame-folder { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); }
+.pane-frame-actions { flex: none; display: flex; }
+.pane-frame-action { width: var(--control-h); height: var(--control-h); }
+.pane-frame-action svg { width: 14px; height: 14px; }
+.pane-frame-grip { position: absolute; left: 50%; top: 0; transform: translateX(-50%); display: flex; color: var(--text-dim); cursor: grab; opacity: 0.5; }
+.pane-frame-grip svg { width: 14px; height: 10px; }
+@media (hover: hover) {
+  .pane-frame:not(:hover) .pane-frame-actions:not(:focus-within) { visibility: hidden; }
+  .pane-frame:not(:hover) .pane-frame-grip { opacity: 0; }
+}
 .pane-frame-menu { flex: none; width: var(--control-h); height: var(--control-h); pointer-events: auto; }
 .pane-frame-body { flex: 1; min-width: 0; min-height: 0; position: relative; }
 /* A lone pane's head floats over the terminal's top right corner, where a full-screen program may
@@ -82,3 +95,11 @@
 }
 
 .pane-canvas.is-pending { pointer-events: none; }
+/* herdr-app's terminals layout (Settings paneLayout, the palette's Switch layout): no sidebar, and each
+   pane a rounded card with a gap around it, its focus a ring. The border is the gap, in the canvas's
+   color; the ring is an outline drawn just inside it, above the terminal */
+@media (min-width: 769px) {
+  .layout-terminals .pane-canvas { background: var(--bg); }
+  .layout-terminals .pane-frame { border: var(--space-1) solid var(--bg); border-radius: var(--radius-xl); outline: var(--hairline) solid var(--border); outline-offset: calc(-1 * var(--space-1)); }
+  .layout-terminals .pane-frame.is-current { border-color: var(--bg); outline-color: var(--accent); }
+}
