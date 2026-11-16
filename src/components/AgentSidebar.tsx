@@ -5,10 +5,9 @@ import type { Machine } from "../../shared/machines.ts";
 import { paneStorageId } from "../../shared/machines.ts";
 import { paneTokenValues } from "../../shared/pane-tokens.ts";
 import type { AgentStatus, OmoTask, PlanSummary } from "../../shared/protocol.ts";
-import { agentGroups, agentRank, agentStepKey, cleanAgentTitle, clearUnread, loadChanges, loadUnread, saveChanges, saveUnread, stepAgent, trackChanges, unreadKey, useAgentView, type AgentChanges } from "../lib/agentList.ts";
+import { agentGroups, agentRank, cleanAgentTitle, clearUnread, loadChanges, loadUnread, saveChanges, saveUnread, setAgentStepper, stepAgent, trackChanges, unreadKey, useAgentView, type AgentChanges } from "../lib/agentList.ts";
 import { fetchPaneOmoActivity } from "../lib/api.ts";
 import { MachineContext } from "../lib/machineContext.tsx";
-import { isMacPlatform } from "../lib/shortcutBindings.ts";
 import { knownStatus, type KnownStatus } from "../lib/status.ts";
 import { currentAgentRowTokens, subscribeAgentRowTokens } from "../lib/agentRowTokens.ts";
 import { useT } from "../lib/i18n.ts";
@@ -233,22 +232,9 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
     const row = live.find((candidate) => rowKey(candidate) === next);
     if (row) select(row.machine.id, row.entry.pane.pane_id);
   };
-  useEffect(() => {
-    const mac = isMacPlatform();
-    const onKey = (event: KeyboardEvent): void => {
-      const delta = agentStepKey(event, mac);
-      if (delta === 0 || event.isComposing) return;
-      // a text field keeps Alt+arrows for its caret; a terminal's own input does not
-      const target = event.target;
-      if (event.altKey && target instanceof HTMLElement && !target.classList.contains("xterm-helper-textarea")
-        && (target.isContentEditable || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      step.current(delta);
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, []);
+  // the Next / Previous agent commands (lib/commands.ts, their keys in Settings) step through this list
+  useEffect(() => setAgentStepper((delta) => step.current(delta)), []);
+  useEffect(() => () => setAgentStepper(null), []);
   // the PCs this device hides are not in `machines`: their pins are kept, not taken for gone panes
   const hidden = useHiddenMachines();
   const togglePin = (key: string): void => {
