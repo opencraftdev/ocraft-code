@@ -52,4 +52,9 @@ export const SIDEBAR_ZH: Record<string, string> = {
   "Expand": "展开",
   "Shell": "Shell",
   "Sessions in {name}": "{name} 中的会话",
+  "Sort agents: Priority": "Agent 排序：优先级",
+  "Sort agents: By space": "Agent 排序：按空间",
+  "Show {count} sub-agents": "显示 {count} 个子 Agent",
+  "Hide {count} sub-agents": "隐藏 {count} 个子 Agent",
+  "Mark unread": "标为未读",
 };

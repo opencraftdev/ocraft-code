@@ -12,10 +12,35 @@
   min-height: 0;
 }
 
-.agent-section-toggle {
+/* the Agents head: its fold, then the Priority / By space switch at the right */
+.agent-section-head {
+  display: flex;
+  align-items: center;
   flex: 0 0 auto;
-  width: 100%;
+  min-width: 0;
+}
+
+.agent-section-toggle {
+  flex: 1 1 auto;
+  min-width: 0;
   cursor: pointer;
+}
+
+.agent-view-toggle {
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.agent-view-toggle svg {
+  width: var(--space-4);
+  height: var(--space-4);
+}
+
+@media (hover: hover) {
+  .agent-view-toggle:hover { color: var(--text); }
 }
 
 /* the fold's caret hangs in the leading cell and shows when it is of use */
@@ -258,4 +283,130 @@
 @media (hover: none) and (pointer: coarse) {
   .agent-row:enabled:active { opacity: 1; }
   .agent-item:has(> .agent-row:enabled:active) { background: var(--side-hover); }
+}
+
+/* A group's head (herdr-app's agents sidebar): a Priority section in its state's colour, or a
+   space's name; a press folds the group, which then says how many it holds. */
+.agent-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--side-row);
+  padding: var(--space-2) var(--space-2) 0 var(--side-box);
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-group-toggle:focus-visible { outline-offset: calc(var(--ring-offset) * -1); }
+
+.agent-group-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-group-toggle.is-blocked .agent-group-label { color: var(--status-blocked); }
+.agent-group-toggle.is-done .agent-group-label { color: var(--status-done); }
+.agent-group-toggle.is-working .agent-group-label { color: var(--status-working); }
+
+.agent-group-count { font-variant-numeric: tabular-nums; }
+
+.agent-group-caret {
+  width: var(--space-3);
+  height: var(--space-3);
+  margin-left: auto;
+}
+
+@media (hover: hover) {
+  .agent-group-toggle:hover { color: var(--text); }
+}
+
+/* a parent's sub-agent fold, before its ⋯; folded, the count of the ones running */
+.agent-fold {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 0 var(--space-1);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.agent-fold svg {
+  width: var(--space-3);
+  height: var(--space-3);
+}
+
+@media (hover: hover) {
+  .agent-fold:hover { color: var(--text); }
+}
+
+/* a sub-agent under its parent, behind tree lines: one row height, its task as its title */
+.agent-sub > .agent-sub-row {
+  min-height: var(--side-row);
+  padding-left: calc(var(--side-box) / 2);
+}
+
+.agent-sub .agent-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+}
+
+.agent-sub-line {
+  align-self: stretch;
+  flex: 0 0 auto;
+  width: calc(var(--side-box) / 2);
+  margin-right: var(--space-2);
+  /* ├ for a sub-agent with another after it, └ for the last: a stem and a branch to its title */
+  background:
+    linear-gradient(var(--border-strong), var(--border-strong)) left top / 1.5px 100% no-repeat,
+    linear-gradient(var(--border-strong), var(--border-strong)) left 50% / 100% 1.5px no-repeat;
+}
+
+.agent-sub-line.is-last { background-size: 1.5px 50%, 100% 1.5px; }
+
+/* the rail: the list's place in it, shown only below 160px */
+.agent-rail-index { display: none; }
+
+/* sized by the sidebar, never by its rows: inline-size containment would otherwise shrink it to nothing */
+.agents-sidebar {
+  container-type: inline-size;
+  width: 100%;
+}
+
+/* Narrower than 160px the list is a rail, as herdr-app's: each row its place and its state; heads,
+   words and sub-agents give way. */
+@container (max-width: 159px) {
+  .agent-group-toggle,
+  .agent-section-head,
+  .agent-sub,
+  .agent-fold,
+  .sidebar-pinned-label,
+  .agent-copy,
+  .agent-row-status,
+  .agent-row > .sidebar-mark { display: none; }
+
+  .agent-rail-index {
+    display: inline-block;
+    flex: 1 1 auto;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .agent-item.is-selected .agent-rail-index { color: var(--text); }
 }

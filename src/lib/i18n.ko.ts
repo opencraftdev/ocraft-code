@@ -460,6 +460,7 @@ const BASE: Record<string, string> = {
   "Terminal line": "터미널 입력 줄",
   "Held message": "보관한 메시지",
   "Held input": "보관한 입력",
+  "Needs you": "내 응답 필요",
 };
 
 /** The parts KO is made of; src/lib/i18n.test.ts fails when a key is in two parts, since a spread keeps only the last. */

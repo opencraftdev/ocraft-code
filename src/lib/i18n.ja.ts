@@ -462,6 +462,7 @@ const BASE: Record<string, string> = {
   "Terminal line": "ターミナルの入力行",
   "Held message": "保留中のメッセージ",
   "Held input": "保持した入力",
+  "Needs you": "応答が必要",
 };
 
 /** The parts JA is made of; src/lib/i18n.test.ts fails when a key is in two parts, since a spread keeps only the last. */
