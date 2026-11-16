@@ -1,5 +1,5 @@
 import type { HerdrIdentity } from "../../shared/machines.ts";
-import type { PaneInfo, PaneReadResult, SessionSnapshot } from "../../shared/herdr-api.generated.ts";
+import type { AgentInfo, PaneInfo, PaneProcessInfo, PaneReadResult, SessionSnapshot } from "../../shared/herdr-api.generated.ts";
 import { HerdrError, type EventFrame, type HerdrSubscription, type PaneReadOptions, type SubscribeHandlers, type Subscription } from "../herdr/client.ts";
 import { CoreConnection, spawnCoreTransport, type CoreStream, type Transport } from "./connection.ts";
 import { applyCoreEvent, coreSnapshot, coreStatus, LAYOUT_DOC, type CoreTerminal, type LayoutDoc } from "./snapshot.ts";
@@ -189,6 +189,82 @@ export class CoreEngine {
       stream.write(new TextEncoder().encode(text));
     } finally {
       stream.close();
+    }
+  }
+
+  /**
+   * herdr 0.9's `pane.process_info` from the terminal's own record (`terminal.get`, read fresh):
+   * `pid` is the shell, `foreground` the foreground process group's leader. herdr-core names only
+   * that leader, so `foreground_processes` holds one process (none once the terminal has ended).
+   */
+  async paneProcessInfo(paneId: string): Promise<PaneProcessInfo> {
+    const { state, pane } = await this.pane(paneId);
+    const record = await state.connection.call<{ pid?: number | null; foreground?: { pid: number; name: string; argv: string[]; cwd: string } | null }>("terminal.get", { terminal: pane.terminal_id });
+    const fg = record.foreground;
+    return {
+      pane_id: pane.pane_id,
+      shell_pid: record.pid ?? null,
+      foreground_process_group_id: fg?.pid ?? null,
+      foreground_processes: fg ? [{ pid: fg.pid, name: fg.name, argv: fg.argv, argv0: fg.argv[0] ?? fg.name, cwd: fg.cwd }] : [],
+    };
+  }
+
+  /** herdr 0.9's agent record of a pane. herdr-core has no agent hooks, so no `agent_session`: Ovis finds the session from the process. */
+  async agentGet(target: string): Promise<AgentInfo> {
+    const { state, pane } = await this.pane(target);
+    const agent = this.snapshotOf(state).agents.find((candidate) => candidate.pane_id === pane.pane_id);
+    if (!agent) throw new HerdrError("agent_not_found", `pane ${target} runs no agent`);
+    return agent;
+  }
+
+  async agentList(): Promise<AgentInfo[]> {
+    return this.snapshotOf(await this.ready()).agents;
+  }
+
+  /** `agent.prompt`: herdr-core's `terminal.send` pastes the text and presses Enter. */
+  async agentPrompt(target: string, text: string, guard?: () => boolean): Promise<void> {
+    const { state, pane } = await this.pane(target);
+    if (guard && !guard()) throw new HerdrError("cancelled", "herdr-core terminal.send was not sent: the sender may no longer send");
+    await state.connection.call("terminal.send", { terminal: pane.terminal_id, text });
+  }
+
+  /**
+   * `pane.wait_for_output` as `terminal.wait {output}`: plain text printed after the wait starts
+   * (herdr-core strips escapes and has no regex match). A timeout rejects as herdr 0.9's does.
+   */
+  async paneWaitForOutput(paneId: string, match: { type: string; value: string }, timeoutMs = 30_000): Promise<{ pane_id: string; matched_line: string }> {
+    if (match?.type !== "substring") throw new HerdrError("unsupported_engine", `herdr-core waits for plain text only, not ${match?.type}`);
+    const { state, pane } = await this.pane(paneId);
+    const waited = await state.connection.call<{ ended: boolean; reason: string }>("terminal.wait", { terminal: pane.terminal_id, output: match.value, timeout: timeoutMs / 1000 }, timeoutMs + 5_000);
+    if (waited.reason === "output") return { pane_id: pane.pane_id, matched_line: match.value };
+    throw new HerdrError(waited.reason === "timeout" ? "timeout" : "output_not_matched", `pane ${paneId} stopped waiting: ${waited.reason}`);
+  }
+
+  /**
+   * herdr 0.9's JSON-RPC, answered from herdr-core for the methods it maps; any other method is
+   * refused (`unsupported_engine`), so no call can reach a herdr 0.9 running beside the core.
+   * Answers carry herdr 0.9's envelope, as `herdrRpc`'s callers unwrap it.
+   */
+  async rpc(method: string, params: Record<string, unknown>, timeoutMs?: number, guard?: () => boolean): Promise<unknown> {
+    const paneId = String(params["pane_id"] ?? params["target"] ?? "");
+    const text = typeof params["text"] === "string" ? params["text"] : "";
+    const keys = Array.isArray(params["keys"]) ? params["keys"].map(String) : [];
+    switch (method) {
+      case "session.snapshot": return { snapshot: await this.sessionSnapshot() };
+      case "pane.get": return { pane: await this.paneGet(paneId) };
+      case "pane.process_info": return { type: "pane_process_info", process_info: await this.paneProcessInfo(paneId) };
+      case "agent.get": return { type: "agent_info", agent: await this.agentGet(paneId) };
+      case "agent.list": return { type: "agent_list", agents: await this.agentList() };
+      case "agent.prompt": await this.agentPrompt(paneId, text, guard); return { type: "ok" };
+      case "pane.send_text": await this.paneSendText(paneId, text, guard); return { type: "ok" };
+      case "pane.send_keys": await this.paneSendKeys(paneId, keys, guard); return { type: "ok" };
+      case "pane.send_input":
+        if (text) await this.paneSendText(paneId, text, guard);
+        if (keys.length > 0) await this.paneSendKeys(paneId, keys, guard);
+        return { type: "ok" };
+      case "pane.wait_for_output":
+        return { type: "output_matched", ...(await this.paneWaitForOutput(paneId, params["match"] as { type: string; value: string }, typeof params["timeout_ms"] === "number" ? params["timeout_ms"] : timeoutMs)) };
+      default: throw new HerdrError("unsupported_engine", `${method} is not available on herdr-core yet`);
     }
   }
 

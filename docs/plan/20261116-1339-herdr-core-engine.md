@@ -1,6 +1,6 @@
 # herdr-core as a second engine
 
-Status: in progress (phase 1 done)
+Status: in progress (phase 1 done; phase 2's chat calls done)
 Created: 2026-11-16 13:39
 
 ## Goal
@@ -50,9 +50,13 @@ restarts or talks to a herdr 0.9 that runs beside a herdr-core.
 
 ## Mapping: Ovis's herdr 0.9 calls
 
-Every call goes through `server/herdr/client.ts`. With `OVIS_ENGINE=herdr-core` the wrappers in
-the first table dispatch to `server/herdr-core/engine.ts`; `herdrRpc` itself refuses every other
-method (`unsupported_engine`), so no call can reach a herdr 0.9 running beside the core.
+Every call goes through `server/herdr/client.ts`. With `OVIS_ENGINE=herdr-core`, `herdrRpc` hands
+every call to `CoreEngine.rpc` (`server/herdr-core/engine.ts`), which answers the mapped methods in
+herdr 0.9's envelope and refuses every other one (`unsupported_engine`), so no call can reach a
+herdr 0.9 running beside the core. The server started that way also registers no bridge
+descriptor (keyed on herdr 0.9's socket, it would replace the herdr 0.9 Ovis's), reads no saved
+herdr machines, offers no `herdr update`, and refuses pane watches (`herdr terminal session
+observe`).
 
 | herdr 0.9 | herdr-core | Phase |
 |---|---|---|
@@ -64,11 +68,11 @@ method (`unsupported_engine`), so no call can reach a herdr 0.9 running beside t
 | `pane.read` | `terminal.read {terminal, lines}`: plain text only (no ANSI read in herdr-core) | 1 ✅ (text) |
 | `pane.send_keys` | `terminal.keys` | 1 ✅ |
 | `pane.send_text` (raw, no Enter) | a short attach at the terminal's own size: DATA, then CLOSE (`terminal.send` always submits) | 1 ✅ |
-| `agent.prompt` | `terminal.send {terminal, text}` (paste + Enter; `force`/`if` cover blocked) | 2 |
-| `pane.send_input` | `terminal.send` or attach DATA | 2 |
-| `pane.wait_for_output` | `terminal.wait {output}` | 2 |
-| `agent.get`, `agent.list` | snapshot agents (terminals with `reported`/`status.app`) | 2 |
-| `pane.process_info` | the terminal's `pid` and `foreground {pid,name,argv,cwd}` | 2 |
+| `agent.prompt` | `terminal.send {terminal, text}` (paste + Enter; `force`/`if` cover blocked) | 2 ✅ |
+| `pane.send_input` | text through the short attach, keys through `terminal.keys` | 2 ✅ |
+| `pane.wait_for_output` | `terminal.wait {output}`: substring only (no regex in core), and only output printed after the wait starts | 2 ✅ |
+| `agent.get`, `agent.list` | snapshot agents (terminals with `reported`/`status.app`); no `agent_session`, so Claude's session comes from its live PID record | 2 ✅ |
+| `pane.process_info` | `terminal.get`: `pid` → `shell_pid`, `foreground {pid,name,argv,cwd}` → the one foreground process (core names only the group's leader) | 2 ✅ |
 | `agent.start`, `workspace.create`, `tab.create`, `pane.split` | `terminal.run {argv,cwd,env,labels,keep:true,size}`, then `doc.set` the new node (CAS on `version`, re-read on `conflict`) | 3 |
 | `pane.close`, `tab.close`, `workspace.close` | `terminal.kill` + remove the node(s) in `doc.set` | 3 |
 | `tab.rename`, `workspace.rename`, `pane.rename`, `tab.move`, `workspace.move`, `pane.move`, `pane.swap`, `layout.set_split_ratio`, `pane.resize`, `pane.zoom` | `doc.set` edits of the tree (`size: {weight}`); zoom and focus are this bridge's own view | 3 |
@@ -103,8 +107,10 @@ unset: herdr 0.9). `OVIS_HC_BIN` names `hc` when it is not on the PATH; `HC_SESS
 1. ✅ Phase 1 (this PR): `server/herdr-core/{frames,connection,snapshot,engine}.ts`; dispatch in
    `server/herdr/client.ts`; `CoreAttachSession` beside `PtySession` in
    `server/core/terminal-process.ts`.
-2. Phase 2, read and type everything: `agent.prompt` → `terminal.send`, `pane.wait_for_output` →
-   `terminal.wait`, `agent.get/list`, `pane.process_info` from `foreground`; ANSI reads from a
+2. Phase 2, read and type everything. ✅ (the chat's calls) `agent.prompt` → `terminal.send`,
+   `pane.wait_for_output` → `terminal.wait`, `agent.get/list`, `pane.process_info` from
+   `foreground`, `pane.send_input`: what herdr-app's ovis-chat mod needs (GET
+   /api/pane/conversation, /ws conversation-watch, submit, prompt/answer). Still to do: ANSI reads from a
    short observe attach (first paint) where a styled screen is needed; `done` vs seen from `turn`
    and the `herdr.seen` label (herdr-app docs/labels.md) instead of the raw word; send FACTS
    (colors, cell size) and FOCUS on attaches; AUTOMATIC_INPUT for xterm's query replies once
@@ -117,6 +123,25 @@ unset: herdr 0.9). `OVIS_HC_BIN` names `hc` when it is not on the PATH; `HC_SESS
    (`hc machine` or `ssh box hc connect`), the bridge descriptor and finishes epoch keyed on the
    core's identity instead of herdr's socket, and Windows (named pipe through `hc connect`).
 
+## Running Ovis on herdr-core
+
+A second Ovis beside the herdr 0.9 one, for herdr-app's Chat | Terminal switch (the pane header
+mod asks `http://127.0.0.1:7318` unless `shared("ovis.server")` names another). Its own state
+dir, never `~/.config/ovis`; loopback only; the user's own core (no `HC_SESSION`/`HC_SOCKET`):
+
+```sh
+mkdir -p ~/.local/state/ovis-herdr-core
+cd <ovis checkout> && OVIS_ENGINE=herdr-core OVIS_HC_BIN=$HOME/.local/bin/hc \
+  HOST=127.0.0.1 PORT=7318 OVIS_STATE_DIR=$HOME/.local/state/ovis-herdr-core \
+  HERDR_CONFIG_PATH=$HOME/.local/state/ovis-herdr-core/herdr-config.toml OVIS_TELEMETRY=0 \
+  bun run server
+```
+
+`HERDR_CONFIG_PATH` keeps it from reading herdr 0.9's config. As a login item:
+[ovis-herdr-core.plist](ovis-herdr-core.plist) (fill in the checkout and home paths).
+`curl -s http://127.0.0.1:7318/api/session` lists herdr-app's panes: `pane_id` is the layout node
+id (herdr-app's `props().pane`), `terminal_id` the core terminal (`t3`).
+
 ## Checks
 
 - `bun test server/herdr-core`: frame codec over any chunking, hello and generation check,
@@ -125,8 +150,13 @@ unset: herdr 0.9). `OVIS_HC_BIN` names `hc` when it is not on the PATH; `HC_SESS
   refusal of unmapped herdr 0.9 calls. All on a fake core (`server/herdr-core/core.fake.ts`).
 - `server/herdr-core/hc.contract.test.ts` runs against a real core when `OVIS_TEST_HC_BIN`
   names one: its own HOME, XDG dirs, `HC_SESSION` and `HC_SOCKET` under a `mkdtemp` directory,
-  stopped afterwards. Building hc needs Zig 0.16 exactly (ghostty's `requireZig`); with 0.17 the
-  build stops, so this run was not done here.
+  stopped afterwards. Building hc needs Zig 0.16 exactly (ghostty's `requireZig`).
+- Real core (done, hc 0.1.21 under `/tmp/ovhc-*`): attach and typing; a program that reports
+  as Claude is an agent, its foreground process, a prompt, and an output wait.
+- End to end (done, sandboxed herdr-app + core + this server on another port): a stand-in Claude
+  (a renamed bun writing Claude's PID record and transcript) shows in ovis-chat through the pane
+  header's Chat switch; a chat message goes in through `/ws` submit and its answer shows; back to
+  the terminal; with the server stopped the switch hides.
 - Smoke (done): the whole server with `OVIS_ENGINE=herdr-core` and a fake `hc` serves
   `/api/session` from the document and attaches a pane over `/ws` (`input-ready`, then the
   core's bytes as `pty-data`).

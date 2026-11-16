@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A second Ovis on this Mac's herdr-core (docs/plan/20261116-1339-herdr-core-engine.md, "Running
+  Ovis on herdr-core"). Replace OVIS_CHECKOUT and HOME_DIR, then:
+    cp docs/plan/ovis-herdr-core.plist ~/Library/LaunchAgents/dev.ovis.herdr-core.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.ovis.herdr-core.plist
+  Stop: launchctl bootout gui/$(id -u)/dev.ovis.herdr-core
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.ovis.herdr-core</string>
+  <key>WorkingDirectory</key><string>OVIS_CHECKOUT</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/bun</string>
+    <string>run</string>
+    <string>server/index.ts</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OVIS_ENGINE</key><string>herdr-core</string>
+    <key>OVIS_HC_BIN</key><string>HOME_DIR/.local/bin/hc</string>
+    <key>HOST</key><string>127.0.0.1</string>
+    <key>PORT</key><string>7318</string>
+    <key>OVIS_STATE_DIR</key><string>HOME_DIR/.local/state/ovis-herdr-core</string>
+    <key>HERDR_CONFIG_PATH</key><string>HOME_DIR/.local/state/ovis-herdr-core/herdr-config.toml</string>
+    <key>OVIS_TELEMETRY</key><string>0</string>
+    <key>PATH</key><string>HOME_DIR/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>HOME_DIR/.local/state/ovis-herdr-core/server.log</string>
+  <key>StandardErrorPath</key><string>HOME_DIR/.local/state/ovis-herdr-core/server.log</string>
+</dict>
+</plist>

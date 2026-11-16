@@ -8,6 +8,7 @@ import type { ClientRole, ServerMessage } from "../../shared/protocol.ts";
 import { OUTPUT_STALLED_CLOSE_CODE } from "../../shared/terminal-flow.ts";
 import type { DeviceStore } from "../devices.ts";
 import { HerdrError, herdrSocketPath } from "../herdr/client.ts";
+import { coreEngineEnabled } from "../herdr-core/engine.ts";
 import type { MachineRelay } from "../machine-relay.ts";
 import { OUTPUT_HARD_BYTES, type OutputWindow } from "../output-window.ts";
 import type { PendingInputs } from "../pending-input.ts";
@@ -139,6 +140,8 @@ export function createConnections({ clients, present, pending, devices, detachCl
     watches.get(paneId)?.kill();
     watches.delete(paneId);
     try {
+      // the watch runs herdr 0.9's CLI on its socket: on herdr-core that is another session's pane
+      if (coreEngineEnabled()) throw new HerdrError("unsupported_engine", "pane watch is not available on herdr-core yet");
       const watch = new PaneWatch({
         paneId,
         ...geometry,

@@ -36,6 +36,7 @@ import {
   paneGet,
   ping,
 } from "./herdr/client.ts";
+import { coreEngineEnabled } from "./herdr-core/engine.ts";
 import { type AlertTiming, defaultStateDir, handlePushRequest } from "./push.ts";
 import { mergeSiblingState, siblingStateDir } from "./state-merge.ts";
 import { moveLegacyStateDir } from "./update-state.ts";
@@ -757,7 +758,11 @@ if (import.meta.main) {
   const portal = new PortalService({ stateDir });
   let instance: ReturnType<typeof createServer>;
   try {
-    instance = createServer({ updates, herdrUpdate: new HerdrUpdater(), portal, telemetry, registerBridge: true, herdrProfiles: readHerdrProfiles, shellAgents: new ShellAgentLocator(), stateDir, siblingStateDir: siblingStateDir(stateDir) });
+    // On herdr-core, nothing of herdr 0.9's: a bridge descriptor is keyed on herdr 0.9's socket, so one
+    // would take the place of the Ovis on herdr 0.9 beside it; herdr's saved machines and `herdr update`
+    // are herdr 0.9's own (phase 4 keys the bridge and machines on the core)
+    const core = coreEngineEnabled();
+    instance = createServer({ updates, portal, telemetry, registerBridge: !core, ...(core ? {} : { herdrUpdate: new HerdrUpdater(), herdrProfiles: readHerdrProfiles }), shellAgents: new ShellAgentLocator(), stateDir, siblingStateDir: siblingStateDir(stateDir) });
   } catch (err) {
     const { code, syscall } = err as { code?: string; syscall?: string };
     // only the bind itself: a permission error reading a state file keeps its own message and path
