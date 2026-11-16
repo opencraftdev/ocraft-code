@@ -499,6 +499,8 @@ herdr-app do tab.new '{"mod":"ovis-assistant"}'
 
 It finds the Assistant itself among the PCs of the Ovis at `server`, as the web app does: the agent pane working in the VM's Assistant folder. `machine` and `pane` name it instead, and `readOnly: true` watches only. The panel reads its routes again every few seconds (a mod reads no event stream).
 
+`herdr-mods/ovis-sessions` lists the herdr 0.9 sessions on every PC the Ovis at `server` reaches: herdr-app shows only herdr-core terminals, so the sessions you keep on herdr 0.9 are reached through Ovis. They are grouped per PC and workspace with their status (**Agents** shows shells too when switched to **All**). A row opens an agent's chat (`ovis-chat`) or a shell's terminal; its terminal button opens the live terminal in a tab of a space on this computer, attached with herdr's own `terminal attach` (over `ssh -t` to the PC's SSH address for another PC; never `--takeover`). herdr gives a pane one attached terminal at a time: close it in Ovis first if Ovis shows that pane's terminal. To put the list in the sidebar, copy the `main` layout under another name, add a block with `"content": {"mod": "ovis-sessions"}` between `spaces` and `agents`, and switch to it (`herdr-app do layout.switch '{"name":"<name>"}'`).
+
 ## Access and safety
 
 Anyone who can reach the server can type into your terminals, so what matters is who gets in. It listens on `127.0.0.1` by default, which means only this computer. From anywhere else, a request gets in in one of three ways:
