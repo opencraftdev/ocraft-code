@@ -104,6 +104,9 @@ export interface WorktreeEntry {
   is_prunable: boolean;
   /** the herdr workspace this checkout is open in, if any */
   open_workspace_id: string | null;
+  /** commits on the branch and not its upstream, and the reverse; absent without an upstream */
+  ahead?: number;
+  behind?: number;
 }
 
 /** GET /api/worktree/list: the repository the workspace is in, and every checkout of it. */

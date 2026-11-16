@@ -9,7 +9,9 @@ import { clipboardKey, hasModifiers, physicalKey, terminalChord, navigationSeque
 import { EMPTY_DRAFT, applyToDraft, draftIsEmpty, type InputDraft } from "./draft.ts";
 import { pendingMessages } from "./pendingMessages.ts";
 import { FrameGate } from "./inputRow.ts";
-import { AttachmentTooLargeError, assertAttachable, fetchPaneScroll, fetchPaneSelection, scrollPane } from "./api.ts";
+import { ApiError, AttachmentTooLargeError, assertAttachable, fetchFileInfo, fetchPaneScroll, fetchPaneSelection, scrollPane } from "./api.ts";
+import { fileLineTarget } from "./filePaths.ts";
+import { terminalPaneLinkProvider } from "./terminalPaneLinks.ts";
 import { parseOsc52 } from "./osc52.ts";
 import { matchHerdrWidths } from "./terminalWidths.ts";
 import { paneStorageId } from "../../shared/machines.ts";
@@ -20,7 +22,7 @@ import { measurableFontStack, TERMINAL_FONT_STACK } from "./fontFamily.ts";
 import type { Translate } from "./i18n.ts";
 import { isAppShortcut } from "./shortcuts.ts";
 import { keyboardHoldsGrid, keyboardUp } from "./keyboard.ts";
-import { fileUriPath, hyperlinkFilter, isWebLink, openWebLink, terminalFileLinkProvider, terminalFileLinks } from "./terminalFileLinks.ts";
+import { cachedExists, fileUriPath, hyperlinkFilter, isWebLink, openWebLink, terminalFileLinkProvider, terminalFileLinks } from "./terminalFileLinks.ts";
 import { adjustTerminalGlyphs } from "./terminalGlyphs.ts";
 import { keepDeleteRepeatText, keyboardNeedsText, restoreDeleteRepeatCaret } from "./deleteRepeat.ts";
 import { pinchFontSize } from "./pinchFontSize.ts";
@@ -240,7 +242,15 @@ export function useTerminalMount(deps: TerminalMountDeps): void {
       matchHerdrWidths(term);
       // the same policy as the linkHandler above: an http(s) address or nothing (S10)
       term.loadAddon(new WebLinksAddon((event, uri) => { if (isWebLink(uri) && !openWebRef.current(uri, event.shiftKey)) openWebLink(uri); }));
-      term.registerLinkProvider(terminalFileLinkProvider(() => term.buffer.active, (path, event) => { if (linkPressed(event)) openFileRef.current?.(path); }));
+      // a path is a link only where the pane's PC finds the file, from the pane's folder; a 404 is the only "no"
+      const fileExists = cachedExists((key) => {
+        const [pane, path] = JSON.parse(key) as [string | null, string];
+        return fetchFileInfo(fileLineTarget(path).path, pane, machineId).then(() => true, (error: unknown) => !(error instanceof ApiError && error.status === 404));
+      });
+      term.registerLinkProvider(terminalFileLinkProvider(() => term.buffer.active, (path, event) => { if (linkPressed(event)) openFileRef.current?.(path); },
+        (path) => fileExists(JSON.stringify([paneRef.current, path]))));
+      // a live pane's address (`w1:p3`, `vps/w1:p3`): Ctrl/Cmd-click shows that pane
+      term.registerLinkProvider(terminalPaneLinkProvider(() => term.buffer.active, machineId));
       term.open(host);
       // xterm turns autocorrect, autocapitalize and spellcheck off on its helper textarea; an Android
       // keyboard still shows its word strip there unless the field also says autocomplete="off",

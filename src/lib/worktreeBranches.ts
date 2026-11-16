@@ -4,6 +4,9 @@ export interface WorkspaceBranch {
   checkoutPath: string;
   branch: string | null;
   isDetached: boolean;
+  /** commits not on the upstream yet, and upstream commits not here; absent without an upstream */
+  ahead?: number;
+  behind?: number;
 }
 
 interface CheckoutIdentity { repoKey: string; checkoutPath: string }
@@ -114,6 +117,8 @@ export class WorkspaceBranchCache {
         checkoutPath: identity.checkoutPath,
         branch: entry.branch ?? null,
         isDetached: entry.is_detached,
+        ahead: entry.ahead,
+        behind: entry.behind,
       });
     }
     return true;
@@ -126,9 +131,10 @@ export class WorkspaceBranchCache {
     const entry = listing.worktrees.find((candidate) => normalizeCheckoutPath(candidate.path) === source);
     if (!entry) return this.unmarked.delete(workspaceId);
     const before = this.unmarked.get(workspaceId);
-    const branch = { checkoutPath: source, branch: entry.branch ?? null, isDetached: entry.is_detached };
+    const branch = { checkoutPath: source, branch: entry.branch ?? null, isDetached: entry.is_detached, ahead: entry.ahead, behind: entry.behind };
     this.unmarked.set(workspaceId, branch);
-    return before?.branch !== branch.branch || before.isDetached !== branch.isDetached || before.checkoutPath !== branch.checkoutPath;
+    return before?.branch !== branch.branch || before.isDetached !== branch.isDetached || before.checkoutPath !== branch.checkoutPath
+      || before.ahead !== branch.ahead || before.behind !== branch.behind;
   }
 
   /** git refused an unmarked workspace (a 4xx): it is no checkout now, so its branch goes. */
@@ -152,6 +158,8 @@ export class WorkspaceBranchCache {
         checkoutPath: branch.checkoutPath,
         branch: branch.branch,
         isDetached: branch.isDetached,
+        ahead: branch.ahead,
+        behind: branch.behind,
       });
     }
     return branches;

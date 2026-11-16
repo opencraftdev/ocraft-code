@@ -52,4 +52,5 @@ export const SIDEBAR_KO: Record<string, string> = {
   "Expand": "펼치기",
   "Shell": "셸",
   "Sessions in {name}": "{name}의 세션",
+  "{ahead} ahead, {behind} behind its upstream": "업스트림보다 {ahead}개 앞서고 {behind}개 뒤처짐",
 };

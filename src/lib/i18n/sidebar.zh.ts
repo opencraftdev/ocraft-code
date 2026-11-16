@@ -52,4 +52,5 @@ export const SIDEBAR_ZH: Record<string, string> = {
   "Expand": "展开",
   "Shell": "Shell",
   "Sessions in {name}": "{name} 中的会话",
+  "{ahead} ahead, {behind} behind its upstream": "领先上游 {ahead} 个提交，落后 {behind} 个",
 };

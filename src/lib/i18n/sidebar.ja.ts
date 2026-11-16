@@ -52,4 +52,5 @@ export const SIDEBAR_JA: Record<string, string> = {
   "Expand": "展開",
   "Shell": "シェル",
   "Sessions in {name}": "{name} のセッション",
+  "{ahead} ahead, {behind} behind its upstream": "上流より {ahead} 件先行、{behind} 件遅れ",
 };
