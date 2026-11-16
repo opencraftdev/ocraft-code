@@ -483,6 +483,7 @@ const BASE: Record<string, string> = {
   "Terminal line": "终端输入行",
   "Held message": "保留的消息",
   "Held input": "保留的输入",
+  "Needs you": "需要你回应",
 };
 
 /** The parts ZH is made of; src/lib/i18n.test.ts fails when a key is in two parts, since a spread keeps only the last. */

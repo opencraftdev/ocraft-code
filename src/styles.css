@@ -3105,9 +3105,6 @@ button, a, [role="button"] {
 .sidebar-shell .sidebar-pinned-label { justify-content: flex-start; margin: 0; padding: var(--space-2) var(--space-2) var(--space-1); text-transform: none; letter-spacing: 0; font-weight: var(--fw-regular); font-size: var(--fs-xs); }
 .sidebar-shell .sidebar-pinned-label > span { padding-inline: 0; background: transparent; }
 
-/* the session list is the sidebar: the cross-PC agent roster repeats it */
-.sidebar-shell .agents-sidebar { display: none; }
-
 /* ── Claude desktop look: chat ────────────────────────────────────────────────────────────────
    One input line (attach · text · send), the model and its level under it on the right, and no
    folder strip or key hint: the right panel says where the agent works. */

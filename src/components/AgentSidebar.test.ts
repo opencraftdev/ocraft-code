@@ -95,4 +95,16 @@ describe("AgentSidebar plugin tokens", () => {
     // the mark already draws Claude: the line does not say it again
     expect(lines[1]).toBe("checkout-api");
   });
+
+  test("Priority, the default view, heads each state's section, most urgent first, and strips a title's spinner", () => {
+    const html = render([machine([
+      pane("w1:p1", { agent_status: "working", title: "⠋ Refactor" }),
+      pane("w1:p2", { agent_status: "idle", title: "Docs" }),
+      pane("w1:p3", { agent_status: "blocked", title: "✦  Login" }),
+    ])]);
+    expect(texts(html, "agent-group-label")).toEqual(["Needs you", "Working", "Idle"]);
+    expect(texts(html, "agent-title")).toEqual(["Login", "Refactor", "Docs"]);
+    // the rail's numbers follow the list's order
+    expect([...html.matchAll(/class="agent-rail-index"[^>]*>(\d+)</g)].map((match) => match[1])).toEqual(["1", "2", "3"]);
+  });
 });
