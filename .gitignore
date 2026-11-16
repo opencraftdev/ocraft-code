@@ -22,6 +22,9 @@ remote-bundles/
 # README demo videos: uploaded to GitHub, not committed (docs/development.md)
 docs/screenshots/*.mp4
 
+# herdr-app mods' bundles of the web client's helpers, made by scripts/build-herdr-mods.ts
+herdr-mods/*/lib.js
+
 # the website, assembled by scripts/build-site.ts
 _site/
 
