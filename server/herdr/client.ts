@@ -217,9 +217,9 @@ export async function herdrRpc(
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
   guard?: () => boolean,
 ): Promise<unknown> {
-  // On herdr-core only the wrappers that dispatch to it below work: a herdr 0.9 call must never
+  // On herdr-core the engine answers what it maps and refuses the rest: a herdr 0.9 call must never
   // reach a herdr 0.9 that happens to run beside it (the same pane IDs would mean other panes).
-  if (coreEngineEnabled()) throw new HerdrError("unsupported_engine", `${method} is not available on herdr-core yet`);
+  if (coreEngineEnabled()) return coreEngine().rpc(method, params as Record<string, unknown>, timeoutMs, guard);
   const id = nextId();
   const started = performance.now();
   const key = JSON.stringify([socketPath, method]); // private bookkeeping only; never logged

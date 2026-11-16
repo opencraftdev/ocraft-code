@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { herdrRpc, HerdrError, paneSendKeys, sessionSnapshot, type EventFrame } from "../herdr/client.ts";
+import { agentGet, agentPrompt, herdrRpc, HerdrError, paneProcessInfo, paneSendKeys, sessionSnapshot, type EventFrame } from "../herdr/client.ts";
 import { FakeCore, until } from "./core.fake.ts";
 import { CoreAttachSession, CoreEngine, setCoreEngineForTests } from "./engine.ts";
 import { CLOSE, DATA } from "./frames.ts";
@@ -9,9 +9,10 @@ const EVENTS = 2;
 
 function world() {
   const terminals: CoreTerminal[] = [
-    { address: "t1", state: "live", cwd: "/w", cols: 80, rows: 24 },
+    { address: "t1", state: "live", cwd: "/w", cols: 80, rows: 24, reported: true, status: { state: "idle", app: "claude" } },
     { address: "t2", state: "live", cwd: "/w", cols: 80, rows: 24 },
   ];
+  const foreground = { pid: 42, name: "claude", argv: ["claude", "--resume"], cwd: "/w/app" };
   let doc: LayoutDoc = { spaces: [{ id: "s1", name: "api", folder: "/w", tabs: [{ id: "tab1", name: "", root: { id: "tab1", type: "row", children: [
     { id: "p1", type: "block", content: { terminal: "t1" } },
   ] } }] }] };
@@ -23,6 +24,9 @@ function world() {
       case "terminal.attach": return { channel: nextChannel++, terminal: terminals.find((t) => t.address === params["terminal"]), automatic_input: false, resize_notifications: false };
       case "terminal.read": return { text: "$ ls\n", complete: true, how: "screen" };
       case "terminal.keys": return { pressed: params["keys"] };
+      case "terminal.get": return { ...terminals.find((t) => t.address === params["terminal"]), pid: 40, foreground: params["terminal"] === "t1" ? foreground : null };
+      case "terminal.send": return { turn: 3, status: "idle", started: true };
+      case "terminal.wait": return { terminal: params["terminal"], ended: true, reason: params["output"] === "ready" ? "output" : "timeout", turn: 3, children: [] };
       default: throw new Error(`unexpected ${method}`);
     }
   });
@@ -144,6 +148,40 @@ describe("engine selection", () => {
     expect(core.calls.at(-1)?.method).toBe("terminal.keys");
     const refused = await herdrRpc("pane.close", { pane_id: "p1" }).catch((e: unknown) => e);
     expect((refused as HerdrError).code).toBe("unsupported_engine");
+    await engine.close();
+  });
+
+  test("process info, agents, prompts and output waits go to the pane's terminal", async () => {
+    const { engine, core } = world();
+    setCoreEngineForTests(engine);
+    process.env["OVIS_ENGINE"] = "herdr-core";
+    // what the chat's transcript lookup asks (server/conversation.ts): the foreground leader, by pane_id
+    expect(await paneProcessInfo("p1")).toEqual({
+      pane_id: "p1", shell_pid: 40, foreground_process_group_id: 42,
+      foreground_processes: [{ pid: 42, name: "claude", argv: ["claude", "--resume"], argv0: "claude", cwd: "/w/app" }],
+    });
+    expect(core.calls.at(-1)).toEqual({ method: "terminal.get", params: { terminal: "t1" } });
+    expect((await paneProcessInfo("hc:loose:t2"))?.foreground_processes).toEqual([]);
+
+    const agent = await agentGet("p1");
+    expect([agent.pane_id, agent.terminal_id, agent.agent, agent.agent_status, agent.agent_session]).toEqual(["p1", "t1", "claude", "idle", undefined]);
+    expect(((await agentGet("hc:loose:t2").catch((e: unknown) => e)) as HerdrError).code).toBe("agent_not_found");
+    expect((await herdrRpc<{ agents: { pane_id: string }[] }>("agent.list", {})).agents.map((a) => a.pane_id)).toEqual(["p1"]);
+
+    await agentPrompt("p1", "fix the test");
+    expect(core.calls.at(-1)).toEqual({ method: "terminal.send", params: { terminal: "t1", text: "fix the test" } });
+    expect(((await agentPrompt("p1", "late", undefined, () => false).catch((e: unknown) => e)) as HerdrError).code).toBe("cancelled");
+    expect(core.calls.at(-1)?.method).toBe("terminal.send");
+    expect(core.calls.filter((c) => c.method === "terminal.send")).toHaveLength(1);
+
+    await herdrRpc("pane.send_input", { pane_id: "p1", keys: ["enter"] });
+    expect(core.calls.at(-1)).toEqual({ method: "terminal.keys", params: { terminal: "t1", keys: ["enter"] } });
+
+    expect(await herdrRpc<unknown>("pane.wait_for_output", { pane_id: "p1", source: "recent", match: { type: "substring", value: "ready" }, timeout_ms: 2000 }))
+      .toEqual({ type: "output_matched", pane_id: "p1", matched_line: "ready" });
+    expect(core.calls.at(-1)).toEqual({ method: "terminal.wait", params: { terminal: "t1", output: "ready", timeout: 2 } });
+    expect(((await herdrRpc("pane.wait_for_output", { pane_id: "p1", source: "recent", match: { type: "substring", value: "never" }, timeout_ms: 10 }).catch((e: unknown) => e)) as HerdrError).code).toBe("timeout");
+    expect(((await herdrRpc("pane.wait_for_output", { pane_id: "p1", source: "recent", match: { type: "regex", value: "r.*y" } }).catch((e: unknown) => e)) as HerdrError).code).toBe("unsupported_engine");
     await engine.close();
   });
 });
