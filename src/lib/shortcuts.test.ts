@@ -238,10 +238,13 @@ it("pages the selected pane with fixed Mod+Shift bindings, remapping and disabli
 
 describe("new tab and split pane", () => {
   it("have no key until one is chosen in Settings, and then work like any other binding", () => {
-    for (const id of ["new-tab", "rename-tab", "split-right", "split-down"] as const) {
-      expect(shortcutKeys(id, {})).toEqual([]);
-      expect(shortcutDisplayKeys(id, {})).toEqual([]);
+    // herdr-app's F2 renames a tab, and on a Mac its ⌘D / ⌘⇧D split (Linux's Ctrl+Shift+O/E are Ovis's already)
+    for (const id of ["new-tab", "split-right", "split-down"] as const) {
+      expect(shortcutKeys(id, {}, false)).toEqual([]);
+      expect(shortcutDisplayKeys(id, {}, false)).toEqual([]);
     }
+    expect(shortcutKeys("rename-tab", {}, false)).toEqual(["F2"]);
+    expect(shortcutKeys("split-right", {}, true)).toEqual(["meta+d"]);
     expect(matchShortcut(keyEvent("t", { ctrlKey: true }), false)).toBeNull();
     const overrides = sanitizeShortcutOverrides({ "new-tab": "y", "rename-tab": "r", "split-right": "l", "split-down": "h" });
     expect(overrides).toEqual({ "new-tab": "y", "rename-tab": "r", "split-right": "l", "split-down": "h" });

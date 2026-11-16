@@ -277,7 +277,7 @@ A pane's plan is the task list a Claude Code agent keeps (`TaskCreate` / `TaskUp
 | **Jump across PCs** | The command palette (Mod+Shift+K) searches all connected PCs at once by PC, workspace, branch, tab, pane title or agent kind. PC names distinguish results, and Recent remembers each pane's PC. Picking a result opens that PC and pane directly. Disconnected PCs are omitted; app and plugin actions remain on the currently selected PC. It also finds Settings pages and actions by related words (try `theme` or `font`), and browses folders: type a path such as `~/`, or pick **Browse folders**, and the folder you reach opens in Files. |
 | **Answer prompts** | Approval, question and plan menus become cards. Tap an option, or type its number in the composer. The server checks that the menu is still current before answering. |
 | **Compose** | `/` commands and `@` file mentions, any file or image up to 32 MB attached by path, and a draft per pane. Send during work schedules a next-turn message; use its ↑ Send now action to send it now. A strip under the input card names the pane's working folder (the whole path on hover) and, for a workspace of a repository with a worktree open, its branch at the other end; a phone leaves it out. Pick or type a terminal-only command and send normally: after acceptance, the pane's terminal opens over the chat, in this browser only, with **Back to Chat** and **Keep Terminal**; the chat stays where you were reading. For Claude Code's panels (`/config`, `/permissions`, `/theme` and the like) the chat may come back by itself when you close the panel, once Claude records the close; for Codex, omp, pi, gjc, OmO, Hermes (classic CLI), Devin, agy and Grok it comes back after their recorded pickers and panels, once the agent's empty input row is back on the screen; otherwise use **Back to Chat**, the header's Chat, or Back on a phone. If you go back to the same pane's chat while the command's screen is still open, the composer says so (Claude Code and every agent above, not OpenCode) and holds Send, quick replies and a queued message's Send now until the screen closes (**Send anyway** sends the message once); **Show terminal** opens it again. Messages the PC sends by itself at the end of a turn are not held. Automatic queued delivery never changes your view. Chat keeps one quiet **Ran in terminal** row with **Open Terminal**, which shows the terminal over the chat again; ordinary commands keep their outcome chips, and Hermes keeps its informational result cards. `/resume` opens **Earlier sessions…**. [Agent commands in Chat](agent-commands.md) explains where each agent's commands come from and what counts as a result. |
-| **Follow every agent** | Live RUN / INPUT / DONE / READY status for all panes, and alerts when an agent needs input, finishes or its terminal ends. |
+| **Follow every agent** | Live RUN / INPUT / DONE / READY status for all panes, and alerts when an agent needs input, finishes or its terminal ends. While the app is open an alert is a card in its corner ("codex needs you", with its workspace / tab; click it to go there), never for the pane in front of you; with **Settings → Alerts → Sound** on, a question chimes always and a finish only for a pane you are not looking at. |
 | **Open what agents make** | A file path in an answer opens in a viewer (images, video, audio, PDF, text), or find it with **Browse files**, and download it to your phone. A source file opens whole up to 8 MB and 200,000 lines; past 2,000 lines it scrolls as a window of rows, colored up to 256 KB and 5,000 lines and plain beyond. A link with `:line` or `#L12` opens at that line. |
 | **See what changed** | **Browse files → Changes** lists what changed in the git repository the pane sits in: the **Working tree**, what is **Staged**, or two **Commits** you name, as a folder tree with git's status letter and the added and removed lines. A row opens its diff, **Unified** or **Split** (Settings → Chat → File viewer → Diff layout; a phone shows one column), with **Copy path**, **Copy patch** and **Open file**. The files a turn's edit tools changed, listed in its work block, open the same diff. It only reads; a remote PC's repository is read on that PC. |
 | **Manage sessions** | Start an agent in a folder you type or pick with **Browse**. In New workspace, Browse filters the currently loaded folders as you type (case-insensitive); opening a folder updates Directory, so **Start** uses that path even without **Use this folder** (which closes Browse), and a folder under home stays written as `~/…`. **New folder** (the folder-plus button in Browse's bar) makes a folder inside the one shown and opens it. It does not search subfolders or folders beyond the displayed 500. Add a tab to a workspace (as herdr's prefix+c), switch tabs from the strip over the pane, rename workspaces from their ⋯/right-click menu and panes from their own menu, reorder workspaces (drag a row, or on a phone long-press it and drag; Alt+Up/Down moves a focused row one step), and jump anywhere from the command palette. |
@@ -669,14 +669,36 @@ The snapshot is the last one a browser reported to this server, not a list of de
 | `Mod+Shift+O` | New workspace (`Mod+Shift+N` too, in the installed app: a Chrome tab keeps `Ctrl+Shift+N` for an incognito window) |
 | `Mod+Shift+↑` / `↓` | Previous / next pane |
 | `Mod+Shift+,` | Settings |
+| `Mod+Shift+P` | Commands: the palette on its actions alone |
+| `Ctrl+Shift+/` (Mac: `⌘/`) | Keyboard shortcuts: every key, filtered by typing |
+| `Alt+[` / `]` | Previous / next tab of the workspace |
+| `Alt+↑` / `↓` (Mac: `⌘[` / `]`) | Previous / next agent, in sidebar order |
+| Mac: `⌘⌥[` / `]` | Previous / next workspace |
+| `Alt+1`–`9` (Mac: `Ctrl+1`–`9`) | Workspace 1–9 |
+| `Ctrl+1`–`9` (not on a Mac) | Tab 1–9 of the workspace |
+| `F2` / `Shift+F2` | Rename tab / rename workspace |
+| Mac: `⌘D` / `⌘⇧D` | Split pane right / down |
+
+The keys from `Mod+Shift+P` down are herdr-app's (`defaults/keys.json`, `keys.macos.json`) where a
+page can have them. A browser tab keeps some for itself whatever the page asks: `Ctrl+1`–`9` and,
+on Linux, `Alt+1`–`8` switch browser tabs there, and work in the installed app. herdr-app's
+`Ctrl+Shift+O`/`E` splits, `Ctrl+Shift+PageUp`/`PageDown` workspace steps and `Ctrl+Shift+W`/`T`,
+`⌘T`/`W`/`N`, `⌘1`–`9` and `Ctrl+Tab` have no default here: Ovis's own keys or the browser's
+come first. On a Mac, `⌥[` and `⌥]` step tabs instead of typing quotes, and `F2` no longer reaches
+the terminal. A focused sidebar row keeps `Alt+↑`/`↓` to reorder its workspace.
 
 Selecting a pane or opening chat focuses its message box on desktop, while touch screens keep
 focus where it was. **Mod+Shift+E** focuses the selected pane's input in any mode, including the
 terminal's input line and direct input; it prefers masked input while a secret prompt is open. The
 shortcut can be reassigned or disabled in Settings → Shortcuts.
 
-**New tab**, **Rename tab**, **Split pane right** and **Split pane down** have no default key:
-pick one in **Settings → Shortcuts**, and the command palette shows it beside the action.
+**New tab** has no default key, nor have the splits outside a Mac: pick one in **Settings →
+Shortcuts**, and the command palette shows it beside the action.
+
+The palette matches the letters of a query in order, word starts first (`nt` finds **Next tab**),
+and with an empty query lists the commands you ran last first. A query also finds **Go to
+workspace: …** and **Go to tab: …** rows, and **Rename this workspace** asks for the name in the
+search field: type it and press Enter.
 
 **Settings → Shortcuts** changes each app binding or turns it off: press **Record** on a row,
 then the new chord (Escape cancels). A Mod+Shift chord is always safe for the terminal. Other

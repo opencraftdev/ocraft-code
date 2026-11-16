@@ -2,11 +2,15 @@ import { useEffect } from "react";
 import { useSettings } from "./settings.ts";
 import { bindingChord, formatExactChord, isMacPlatform, parseExactChord, type ExactChord, type ShortcutOverrides } from "./shortcutBindings.ts";
 import { physicalKey } from "./keys.ts";
+import { commandForChord, runCommand, toggleHelp } from "./commands.ts";
 
 import type { AppActions } from "./actions.ts";
 
 export const SHORTCUTS = [
   { id: "palette", label: "Command palette", keys: ["Mod", "Shift", "K"] },
+  // herdr-app's app.palette: the palette on its commands alone
+  { id: "commands", label: "Commands", keys: ["Mod", "Shift", "P"] },
+  { id: "help", label: "Keyboard shortcuts", keys: ["Mod", "Shift", "/"] },
   { id: "find", label: "Find in terminal", keys: ["Mod", "Shift", "F"] },
   { id: "toggle-view", label: "Switch chat / terminal", keys: ["Mod", "Shift", "J"] },
   { id: "focus-input", label: "Focus pane input", keys: ["Mod", "Shift", "E"] },
@@ -23,6 +27,13 @@ export const SHORTCUTS = [
   { id: "split-down", label: "Split pane down", keys: [] },
   { id: "previous-pane", label: "Previous pane", keys: ["Mod", "Shift", "ArrowUp"] },
   { id: "next-pane", label: "Next pane", keys: ["Mod", "Shift", "ArrowDown"] },
+  // herdr-app's tab, space and agent steps: their keys are per platform (DEFAULT_CHORDS)
+  { id: "previous-tab", label: "Previous tab", keys: [] },
+  { id: "next-tab", label: "Next tab", keys: [] },
+  { id: "previous-workspace", label: "Previous workspace", keys: [] },
+  { id: "next-workspace", label: "Next workspace", keys: [] },
+  { id: "previous-agent", label: "Previous agent", keys: [] },
+  { id: "next-agent", label: "Next agent", keys: [] },
   { id: "settings", label: "Settings", keys: ["Mod", "Shift", ","] },
   // listed only: held, not dispatched; VoiceInput.tsx listens for it itself (isVoiceShortcut)
   { id: "voice", label: "Dictate (hold)", keys: ["Mod", "Shift", "Space"] },
@@ -43,6 +54,8 @@ export interface ShortcutEventLike {
 
 const KEY_TO_ID: Readonly<Record<string, ShortcutId>> = {
   k: "palette",
+  p: "commands",
+  "/": "help",
   f: "find",
   j: "toggle-view",
   e: "focus-input",
@@ -56,16 +69,53 @@ const KEY_TO_ID: Readonly<Record<string, ShortcutId>> = {
   ",": "settings",
 };
 
-export function shortcutKeys(id: ShortcutId, overrides: ShortcutOverrides): string[] {
-  if (Object.hasOwn(overrides, id)) return overrides[id] ? [overrides[id]!] : [];
-  return Object.entries(KEY_TO_ID).filter(([, action]) => action === id).map(([key]) => key);
+/**
+ * herdr-app's own keys (defaults/keys.json for Linux and Windows, keys.macos.json) where a page can
+ * have them, as exact chords. The browser keeps some for itself whatever the page asks (Cmd+T/W/N,
+ * Ctrl+Tab, Cmd+1–9 and Ctrl+1–9 in a tab), and Ovis's own Mod+Shift keys came first
+ * (Ctrl+Shift+O/E/PageUp/PageDown): those herdr-app keys have no default here, and a person picks
+ * one in Settings. Option+[ and ] type quotes on a Mac keyboard; here they step tabs, as Alt does
+ * on Linux.
+ */
+const DEFAULT_CHORDS: Partial<Record<ShortcutId, { mac?: readonly string[]; other?: readonly string[] }>> = {
+  help: { mac: ["meta+/"] },
+  "rename-tab": { mac: ["F2"], other: ["F2"] },
+  "split-right": { mac: ["meta+d"] },
+  "split-down": { mac: ["shift+meta+d"] },
+  "previous-tab": { mac: ["alt+["], other: ["alt+["] },
+  "next-tab": { mac: ["alt+]"], other: ["alt+]"] },
+  "previous-workspace": { mac: ["alt+meta+["] },
+  "next-workspace": { mac: ["alt+meta+]"] },
+  "previous-agent": { mac: ["meta+["], other: ["alt+ArrowUp"] },
+  "next-agent": { mac: ["meta+]"], other: ["alt+ArrowDown"] },
+};
+
+function defaultChords(id: ShortcutId, platformIsMac: boolean): readonly string[] {
+  const chords = DEFAULT_CHORDS[id];
+  return (platformIsMac ? chords?.mac : chords?.other) ?? [];
 }
 
-export function shortcutDisplayKeys(id: ShortcutId, overrides: ShortcutOverrides): string[] {
+export function shortcutKeys(id: ShortcutId, overrides: ShortcutOverrides, platformIsMac = isMacPlatform()): string[] {
+  if (Object.hasOwn(overrides, id)) return overrides[id] ? [overrides[id]!] : [];
+  return [...Object.entries(KEY_TO_ID).filter(([, action]) => action === id).map(([key]) => key), ...defaultChords(id, platformIsMac)];
+}
+
+export function shortcutDisplayKeys(id: ShortcutId, overrides: ShortcutOverrides, platformIsMac = isMacPlatform()): string[] {
   const shortcut = SHORTCUTS.find((candidate) => candidate.id === id)!;
-  if (id === "voice" || !Object.hasOwn(overrides, id)) return [...shortcut.keys];
+  if (id === "voice" || !Object.hasOwn(overrides, id)) {
+    const chord = defaultChords(id, platformIsMac)[0];
+    return chord === undefined ? [...shortcut.keys] : chordDisplayKeys(chord);
+  }
   const value = overrides[id];
   return value ? bindingDisplayKeys(value) : [];
+}
+
+/** An exact chord as DEFAULT_CHORDS writes it ("shift+meta+d", "F2"), as shown. */
+export function chordDisplayKeys(value: string): string[] {
+  const parts = value.split("+");
+  const key = parts.pop()!;
+  const names: Record<string, string> = { ctrl: "Ctrl", alt: "Alt", shift: "Shift", meta: "Meta" };
+  return [...parts.map((part) => names[part] ?? part), key.length === 1 ? key.toUpperCase() : key];
 }
 
 /** A stored binding as shown: Mod+Shift+key, or its exact modifiers in macOS order (⌃⌥⇧⌘). */
@@ -129,14 +179,18 @@ export function exactChordFromEvent(event: ShortcutEventLike): ExactChord {
 
 export function matchShortcut(event: ShortcutEventLike, platformIsMac: boolean, overrides: ShortcutOverrides = {}): ShortcutId | null {
   if (event.isComposing || event.keyCode === 229) return null;
+  const pressed = formatExactChord(exactChordFromEvent(event));
   if (event.ctrlKey || event.altKey || event.metaKey) {
-    const pressed = formatExactChord(exactChordFromEvent(event));
     for (const shortcut of SHORTCUTS) {
       if (shortcut.id === "voice") continue;
       const value = Object.hasOwn(overrides, shortcut.id) ? overrides[shortcut.id] : null;
       const chord = value ? parseExactChord(value) : null;
       if (chord && formatExactChord(chord) === pressed) return shortcut.id;
     }
+  }
+  // a default exact chord (DEFAULT_CHORDS) holds until its binding is changed
+  for (const shortcut of SHORTCUTS) {
+    if (!Object.hasOwn(overrides, shortcut.id) && defaultChords(shortcut.id, platformIsMac).includes(pressed)) return shortcut.id;
   }
   const hasMod = platformIsMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
   if (!hasMod || !event.shiftKey || event.altKey) return null;
@@ -190,7 +244,8 @@ export function keepsArrowsForText(target: KeyTargetLike | EventTarget | null): 
  * app shortcut for the pane: its key handler asks this first.
  */
 export function isAppShortcut(event: ShortcutEventLike, overrides: ShortcutOverrides = {}): boolean {
-  return matchShortcut(event, isMacPlatform(), overrides) !== null;
+  const mac = isMacPlatform();
+  return matchShortcut(event, mac, overrides) !== null || (!event.isComposing && commandForChord(formatExactChord(exactChordFromEvent(event)), mac) !== null);
 }
 
 export { isMacPlatform };
@@ -210,6 +265,15 @@ export function keepsKeyForText(event: { key: string; target: KeyTargetLike | Ev
   const moving = field.selectionDirection === "backward" ? field.selectionStart : field.selectionEnd;
   const back = event.key === "ArrowUp" || event.key === "ArrowLeft" || event.key === "Home";
   return back ? moving > 0 : moving < (field.value ?? "").length;
+}
+
+/** Whether the focused control lists this chord in its aria-keyshortcuts ("Alt+ArrowUp"): then it is the control's. */
+export function ownsChord(event: ShortcutEventLike & { target: EventTarget | null }): boolean {
+  const target = event.target as { closest?: (selector: string) => Element | null } | null;
+  const owner = typeof target?.closest === "function" ? target.closest("[aria-keyshortcuts]") : null;
+  if (!owner) return false;
+  const chord = [event.ctrlKey && "Control", event.altKey && "Alt", event.shiftKey && "Shift", event.metaKey && "Meta", event.key].filter(Boolean).join("+");
+  return (owner.getAttribute("aria-keyshortcuts") ?? "").split(/\s+/).includes(chord);
 }
 
 export function modKeyLabel(): string {
@@ -242,8 +306,17 @@ export function useShortcuts(actions: AppActions, enabled: boolean): void {
     const platformIsMac = isMacPlatform();
     const onKeyDown = (event: KeyboardEvent): void => {
       if (recordingShortcut) return;
+      // a control that names the chord as its own (a sidebar row's Alt+↑/↓ reorder) keeps it
+      if (ownsChord(event)) return;
       const shortcut = matchShortcut(event, platformIsMac, settings.shortcutOverrides);
-      if (shortcut === null) return;
+      if (shortcut === null) {
+        // a registered command's own key (lib/commands.ts): the numbered workspace and tab keys
+        const command = event.isComposing || event.keyCode === 229 ? null : commandForChord(formatExactChord(exactChordFromEvent(event)), platformIsMac);
+        if (command === null) return;
+        event.preventDefault();
+        if (!event.repeat) runCommand(command.id);
+        return;
+      }
       if (keepsKeyForText(event, shortcut)) return;
       event.preventDefault();
       // a held chord repeats: a tab or a split is made once per press, not once per key repeat
@@ -293,6 +366,21 @@ export function useShortcuts(actions: AppActions, enabled: boolean): void {
           break;
         case "settings":
           actions.openSettings();
+          break;
+        case "commands":
+          actions.openPalette(">");
+          break;
+        case "help":
+          toggleHelp();
+          break;
+        // registered by lib/useAppCommands.ts under the same ids
+        case "previous-tab":
+        case "next-tab":
+        case "previous-workspace":
+        case "next-workspace":
+        case "previous-agent":
+        case "next-agent":
+          runCommand(shortcut);
           break;
       }
     };

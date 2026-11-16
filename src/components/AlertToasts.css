@@ -1,0 +1,76 @@
+/* the in-app alert cards: bottom corner, newest last, in the droplet's colours (the earlier in-app alert) */
+.alert-toasts {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: var(--z-droplet);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(calc(100vw - 2 * var(--space-4)), 22rem);
+}
+
+.alert-toast {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-lg);
+  background: var(--droplet-bg);
+  box-shadow: var(--droplet-shadow);
+  color: var(--droplet-text);
+}
+
+.alert-toast-open {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.alert-toast-dot {
+  flex: 0 0 auto;
+  width: var(--dot-size);
+  height: var(--dot-size);
+  border-radius: var(--radius-pill);
+  background: var(--droplet-done);
+}
+
+.alert-toast[data-kind="blocked"] .alert-toast-dot {
+  background: var(--droplet-blocked);
+}
+
+.alert-toast-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.alert-toast-title,
+.alert-toast-place {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alert-toast-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.alert-toast-place {
+  color: var(--droplet-text-dim);
+  font-size: var(--fs-xs);
+}
+
+.alert-toast-dismiss {
+  flex: 0 0 auto;
+  margin-inline-end: var(--space-2);
+  color: var(--droplet-text-dim);
+}
