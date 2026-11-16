@@ -81,7 +81,7 @@ export function hyperlinkFilter(): { handler: (payload: string) => boolean; rese
   };
 }
 
-interface LogicalLine {
+export interface LogicalLine {
   text: string;
   /** the cell each UTF-16 unit of `text` sits in (1-based, as xterm's link ranges are) and its width */
   positions: { x: number; y: number; width: number }[];
@@ -90,7 +90,7 @@ interface LogicalLine {
 }
 
 /** The whole wrapped line that buffer row `lineNumber` (1-based) is part of. */
-function logicalLine(buffer: IBuffer, lineNumber: number): LogicalLine | null {
+export function logicalLine(buffer: IBuffer, lineNumber: number): LogicalLine | null {
   let first = lineNumber - 1;
   while (first > 0 && buffer.getLine(first)?.isWrapped) first--;
   let text = "";
@@ -126,7 +126,8 @@ function addresses(text: string): [number, number][] {
   return spans;
 }
 
-type FileLink = Omit<ILink, "activate"> & { activate: (event: MouseEvent) => void };
+/** `path`: what the link opens, as the viewer is handed it (a `:line` kept) */
+type FileLink = Omit<ILink, "activate"> & { activate: (event: MouseEvent) => void; path: string };
 
 export function terminalFileLinks(buffer: IBuffer, lineNumber: number, open: (path: string, event: MouseEvent) => void): FileLink[] {
   const line = logicalLine(buffer, lineNumber);
@@ -144,6 +145,7 @@ export function terminalFileLinks(buffer: IBuffer, lineNumber: number, open: (pa
       // a wide character's last cell is the link's end, not its first
       range: { start: { x: start.x, y: start.y }, end: { x: last.x + last.width - 1, y: last.y } },
       text: shown,
+      path,
       // xterm keeps a row's links until the pointer leaves the row: the row is read again at the
       // click, and it opens only if the same whole link is still there (`foo.ts` grown to `foo.tsx` is not)
       activate: (event) => {
@@ -175,6 +177,34 @@ export function terminalFileLinks(buffer: IBuffer, lineNumber: number, open: (pa
   return links;
 }
 
-export function terminalFileLinkProvider(buffer: () => IBuffer, open: (path: string, event: MouseEvent) => void): ILinkProvider {
-  return { provideLinks: (line, callback) => callback(terminalFileLinks(buffer(), line, open)) };
+/**
+ * `exists`, when given, is asked for each path before it is drawn as a link (the pane's PC answers,
+ * relative to the pane's folder): a name that only looks like a file stays text. A check that
+ * fails to ask keeps the link, as before there was one.
+ */
+export function terminalFileLinkProvider(buffer: () => IBuffer, open: (path: string, event: MouseEvent) => void, exists?: (path: string) => Promise<boolean>): ILinkProvider {
+  return {
+    provideLinks: (line, callback) => {
+      const links = terminalFileLinks(buffer(), line, open);
+      if (!exists || links.length === 0) { callback(links); return; }
+      void Promise.all(links.map((link) => exists(link.path).catch(() => true)))
+        .then((found) => callback(links.filter((_, index) => found[index])));
+    },
+  };
+}
+
+/**
+ * One answer per path for `ttlMs`: a pointer moving along a row asks for its links again and
+ * again, and the PC is asked once. ponytail: an unbounded map trimmed only on reads; a cap if a
+ * long session ever shows it.
+ */
+export function cachedExists(check: (path: string) => Promise<boolean>, ttlMs = 10_000, now = Date.now): (path: string) => Promise<boolean> {
+  const known = new Map<string, { at: number; answer: Promise<boolean> }>();
+  return (path) => {
+    const hit = known.get(path);
+    if (hit && now() - hit.at < ttlMs) return hit.answer;
+    const answer = check(path);
+    known.set(path, { at: now(), answer });
+    return answer;
+  };
 }

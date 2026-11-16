@@ -425,6 +425,27 @@ button.sidebar-section-label:focus-visible { outline-offset: calc(var(--ring-off
   line-height: var(--lh-tight);
 }
 
+/* a workspace's own color (lib/spaceColors.ts) tints its folder face, as herdr-app's space avatars:
+   the syntax colors, which every theme sets */
+.workspace-group[data-space-color="0"] > .workspace-header .sidebar-mark.workspace-folder { color: var(--syntax-function); }
+.workspace-group[data-space-color="1"] > .workspace-header .sidebar-mark.workspace-folder { color: var(--syntax-number); }
+.workspace-group[data-space-color="2"] > .workspace-header .sidebar-mark.workspace-folder { color: var(--syntax-string); }
+.workspace-group[data-space-color="3"] > .workspace-header .sidebar-mark.workspace-folder { color: var(--syntax-meta); }
+.workspace-group[data-space-color="4"] > .workspace-header .sidebar-mark.workspace-folder { color: var(--syntax-keyword); }
+
+/* commits the branch has that its upstream does not (green), and the reverse (red) */
+.workspace-sync {
+  display: inline-flex;
+  flex: none;
+  gap: var(--space-1);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--lh-tight);
+}
+
+.workspace-ahead { color: var(--diff-add); }
+.workspace-behind { color: var(--diff-del); }
+
 /* hover first, selection after it: one neutral fill at two strengths */
 @media (hover: hover) {
   .workspace-header:hover {

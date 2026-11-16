@@ -257,7 +257,8 @@ function layOutRoster(): void {
     if (spec.worktreeOf && spec.branch) {
       const path = pathOf(spec);
       repo.branches.add(spec.branch);
-      repo.checkouts.push({ path, branch: spec.branch, label: spec.label, is_linked_worktree: true, is_bare: false, is_detached: false, is_prunable: false });
+      // each worktree a few commits from its upstream, as the sidebar's ↑/↓ shows
+      repo.checkouts.push({ path, branch: spec.branch, label: spec.label, is_linked_worktree: true, is_bare: false, is_detached: false, is_prunable: false, ...(repo.checkouts.length === 1 ? { ahead: 3 } : { ahead: 1, behind: 2 }) });
       workspace.worktree = worktreeMetadata(repo, path);
     } else workspace.worktree = worktreeMetadata(repo);
   }

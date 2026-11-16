@@ -32,6 +32,7 @@ import { useSessionHistoryOffered } from "../lib/useSessionHistoryOffered.ts";
 import { watchTouchReorder } from "../lib/touchReorder.ts";
 import { placeBlock, workspaceMoves, worktreeGroups as groupWorktrees } from "../lib/workspaceOrder.ts";
 import { worktreeLabel } from "../lib/worktreeName.ts";
+import { useSpaceColors } from "../lib/spaceColors.ts";
 import { lastViewedPane, rememberViewedPane } from "../lib/lastViewedPane.ts";
 import { paneMark, sidebarAgents, workspaceAgentLabels } from "../lib/sidebarAgents.ts";
 import { PANE_DRAG_TYPE, paneDragData } from "../lib/split.ts";
@@ -318,6 +319,8 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
   const agentNames = useMemo(() => workspaceAgentLabels(agentRows), [agentRows]);
   // a repository's worktree workspaces hang under one on its main checkout (lib/workspaceOrder.ts)
   const worktreeGroups = useMemo(() => groupWorktrees(orderedWorkspaces), [orderedWorkspaces]);
+  // each group's face keeps one color while it lives (lib/spaceColors.ts); its worktrees go under it
+  const spaceColors = useSpaceColors(machineId, worktreeGroups.map((group) => group.workspace.workspace_id));
   // pinned workspaces stand first, in a card, in pin order (shared with the other browsers,
   // lib/preferencesSync.ts); their moves change pins, while the rest change herdr's order
   const pins = useSyncExternalStore(subscribeSidebarPins, currentSidebarPins, currentSidebarPins);
@@ -665,6 +668,13 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
     const branchLine = !twoLine && !nested && !pinnedIds.includes(workspace.workspace_id) && branchTitle ? branchTitle : null;
     // the tooltip and the menu keep the exact branch (its slashes) even where the row does not repeat it
     const branchNote = branchTitle && branchTitle !== workspace.label ? branchTitle : null;
+    // as herdr-app's spaces: how far the branch is from its upstream, only when it is
+    const ahead = branch?.ahead ?? 0;
+    const behind = branch?.behind ?? 0;
+    const sync = ahead > 0 || behind > 0 ? <span className="workspace-sync" title={t("{ahead} ahead, {behind} behind its upstream", { ahead, behind })}>
+      {ahead > 0 && <span className="workspace-ahead">↑{ahead}</span>}
+      {behind > 0 && <span className="workspace-behind">↓{behind}</span>}
+    </span> : null;
     const paths = [...new Set([workspace.worktree?.checkout_path, pane.cwd].filter((path): path is string => Boolean(path)))];
     // a row the filter keeps for the selection or as a match's head, not as a match, is drawn as context,
     // and the selected one says so in words; a fold with a match in it stands open while the filter lasts
@@ -691,6 +701,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
       key={workspace.workspace_id}
       data-workspace={workspace.workspace_id}
       data-branch={branchTitle ?? undefined}
+      data-space-color={nested ? undefined : spaceColors[workspace.workspace_id]}
       data-drop={drop}
       onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }}
       onDrop={(event) => onDrop(event, workspace.workspace_id)}
@@ -766,6 +777,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
             {foldedCount > 0 && <span className="workspace-fold-count" aria-hidden="true">+{foldedCount}</span>}
             {filterNote}
           </span>}
+          {sync}
           {(ownPanes.length > 0 ? ownPanes : panes).map((candidate) => screenBadge(candidate.pane_id)).find(Boolean)}
           <span className="sidebar-pane-meta">
             <span className="visually-hidden">{markName(pane)}</span>

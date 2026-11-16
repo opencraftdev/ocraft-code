@@ -57,4 +57,5 @@ export const SIDEBAR_JA: Record<string, string> = {
   "Show {count} sub-agents": "サブエージェント {count} 件を表示",
   "Hide {count} sub-agents": "サブエージェント {count} 件を隠す",
   "Mark unread": "未読にする",
+  "{ahead} ahead, {behind} behind its upstream": "上流より {ahead} 件先行、{behind} 件遅れ",
 };
