@@ -52,4 +52,9 @@ export const SIDEBAR_KO: Record<string, string> = {
   "Expand": "펼치기",
   "Shell": "셸",
   "Sessions in {name}": "{name}의 세션",
+  "Sort agents: Priority": "에이전트 정렬: 우선순위",
+  "Sort agents: By space": "에이전트 정렬: 스페이스별",
+  "Show {count} sub-agents": "하위 에이전트 {count}개 표시",
+  "Hide {count} sub-agents": "하위 에이전트 {count}개 숨기기",
+  "Mark unread": "읽지 않음으로 표시",
 };

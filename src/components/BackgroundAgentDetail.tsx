@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CircleDot, RefreshCw, X } from "lucide-react";
+import { ArrowUpRight, CircleDot, RefreshCw, X } from "lucide-react";
 
 import "./BackgroundAgentDetail.css";
 
@@ -35,7 +35,7 @@ const failureOf = (error: unknown): Failure => {
  * A dialog over the task list: Escape, the scrim and a phone's Back close it, and the focus goes
  * back to the row that opened it.
  */
-export function BackgroundAgentDetail({ paneId, task, onClose }: { paneId: string; task: OmoTask; onClose: () => void }) {
+export function BackgroundAgentDetail({ paneId, task, onClose, onGoToPane }: { paneId: string; task: OmoTask; onClose: () => void; /** opened as a Peek from the Agents list: to the pane that started it */ onGoToPane?: () => void }) {
   const t = useT();
   const id = useId();
   const { fetchPaneBackgroundAgent } = useMachineApi();
@@ -109,6 +109,7 @@ export function BackgroundAgentDetail({ paneId, task, onClose }: { paneId: strin
             {meta.length > 0 && <p className="bg-agent-detail-meta">{meta}</p>}
           </div>
           {supported && <button type="button" className="icon-button" aria-label={t("Refresh")} title={t("Refresh")} disabled={loading} onClick={load}><RefreshCw aria-hidden="true" /></button>}
+          {onGoToPane && <button type="button" className="icon-button" aria-label={t("Go to pane")} title={t("Go to pane")} onClick={onGoToPane}><ArrowUpRight aria-hidden="true" /></button>}
           <button type="button" className="icon-button" aria-label={t("Close details")} title={t("Close details")} onClick={onClose}><X aria-hidden="true" /></button>
         </header>
         <div className="modal-body bg-agent-detail-body" role="region" aria-labelledby={`${id}-title`} tabIndex={0}>

@@ -123,6 +123,17 @@ command palette gives the panes the whole window as framed cards and folds the s
 (herdr's `terminals` layout); **Switch to the main layout** brings the sidebar back. This browser
 remembers the choice.
 
+The **Agents** list gathers the agents of every workspace and PC, as herdr-app's agents sidebar
+does. Its head switches between **Priority** (Needs you, Done, Working, Idle, the latest change
+first in each) and **By space** (one group per workspace); this browser remembers the choice, and
+a group's head folds it. Done means it finished while you looked elsewhere: opening it makes it
+Idle, and **Mark unread** in a row's menu makes it Done again on this device. Pinned agents come
+first. A pane's running sub-agents (an OmO pane's tasks, a Claude Code or OpenCode pane's
+subagents) hang under it as a tree that folds at its chevron, and the pane ranks as its most urgent
+one; a sub-agent has no pane, so a click opens it in a peek over the current tab, with **Go to
+pane** for the pane that started it. `Alt+↓` / `Alt+↑` (also `⌘]` / `⌘[` on a Mac) step through
+the list in its order. Narrower than 160px, the list is a rail of numbers and states.
+
 
 **3. Take it with you.** Scan the installer's QR code with a phone signed in to the same Tailscale account, then install the app from the browser. See [On your phone](#on-your-phone).
 

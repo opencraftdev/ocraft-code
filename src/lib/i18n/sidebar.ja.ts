@@ -52,4 +52,9 @@ export const SIDEBAR_JA: Record<string, string> = {
   "Expand": "展開",
   "Shell": "シェル",
   "Sessions in {name}": "{name} のセッション",
+  "Sort agents: Priority": "エージェントの並び: 優先度",
+  "Sort agents: By space": "エージェントの並び: スペース別",
+  "Show {count} sub-agents": "サブエージェント {count} 件を表示",
+  "Hide {count} sub-agents": "サブエージェント {count} 件を隠す",
+  "Mark unread": "未読にする",
 };
