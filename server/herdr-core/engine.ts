@@ -2,7 +2,7 @@ import type { HerdrIdentity } from "../../shared/machines.ts";
 import type { AgentInfo, PaneInfo, PaneProcessInfo, PaneReadResult, SessionSnapshot } from "../../shared/herdr-api.generated.ts";
 import { HerdrError, type EventFrame, type HerdrSubscription, type PaneReadOptions, type SubscribeHandlers, type Subscription } from "../herdr/client.ts";
 import { CoreConnection, spawnCoreTransport, type CoreStream, type Transport } from "./connection.ts";
-import { applyCoreEvent, coreSnapshot, coreStatus, LAYOUT_DOC, type CoreTerminal, type LayoutDoc } from "./snapshot.ts";
+import { applyCoreEvent, coreAgent, coreSnapshot, coreStatus, LAYOUT_DOC, type CoreTerminal, type LayoutDoc } from "./snapshot.ts";
 
 /**
  * Which engine this PC's bridge drives: herdr 0.9 (the default) or herdr-core, the engine of
@@ -100,7 +100,7 @@ export class CoreEngine {
     if (before.length > 0) this.notify({ kind: "ended", paneIds: before });
     if (params.type === "status") {
       const terminal = state.terminals.find((t) => t.address === params.terminal);
-      this.notify({ kind: "status", paneIds: this.panesOf(state, params.terminal), status: coreStatus(terminal), agent: terminal?.status?.app ?? null });
+      this.notify({ kind: "status", paneIds: this.panesOf(state, params.terminal), status: coreStatus(terminal), agent: coreAgent(terminal) });
     }
     if (params.type !== "status" && params.type !== "turn" && params.type !== "size" && params.type !== "foreground") this.notify({ kind: "structure" });
   }
