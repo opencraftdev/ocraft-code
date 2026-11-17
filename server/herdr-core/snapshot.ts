@@ -63,6 +63,15 @@ const STATUS_PRIORITY: Record<string, number> = { blocked: 4, done: 3, working: 
  * A 7501 word as herdr 0.9's status: `error` needs the person as `blocked` does (herdr-app's
  * Alert::Blocked covers both); a program that never reported is `unknown`.
  */
+/**
+ * The agent a terminal runs, by herdr 0.9's name: herdr-core says `claude-code` where herdr 0.9 and
+ * every Ovis reader (the transcript lookup, the chat) say `claude`.
+ */
+export function coreAgent(terminal: CoreTerminal | undefined): string | null {
+  const app = terminal?.status?.app;
+  return !app ? null : app === "claude-code" ? "claude" : app;
+}
+
 export function coreStatus(terminal: CoreTerminal | undefined): AgentStatus {
   const word = terminal?.status?.state;
   if (!word) return "unknown";
@@ -188,7 +197,7 @@ export function coreSnapshot({ doc, terminals, version, protocol }: CoreSnapshot
         tab_id: tabId,
         workspace_id: workspaceId,
         agent_status: status,
-        agent: terminal.status?.app ?? null,
+        agent: coreAgent(terminal),
         focused: false,
         revision: terminal.turn ?? 0,
         cwd,

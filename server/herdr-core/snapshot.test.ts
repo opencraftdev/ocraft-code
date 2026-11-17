@@ -54,7 +54,7 @@ describe("coreSnapshot", () => {
   });
 
   test("7501 words become herdr statuses and roll up; reporting programs are agents", () => {
-    expect(snap.panes.find((p) => p.pane_id === "p1")).toMatchObject({ agent_status: "working", agent: "claude-code", revision: 3 });
+    expect(snap.panes.find((p) => p.pane_id === "p1")).toMatchObject({ agent_status: "working", agent: "claude", revision: 3 }); // herdr 0.9's name for it
     expect(snap.panes.find((p) => p.pane_id === "p2")?.agent_status).toBe("blocked");
     expect(snap.panes.find((p) => p.pane_id === "p3")?.agent_status).toBe("unknown");
     expect(snap.workspaces[0]?.agent_status).toBe("blocked");
