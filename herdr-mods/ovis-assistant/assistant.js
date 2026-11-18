@@ -109,10 +109,18 @@ export function changeTotals(listing) {
 /**
  * The web app's address for the Assistant's pane in Voice: lib/deepLink.ts selects the pane in its
  * chat, and `assistant=voice` (lib/assistantMode.ts linkedAssistantView) opens its voice view.
+ * `vm`: the Assistant VM's SSH destination; the OCraft Voice window saves its host as the Assistant
+ * address (its storage starts empty, and the web app shows Voice only on the VM it knows).
  */
-export function voiceUrl(server, machineId, paneId) {
-  const query = [machineId && machineId !== "local" ? ["machine", machineId] : null, ["pane", paneId], ["view", "chat"], ["assistant", "voice"]].filter(Boolean);
+export function voiceUrl(server, machineId, paneId, vm = "") {
+  const host = String(vm ?? "").replace(/^.*@/, "").replace(/:\d+$/, "");
+  const query = [machineId && machineId !== "local" ? ["machine", machineId] : null, ["pane", paneId], ["view", "chat"], host ? ["vm", host] : null, ["assistant", "voice"]].filter(Boolean);
   return `${server}/?${query.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&")}`;
+}
+
+/** The program that opens Voice in the OCraft Voice window (herdr-mods/voice-window), on a Mac; null elsewhere. */
+export function voiceWindowCommand(platform, url) {
+  return platform === "macos" ? ["open", ["-a", "OCraft Voice", url]] : null;
 }
 
 /** The program that opens a link in the system browser. */

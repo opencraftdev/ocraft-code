@@ -112,5 +112,13 @@ describe("voice", () => {
     expect(new URL(a.voiceUrl("http://x", "local", "w1:p1")).searchParams.has("machine")).toBe(false);
     expect(a.openCommand("macos", url)).toEqual(["open", [url]]);
     expect(a.openCommand("linux", url)[0]).toBe("xdg-open");
+    expect(a.voiceWindowCommand("macos", url)).toEqual(["open", ["-a", "OCraft Voice", url]]);
+    expect(a.voiceWindowCommand("linux", url)).toBeNull();
+  });
+
+  test("names the Assistant VM's host for the voice window", () => {
+    const params = new URL(a.voiceUrl("http://x", "vm 1", "wF:p1", "me@raka-devs.example.ts.net:22")).searchParams;
+    expect(params.get("vm")).toBe("raka-devs.example.ts.net");
+    expect(new URL(a.voiceUrl("http://x", "local", "w1:p1")).searchParams.has("vm")).toBe(false);
   });
 });

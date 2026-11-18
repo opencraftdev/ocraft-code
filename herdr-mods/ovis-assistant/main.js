@@ -13,7 +13,7 @@ import OvisChat, { getJson } from "./ovis-chat/main.js";
 import { target, apiUrl } from "./ovis-chat/chat.js";
 import {
   findAssistant, delegateMachines, sessionsSection, statusOf, paneTitle, mentionAt, mentionChoices, dropMention,
-  outgoingText, contextUsed, restartCommand, backgroundTasks, changeTotals, voiceUrl, openCommand,
+  outgoingText, contextUsed, restartCommand, backgroundTasks, changeTotals, voiceUrl, voiceWindowCommand, openCommand,
 } from "./assistant.js";
 import { machineNamesOf } from "./lib.js";
 
@@ -95,6 +95,13 @@ export default class OvisAssistant extends OvisChat {
     exec(command, args).catch(() => {});
   }
 
+  /** Voice in the OCraft Voice window (it has the microphone a mod lacks); the browser when that app is missing. */
+  openVoice(url) {
+    const command = voiceWindowCommand(hostWindow().platform, url);
+    if (!command) return this.openLink(url);
+    exec(...command).then((r) => { if (r.code !== 0) this.openLink(url); }, () => this.openLink(url));
+  }
+
   // ---- the composer's session tags ----
 
   mention() {
@@ -169,13 +176,13 @@ export default class OvisAssistant extends OvisChat {
       .when(!active, (el) => el.cursor_pointer().hover((s) => s.text_color(t.foreground)))
       .when(Boolean(onClick), (el) => el.on_click(onClick))
       .child(svg(icon(name)).size(14)).child(label);
-    const voice = this.found ? voiceUrl(this.t.server, this.t.machine, this.t.pane) : null;
+    const voice = this.found ? voiceUrl(this.t.server, this.t.machine, this.t.pane, this.found.machine?.target?.destination) : null;
     return h_flex().w_full().h(44).px(16).gap(8).items_center().bg(t.background).border_b(1).border_color(t.border).children([
       div().flex_1().min_w(0).truncate().text_size(14).font_semibold().child(title),
       h_flex().p(2).gap(2).rounded(10).bg(t.chrome).border(1).border_color(t.border).children([
         tab("view-chat", "message-square", "Chat", true, null),
-        // the call runs in the web app: a mod has no microphone or audio
-        tab("view-voice", "audio-lines", "Voice", false, voice && ((_e) => this.openLink(voice))).tooltip("Opens the Assistant's voice in your browser"),
+        // the call runs in the web app's voice view, in its own window: a mod has no microphone or audio
+        tab("view-voice", "audio-lines", "Voice", false, voice && ((_e) => this.openVoice(voice))).tooltip("Talk to the Assistant"),
       ]),
     ]);
   }
