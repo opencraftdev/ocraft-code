@@ -12,7 +12,7 @@ import type { SessionGraph } from "../shared/assistant.ts";
 import { VOICE_MARKER, type VoiceSessionResponse, type VoiceStatus, type VoiceTask, type VoiceToolResponse } from "../shared/assistant-voice.ts";
 import { firstMessageFault } from "../shared/launch-rules.ts";
 import type { AgentStatus, ConversationResponse } from "../shared/protocol.ts";
-import { logDay, VOICE, type AssistantSession } from "./assistant-sessions.ts";
+import { logDay, VOICE } from "./assistant-sessions.ts";
 import { paneConversation } from "./conversation.ts";
 import { isJsonObject } from "./http.ts";
 import { writePrivateState } from "./private-state.ts";
@@ -119,9 +119,19 @@ const hash = (value: unknown): string => createHash("sha256").update(JSON.string
 /** the provider's words without the key they may quote back */
 const scrub = (message: string, key: string): string => (key ? message.split(key).join("***") : message).slice(0, 500);
 
+/** what the voice mode needs of the Assistant's session: AssistantSession on the VM, FolderAssistant elsewhere */
+export interface VoiceSession {
+  readonly folder: string;
+  readonly profile: string;
+  readonly codexHome: string | undefined;
+  paneNow(): Promise<{ paneId: string; status: AgentStatus | null } | null>;
+  info(): { pane_id: string | null } | null;
+  sendToPane(paneId: string, text: string): Promise<void>;
+}
+
 /** what the voice mode needs of the Assistant (server/assistant.ts) */
 export interface VoiceSources {
-  session: AssistantSession | null;
+  session: VoiceSession | null;
   graph: { build(): SessionGraph };
 }
 export interface VoiceOptions {

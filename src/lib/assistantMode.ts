@@ -80,7 +80,8 @@ export function isAssistantMachine(destination: string | undefined, address = st
 
 /** The Assistant's own pane: its agent runs in the Assistant's folder on the VM (server/assistant-sessions.ts). */
 export function isAssistantPane(cwd: string | null | undefined): boolean {
-  return typeof cwd === "string" && /\/ovis\/assistant\/agent\/?$/.test(cwd);
+  // the VM's own Assistant folder, or the orchestrator's (server/folder-assistant.ts, OVIS_VOICE_ASSISTANT_DIR)
+  return typeof cwd === "string" && /\/(?:ovis\/assistant\/agent|orchestrator)\/?$/.test(cwd);
 }
 
 /** Assistant mode (the setup page, from the ⋯ menu) or Code mode: every visit starts in Code. */

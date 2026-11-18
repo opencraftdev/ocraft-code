@@ -58,7 +58,8 @@ import { handleMachineRequest, nonCanonicalPath, slowMachinePath } from "./machi
 import { Assistant, handleAssistantRequest, machineBridge, type MachineBridge, type RunScript } from "./assistant.ts";
 import { AssistantSetup, handleAssistantSetupRequest, type AssistantSetupOptions } from "./assistant-setup.ts";
 import { AssistantSession, OVIS_TASK_BIN, type AssistantPanes } from "./assistant-sessions.ts";
-import type { VoiceOptions } from "./assistant-voice.ts";
+import { AssistantVoice, type VoiceOptions } from "./assistant-voice.ts";
+import { FolderAssistant } from "./folder-assistant.ts";
 import { cliToken, handleOvisTaskRequest } from "./ovis-task.ts";
 import type { AssistantAgent } from "../shared/assistant.ts";
 import { handleSessionHistoryRequest, handleSessionResumeRequest, SESSION_HISTORY_PATH, SESSION_RESUME_PATH } from "./session-history-routes.ts";
@@ -225,6 +226,8 @@ export function createServer(
     assistantBridge?: MachineBridge;
     /** the voice mode's ElevenLabs API and the Assistant pane's conversation (server/assistant-voice.ts); unset, the real ones. Tests pass fakes. */
     assistantVoice?: VoiceOptions;
+    /** the Assistant's folder for voice when this server is not the Assistant VM; unset, OVIS_VOICE_ASSISTANT_DIR (server/folder-assistant.ts) */
+    assistantDir?: string;
     /** how a VM setup from the setup page runs (server/assistant-setup.ts); unset, over SSH on this server's PTY host. Tests pass their own. */
     assistantSetup?: AssistantSetupOptions;
   } = {},
@@ -289,6 +292,10 @@ export function createServer(
     PATH: `${OVIS_TASK_BIN}${delimiter}${process.env["PATH"] ?? ""}`,
   }), options.assistantPanes);
   const assistantService = assistant && machines ? new Assistant(stateDir, machines, options.assistantRun ?? ((machine, script, timeoutMs) => machines.runScript(machine.id, script, timeoutMs)), { session: assistantSession, bridge: options.assistantBridge ?? machineBridge(machines), ...(options.assistantVoice ? { voice: options.assistantVoice } : {}) }) : null;
+  // the Assistant as a folder on an Ovis that is not the Assistant VM (server/folder-assistant.ts): its voice routes only
+  const assistantDir = options.assistantDir ?? process.env["OVIS_VOICE_ASSISTANT_DIR"];
+  const folderAssistant = assistantService === null && assistantDir ? new FolderAssistant(assistantDir) : null;
+  const assistantRoutes = assistantService ?? (folderAssistant && { voice: new AssistantVoice(stateDir, { session: folderAssistant, graph: folderAssistant.graph }, options.assistantVoice) });
   const assistantSetup = new AssistantSetup(stateDir, { ...(machines ? { machines: () => machines.linuxMachines() } : {}), ...options.assistantSetup });
   // read finishes are kept for the herdr run each PC told this server it is in
   const seen = new SeenStore(stateDir, () => machines?.finishEpochs() ?? new Map());
@@ -439,9 +446,9 @@ export function createServer(
         return handleAssistantSetupRequest(request, pathname, assistantSetup, readOnly);
       }
       if (pathname === "/api/assistant" || pathname.startsWith("/api/assistant/")) {
-        if (!assistantService) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
+        if (!assistantRoutes) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
         const bearer = bearerMatches(request, bridgeToken) || (access.level === "full" && access.via === "token" && bearerMatches(request, token));
-        return handleAssistantRequest(request, pathname, assistantService, { bearer });
+        return handleAssistantRequest(request, pathname, assistantRoutes, { bearer });
       }
       if (pathname === "/api/machines" || pathname.startsWith("/api/machines/")) {
         if (!machines) return jsonResponse({ error: { code: "bridge_only", message: "Manage PCs on the connection server" } }, 404);
@@ -588,7 +595,7 @@ export function createServer(
           const herdr = attachableIdentity(info, sidecar);
           return jsonResponse({ ok: true, herdr, auth, ...(lan_exposure ? { lan_exposure } : {}), ...(security ? { security } : {}),
             // the Assistant VM is told to a client that got in, as the security summary is
-            web_ui: { boot_id: bootId, revision: process.env["OVIS_REVISION"] ?? null, ...(access.level === "full" ? { assistant } : {}) } }, 200, securityHeaders);
+            web_ui: { boot_id: bootId, revision: process.env["OVIS_REVISION"] ?? null, ...(access.level === "full" ? { assistant: assistant || folderAssistant !== null } : {}) } }, 200, securityHeaders);
         } catch (error) {
           return errorResponse(error);
         }

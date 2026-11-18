@@ -493,11 +493,14 @@ export class Assistant {
  * The voice routes (voice/...) also take a bearer token instead (`bearer`): another Ovis's machine
  * proxy forwards them with this PC's token and no Origin.
  */
-export async function handleAssistantRequest(request: Request, pathname: string, assistant: Assistant, options: { bearer?: boolean } = {}): Promise<Response> {
+export async function handleAssistantRequest(request: Request, pathname: string, assistant: Assistant | { voice: AssistantVoice }, options: { bearer?: boolean } = {}): Promise<Response> {
   const parts = pathname.slice("/api/assistant".length).split("/").filter(Boolean);
   const [collection, id, action] = parts;
-  const route = parts.length === 0 ? ""
-    : collection === "voice" && parts.length === 2 && ["status", "session", "tool"].includes(id!) ? `/voice/${id}`
+  // a folder Assistant (server/folder-assistant.ts) has only the voice routes
+  const full = assistant instanceof Assistant ? assistant : null;
+  const route = collection === "voice" && parts.length === 2 && ["status", "session", "tool"].includes(id!) ? `/voice/${id}`
+    : full === null ? null
+    : parts.length === 0 ? ""
     : collection === "machines" && id && (parts.length === 2 || (parts.length === 3 && action === "fix")) ? (action ? "/machines/:id/fix" : "/machines/:id") : null;
   if (route === null) return jsonResponse({ error: { code: "not_found", message: "not found" } }, 404);
   setRequestRoute(`/api/assistant${route}`);
@@ -508,12 +511,12 @@ export async function handleAssistantRequest(request: Request, pathname: string,
   const body = request.method === "GET" ? null : await request.json().catch(() => null);
   try {
     switch (`${request.method} ${route}`) {
-      case "GET ": return jsonResponse(assistant.state());
+      case "GET ": return jsonResponse(full!.state());
       case "GET /voice/status": return jsonResponse(await assistant.voice.status());
       case "POST /voice/session": return jsonResponse(await assistant.voice.session(body));
       case "POST /voice/tool": return jsonResponse(await assistant.voice.tool(body));
-      case "PATCH /machines/:id": assistant.setMachine(id!, body); return jsonResponse({ ok: true });
-      default: await assistant.fix(id!, body); return jsonResponse(assistant.state());
+      case "PATCH /machines/:id": full!.setMachine(id!, body); return jsonResponse({ ok: true });
+      default: await full!.fix(id!, body); return jsonResponse(full!.state());
     }
   } catch (error) {
     if (error instanceof AssistantError || error instanceof VoiceError) return jsonResponse({ error: { code: error.code, message: error.message } }, error.status);
